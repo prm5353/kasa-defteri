@@ -420,7 +420,9 @@ async function fileToParts(file){
 function parseJSON(t){t=String(t||'').trim();const m=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(m)t=m[1].trim();try{return JSON.parse(t)}catch(e){}const st=[t.indexOf('['),t.indexOf('{')].filter(i=>i>=0);const s0=st.length?Math.min(...st):-1;const e0=Math.max(t.lastIndexOf(']'),t.lastIndexOf('}'));if(s0>=0&&e0>s0){try{return JSON.parse(t.slice(s0,e0+1))}catch(e){}}throw {code:'invalid_json',message:'Cevap okunamadı'}}
 async function apiCall(prompt,files,maxTokens){
   const key=getKey();if(!key)throw {code:'no_key',message:'API anahtarı yok'};
-  const content=[];let n=0;for(const f of files||[]){const ps=await fileToParts(f);ps.forEach(b=>{content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b}});n++})}
+  const content=[];let n=0;for(const f of files||[]){
+    if(/pdf/i.test(f.type)||/\.pdf$/i.test(f.name)){const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=()=>rej({code:'image_rejected',message:'PDF okunamadı'});r.readAsDataURL(f)});content.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}});n+=2;continue}
+    const ps=await fileToParts(f);ps.forEach(b=>{content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b}});n++})}
   if(n>1)prompt+='\nNot: Görüntüler sırayla verilen, üst üste binen parçalardır; aynı satırı iki kez yazma.';
   content.push({type:'text',text:prompt});
   let r;try{r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:MODEL(),max_tokens:maxTokens||8192,messages:[{role:'user',content}]})})}catch(e){throw {code:'network',message:'İnternet bağlantısı yok gibi görünüyor'}}
@@ -481,7 +483,7 @@ async function boot(){
   db=localDb;base=localDb.collection();
   base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render()});
   db.doc('market/prices').onSnapshot(s=>{S.prices=s.exists?(s.data()||{}):{};if(S.loaded)render()});
-  sampleFn=apiSample;sampleCaps={images:{maxCount:6,mediaTypes:['image/*']}};
+  sampleFn=apiSample;sampleCaps={images:{maxCount:6,mediaTypes:['image/*','application/pdf']}};
   if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 }
 
@@ -989,7 +991,7 @@ function dupState(r){
 const imgAccept=()=>sampleCaps?.images?.mediaTypes?.join(',')||'image/*';
 const imgOk=()=>!!getKey();
 const noImgMsg='<p class="small" style="color:var(--warn);margin:0">Görüntü okuma için önce Ayarlar\'dan API anahtarını gir.</p>';
-function pdfGuard(files,st){if(files.some(f=>/pdf/i.test(f.type)||/\.pdf$/i.test(f.name))){st.innerHTML='<span class="bad-t">PDF yerine ekran görüntüsü yükle: PDF\'i telefonda aç, kaydırarak ekran görüntüleri al, hepsini birlikte seç.</span>';return true}return false}
+function pdfGuard(){return false}
 async function askImages(prompt,files,onP){const max=sampleCaps?.images?.maxCount||4;const ch=[];for(let i=0;i<files.length;i+=max)ch.push(files.slice(i,i+max));const out=[];for(let i=0;i<ch.length;i++){onP&&onP(i+1,ch.length);out.push(await sampleFn.json(prompt,{images:ch[i]}))}return out}
 const sampleErr=e=>({no_key:'Önce Ayarlar\'dan API anahtarını gir.',bad_key:'API anahtarı geçersiz. Ayarlar\'dan kontrol et.',no_credit:'API kredin bitmiş. Anthropic Console\'dan kredi yükle.',rate_limited:'Çok sık istek gönderildi, bir dakika sonra dene.',invalid_json:'Okuyamadım, daha net bir görüntü dene.',network:'İnternet bağlantısı yok gibi görünüyor.',image_rejected:'Bu görüntü açılamadı. Ekran görüntüsü ya da JPEG fotoğraf yükle.'})[e?.code]||'Okuma başarısız: '+(e?.message||'hata');
 const TX_SCHEMA=`{"merchant":"işyeri/açıklama aynen","amount":123.45,"date":"YYYY-MM-DD","income":false,"installments":1,"installment_no":1,"amount_is_total":true,"holder":"satır bir kart sahibi bölümünün altındaysa o kişinin adı, yoksa boş","category":"listeden kategori ya da null"}`;
@@ -1007,7 +1009,7 @@ function rowFromAI(r,src,isCard){
   row.dup=dupState(row);row.on=row.dup!=='dup';return row;
 }
 function dedupeChunks(chunks){const out=[];let prev=new Set();chunks.forEach((arr,ci)=>{const keys=new Set();arr.forEach(r=>{const k=[r.date,r2(Math.abs(num(r.amount))),firstWord(r.merchant)].join('|');keys.add(k);if(ci>0&&prev.has(k))return;out.push(r)});prev=keys});return out}
-function formSS(){return head('Ekran görüntüsünden ekle')+`<form data-form="ss"><label class="f">Hangi kart ya da hesap?<select id="ssSrc" name="src">${srcOpts(defaultSrc())}</select></label><label class="f">Görüntü(ler)<input id="ssFiles" name="files" type="file" accept="${esc(imgAccept())}" multiple required></label><p class="small muted" style="margin:0">Liste uzunsa kaydırıp birkaç görüntü al, birlikte seç. Daha önce eklediklerini iki kez eklemem.</p>${imgOk()?'':noImgMsg}<button class="btn" type="submit" id="ssGo">Oku</button><div id="ssStatus" class="small muted"></div></form>`}
+function formSS(){return head('Ekran görüntüsünden ekle')+`<form data-form="ss"><label class="f">Hangi kart ya da hesap?<select id="ssSrc" name="src">${srcOpts(defaultSrc())}</select></label><label class="f">Görüntü(ler)<input id="ssFiles" name="files" type="file" accept="${esc(imgAccept())}" multiple required></label><p class="small muted" style="margin:0">Liste uzunsa kaydırıp birkaç görüntü al ya da tam sayfa PDF yükle. Daha önce eklediklerini iki kez eklemem.</p>${imgOk()?'':noImgMsg}<button class="btn" type="submit" id="ssGo">Oku</button><div id="ssStatus" class="small muted"></div></form>`}
 async function runSS(fd){
   const files=[...document.getElementById('ssFiles').files];const src=fd.get('src')||'';const st=document.getElementById('ssStatus'),btn=document.getElementById('ssGo');
   if(!files.length||pdfGuard(files,st))return;if(!sampleFn){st.textContent='Görüntü okuma kullanılamıyor.';return}
@@ -1016,7 +1018,7 @@ async function runSS(fd){
     RV={mode:'ss',rows:dedupeChunks(res.map(a=>Array.isArray(a)?a:[])).filter(r=>r&&num(r.amount)!==0).map(r=>rowFromAI(r,src,src.startsWith('c:')))};renderReview();
   }catch(e){btn.disabled=false;st.textContent=sampleErr(e)}
 }
-function formStmt(cardId){const c=cardById(cardId)||S.cards[0];return head('Ekstre yükle ve karşılaştır')+`<form data-form="stmt"><label class="f">Hangi kart?<select id="stCard" name="cardId">${S.cards.map(x=>opt(x.id,x.name,c?.id)).join('')}</select></label><label class="f">Ekstre ekran görüntüleri<input id="stFiles" name="files" type="file" accept="${esc(imgAccept())}" multiple required></label><div class="banner"><span>Ekstreyi <b>ekran görüntüsü</b> olarak yükle. Tek ekrana sığmıyorsa kaydırarak birkaç görüntü al ve <b>sırayla birlikte</b> seç.</span></div>${imgOk()?'':noImgMsg}<button class="btn" type="submit" id="stGo">Oku ve karşılaştır</button><div id="stStatus" class="small muted"></div></form>`}
+function formStmt(cardId){const c=cardById(cardId)||S.cards[0];return head('Ekstre yükle ve karşılaştır')+`<form data-form="stmt"><label class="f">Hangi kart?<select id="stCard" name="cardId">${S.cards.map(x=>opt(x.id,x.name,c?.id)).join('')}</select></label><label class="f">Ekstre ekran görüntüleri<input id="stFiles" name="files" type="file" accept="${esc(imgAccept())}" multiple required></label><div class="banner"><span>Ekstreyi <b>PDF</b> olarak ya da <b>ekran görüntüleriyle</b> yükleyebilirsin. Ekran görüntüsüyse kaydırarak birkaç tane al ve <b>sırayla birlikte</b> seç.</span></div>${imgOk()?'':noImgMsg}<button class="btn" type="submit" id="stGo">Oku ve karşılaştır</button><div id="stStatus" class="small muted"></div></form>`}
 async function runStmt(fd){
   const files=[...document.getElementById('stFiles').files];const card=cardById(fd.get('cardId'));const st=document.getElementById('stStatus'),btn=document.getElementById('stGo');
   if(!files.length||!card||pdfGuard(files,st))return;if(!sampleFn){st.textContent='Görüntü okuma kullanılamıyor.';return}
