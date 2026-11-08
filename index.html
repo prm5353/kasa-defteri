@@ -417,7 +417,19 @@ async function fileToParts(file){
   for(const y of ys){const h=ys.length>1?Math.min(segH,H-y):H;const sc=Math.min(1,1568/Math.max(W,h));const c=document.createElement('canvas');c.width=Math.round(W*sc);c.height=Math.round(h*sc);c.getContext('2d').drawImage(img,0,y,W,h,0,0,c.width,c.height);parts.push(c.toDataURL('image/jpeg',0.86).split(',')[1])}
   return parts;
 }
-function parseJSON(t){t=String(t||'').trim();const m=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(m)t=m[1].trim();try{return JSON.parse(t)}catch(e){}const st=[t.indexOf('['),t.indexOf('{')].filter(i=>i>=0);const s0=st.length?Math.min(...st):-1;const e0=Math.max(t.lastIndexOf(']'),t.lastIndexOf('}'));if(s0>=0&&e0>s0){try{return JSON.parse(t.slice(s0,e0+1))}catch(e){}}throw {code:'invalid_json',message:'Cevap okunamadı'}}
+function tryParse(t){try{return {ok:true,v:JSON.parse(t)}}catch(e){return {ok:false}}}
+function parseJSON(t){
+  t=String(t||'').trim();const m=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(m)t=m[1].trim();
+  let r=tryParse(t);if(r.ok)return r.v;
+  const st=[t.indexOf('['),t.indexOf('{')].filter(i=>i>=0);const s0=st.length?Math.min(...st):-1;const e0=Math.max(t.lastIndexOf(']'),t.lastIndexOf('}'));
+  let c=s0>=0&&e0>s0?t.slice(s0,e0+1):t;
+  r=tryParse(c);if(r.ok)return r.v;
+  c=c.replace(/[“”]/g,'"').replace(/[‘’]/g,"'").replace(/\/\/[^\n]*/g,'').replace(/,\s*([\]}])/g,'$1')
+     .replace(/:\s*(-?\d{1,3}(?:\.\d{3})+,\d+)/g,(x,n)=>':'+n.replace(/\./g,'').replace(',','.'))
+     .replace(/:\s*(-?\d+),(\d{1,2})(?=\s*[,}\]])/g,':$1.$2');
+  r=tryParse(c);if(r.ok)return r.v;
+  throw {code:'invalid_json',message:'Cevap okunamadı',raw:t};
+}
 async function apiCall(prompt,files,maxTokens){
   const key=getKey();if(!key)throw {code:'no_key',message:'API anahtarı yok'};
   const content=[];let n=0;for(const f of files||[]){
@@ -430,9 +442,18 @@ async function apiCall(prompt,files,maxTokens){
   if(!r.ok){const msg=j?.error?.message||('HTTP '+r.status);throw {code:r.status===401?'bad_key':r.status===429?'rate_limited':/credit|balance|billing/i.test(msg)?'no_credit':'api',message:msg}}
   const txt=(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('');
   try{const u=j.usage||{};const cost=(u.input_tokens||0)*0.10/1e6+(u.output_tokens||0)*0.50/1e6;ls.set('kd_cost',String(num(ls.get('kd_cost','0'))+cost));ls.set('kd_calls',String(num(ls.get('kd_calls','0'))+1))}catch(e){}
+  ls.set('kd_lastraw',txt.slice(0,20000));
   return txt;
 }
-const apiSample={json:async(prompt,opts)=>parseJSON(await apiCall(prompt+'\nYalnızca istenen JSON\'u döndür, başka açıklama yazma.',opts?.images,opts?.maxTokens))};
+const JSON_RULE='\nYalnızca istenen JSON\'u döndür; başına ya da sonuna açıklama yazma, kod bloğu kullanma. Sayıları JSON sayısı olarak, nokta ondalıkla ve binlik ayırıcı olmadan yaz (ör. 1250.5).';
+const apiSample={json:async(prompt,opts)=>{
+  const txt=await apiCall(prompt+JSON_RULE,opts?.images,opts?.maxTokens);
+  try{return parseJSON(txt)}catch(e){
+    if(!txt||txt.length<2)throw e;
+    const fixed=await apiCall('Aşağıdaki metni anlamını değiştirmeden geçerli JSON\'a çevir. Sadece JSON döndür.\n\n'+txt.slice(0,30000),[],opts?.maxTokens);
+    return parseJSON(fixed);
+  }
+}};
 
 /* ===================== VERİ KATMANI ===================== */
 const qs={};
@@ -965,6 +986,7 @@ function settingsSheet(){
       <form data-form="cat"><div class="two"><label class="f">Ana kategori<input id="catMain" name="main" required list="mainCats"></label><label class="f">Alt kategori<input id="catSub" name="sub"></label></div><datalist id="mainCats">${Object.keys(catTree()).map(c=>`<option value="${esc(c)}">`).join('')}</datalist><button class="btn sm" type="submit">Ekle</button></form></section>
     <section class="sec"><h2>Görüntü okuma (API anahtarı)</h2><p class="small muted" style="margin:0 0 8px">Ekstre, ekran görüntüsü ve fiş okumak için Anthropic API anahtarın. Sadece bu telefonda saklanır.</p>
       <form data-form="apikey"><label class="f">API anahtarı<input id="apiKey" name="key" type="password" autocomplete="off" placeholder="sk-ant-..." value="${esc(getKey())}"></label><div class="btnrow"><button class="btn sm" type="submit">Kaydet</button><button class="btn sm ghost" type="button" data-act="apitest">Bağlantıyı dene</button></div></form>
+      <div class="btnrow" style="margin-top:8px"><button class="btn sm ghost" type="button" data-act="copyraw">Son okuma cevabını kopyala</button></div>
       <div class="small muted" style="margin-top:6px">Bu telefonda ${nf0.format(num(ls.get('kd_calls','0')))} okuma · tahmini harcama ${nf2.format(num(ls.get('kd_cost','0')))} $</div></section>
     <section class="sec"><h2>Yedek</h2><p class="small muted" style="margin:0 0 8px">Tüm kayıtlarını telefonuna indir. Ayda bir almanı öneririm; Excel dosyasını her yerde açabilirsin.</p><div class="btnrow"><button class="btn sm" data-act="backupcsv">Excel için indir (CSV)</button><button class="btn sm ghost" data-act="backupjson">Tam yedek (JSON)</button></div>${S.meta.lastBackup?`<div class="small muted" style="margin-top:6px">Son yedek: ${fmtDY(S.meta.lastBackup)}</div>`:''}
       <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><label class="f">Yedekten geri yükle (JSON)<input id="restoreFile" type="file" accept=".json,application/json"></label><p class="small muted" style="margin:4px 0 0">Telefondaki tüm kayıtların, seçtiğin yedekteki kayıtlarla değiştirilir.</p></div></section>
@@ -993,7 +1015,7 @@ const imgOk=()=>!!getKey();
 const noImgMsg='<p class="small" style="color:var(--warn);margin:0">Görüntü okuma için önce Ayarlar\'dan API anahtarını gir.</p>';
 function pdfGuard(){return false}
 async function askImages(prompt,files,onP){const max=sampleCaps?.images?.maxCount||4;const ch=[];for(let i=0;i<files.length;i+=max)ch.push(files.slice(i,i+max));const out=[];for(let i=0;i<ch.length;i++){onP&&onP(i+1,ch.length);out.push(await sampleFn.json(prompt,{images:ch[i]}))}return out}
-const sampleErr=e=>({no_key:'Önce Ayarlar\'dan API anahtarını gir.',bad_key:'API anahtarı geçersiz. Ayarlar\'dan kontrol et.',no_credit:'API kredin bitmiş. Anthropic Console\'dan kredi yükle.',rate_limited:'Çok sık istek gönderildi, bir dakika sonra dene.',invalid_json:'Okuyamadım, daha net bir görüntü dene.',network:'İnternet bağlantısı yok gibi görünüyor.',image_rejected:'Bu görüntü açılamadı. Ekran görüntüsü ya da JPEG fotoğraf yükle.'})[e?.code]||'Okuma başarısız: '+(e?.message||'hata');
+const sampleErr=e=>({no_key:'Önce Ayarlar\'dan API anahtarını gir.',bad_key:'API anahtarı geçersiz. Ayarlar\'dan kontrol et.',no_credit:'API kredin bitmiş. Anthropic Console\'dan kredi yükle.',rate_limited:'Çok sık istek gönderildi, bir dakika sonra dene.',invalid_json:'Cevabı çözemedim. Bir kez daha dene; olmazsa Ayarlar → "Son okuma cevabını kopyala" ile bana gönder.',network:'İnternet bağlantısı yok gibi görünüyor.',image_rejected:'Bu görüntü açılamadı. Ekran görüntüsü ya da JPEG fotoğraf yükle.'})[e?.code]||'Okuma başarısız: '+(e?.message||'hata');
 const TX_SCHEMA=`{"merchant":"işyeri/açıklama aynen","amount":123.45,"date":"YYYY-MM-DD","income":false,"installments":1,"installment_no":1,"amount_is_total":true,"holder":"satır bir kart sahibi bölümünün altındaysa o kişinin adı, yoksa boş","category":"listeden kategori ya da null"}`;
 const txRules=()=>`Bugün ${today()}. Yıl yoksa bugünden önceki en yakın tarihi kullan; "Bugün", "Dün" ifadelerini tarihe çevir.
 Kategori listesi: ${catPromptList().join(', ')}.
@@ -1163,6 +1185,7 @@ document.addEventListener('click',async e=>{
     case 'spendcat':spendCatSheet(el.dataset.c);break;
     case 'spendback':spendSheet();break;
     case 'apitest':{const k=document.getElementById('apiKey')?.value?.trim();if(k)ls.set('kd_apikey',k);el.disabled=true;el.textContent='Deneniyor…';try{const r=await apiSample.json('Sadece {"ok":true} döndür.',{maxTokens:20});toast(r?.ok?'Bağlantı çalışıyor ✓':'Cevap geldi ama beklenen biçimde değil')}catch(e){toast(sampleErr(e))}el.disabled=false;el.textContent='Bağlantıyı dene';break}
+    case 'copyraw':{const r=ls.get('kd_lastraw','');if(!r){toast('Henüz okuma yapılmadı');break}try{await navigator.clipboard.writeText(r);toast('Kopyalandı, Claude\'a yapıştırabilirsin')}catch(e){openSheet(head('Son cevap')+`<textarea class="inp" style="height:300px">${esc(r)}</textarea>`)}break}
     case 'backupcsv':case 'backupjson':await backup(a==='backupcsv'?'csv':'json');break;
     case 'account':accountSheet(id);break;
     case 'assets':assetsSheet();break;
