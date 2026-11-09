@@ -326,7 +326,9 @@ const CAT_TREE={
   'Banka':['Kredi','Kredi Kartı','Komisyon'],
   'Diğer':[]
 };
-const INCOME_SRC=['Maaş','Ticari Gelir','Araba taksiti','Temettü Geliri','Banka','Hediyeler','Diğer'];
+const INCOME_DEF=['Maaş','Ticari Gelir','Araba taksiti','Temettü Geliri','Banka','Hediyeler','Diğer'];
+/* gelir türleri düzenlenebilir (ad değiştir, ekle, sil, sırala) */
+const incomeSrc=()=>S.incSrc&&S.incSrc.length?S.incSrc:INCOME_DEF;
 const ASSET_TYPES={gram:'Gram altın',ceyrek:'Çeyrek altın',yarim:'Yarım altın',tam:'Tam altın',gumus:'Gram gümüş',usd:'Dolar',eur:'Euro',tl:'Türk lirası',esya:'Araç / diğer eşya'};
 /* yarım = 2 çeyrek, tam = 4 çeyrek fiyatından hesaplanır */
 const PRICED=Object.keys(ASSET_TYPES).filter(k=>!['tl','yarim','tam','esya'].includes(k));
@@ -632,6 +634,7 @@ function partition(docs){
     else if(v.k==='cattree'){S.catTree=v.tree;S.catIcons=v.icons||{}}
     else if(v.k==='networth')S.nw=v;
     else if(v.k==='catplan')S.catplan=v;
+    else if(v.k==='incsrc')S.incSrc=v.list||[];
     else if(arr[v.k])S[arr[v.k]].push({...v,id:d.id});
   });
   derive();
@@ -725,7 +728,7 @@ function formQuick(mode){
   const seg=`<div class="seg" style="margin-bottom:10px"><button type="button" class="${mode!=='gelir'?'on':''}" data-act="qamode" data-v="gider">Gider</button><button type="button" class="${mode==='gelir'?'on':''}" data-act="qamode" data-v="gelir">Gelir</button></div>`;
   if(mode==='gelir'){const acc=ls.get('kd_qa_acc','')||S.accounts[0]?.name||'';
     return head('Hızlı gelir')+seg+`<form data-form="quickin"><input class="qa-amt" name="amount" type="number" step="0.01" inputmode="decimal" placeholder="0 ₺" required>
-      <div class="f" style="margin-top:12px"><span class="lbl2">Gelir türü</span>${chipPick('source',INCOME_SRC.map(x=>[x,x]),'Maaş')}</div>
+      <div class="f" style="margin-top:12px"><span class="lbl2" style="display:flex">Gelir türü<span style="flex:1"></span><button type="button" class="linkbtn" data-act="incedit">Düzenle</button></span>${chipPick('source',incomeSrc().map(x=>[x,x]),incomeSrc()[0])}</div>
       <div class="f"><span class="lbl2">Hangi hesaba geldi</span>${chipPick('account',[...S.accounts.map(a=>[a.name,a.name]),...(hasCashAcc()?[]:[['','Nakit']])],acc)}</div>
       <input class="inp" name="merchant" placeholder="Açıklama (isteğe bağlı)">
       <label class="f" style="margin-top:10px">Tarih<input type="date" name="date" value="${today()}"></label>
@@ -1062,6 +1065,13 @@ function heldNote(names){const m=heldByAcc();const by={};names.forEach(n=>(m[n]|
 /* başkalarından alıp henüz karta yatırmadığım ve hesabımda duran para: benim param değil */
 function heldTotal(){const M=heldByAcc();return Object.values(M).flat().reduce((a,x)=>a+x.amt,0)}
 let PENDPAY=null;
+function incEditSheet(){const L=incomeSrc();openSheet(head('Gelir türleri')+`<section class="sec">${L.map((x,i)=>`<div class="cer"><span class="nm">${esc(x)}</span>
+    <button class="x" data-act="incmv" data-i="${i}" data-d="-1" ${i===0?'disabled':''} aria-label="Yukarı">↑</button><button class="x" data-act="incmv" data-i="${i}" data-d="1" ${i===L.length-1?'disabled':''} aria-label="Aşağı">↓</button>
+    <button class="x" data-act="incren" data-i="${i}" aria-label="Adını değiştir">✎</button><button class="x" data-act="incdel" data-i="${i}" aria-label="Sil">🗑</button></div>`).join('')}
+    <button class="cg add" style="width:100%;margin-top:10px" data-act="incadd">+ Yeni gelir türü</button>
+    <p class="small muted" style="margin-top:8px">Adını değiştirince bu türle girilmiş eski gelirlerin de adı değişir (Money Pro arşivi hariç). Silersen eski kayıtların adı aynen kalır.</p>
+    <button class="btn ghost" style="width:100%;margin-top:6px" data-act="quickinopen">‹ Gelir girişine dön</button></section>`)}
+async function incSave(list){S.incSrc=list;await put({id:'incsrc',k:'incsrc',list})}
 /* hesaplar arası transfer; banka ücreti Banka › Komisyon harcaması olarak gönderen hesaptan düşer */
 function formTransfer(from){const A=S.accounts.map(a=>[a.name,a.name+' · '+TL(accBalance(a))]);from=from||S.accounts[0]?.name||'';const to=S.accounts.find(a=>a.name!==from)?.name||'';
   return head('Hesaplar arası transfer')+`<form data-form="transfer"><div class="f"><span class="lbl2">Nereden</span>${chipPick('from',A,from)}</div><div class="f"><span class="lbl2">Nereye</span>${chipPick('to',A,to)}</div>
@@ -1277,7 +1287,7 @@ function analizSheet(){anInit();const D=anData();const gT=D.G.reduce((a,x)=>a+x.
       <div class="eyebrow">Gider kategorileri</div><div class="small muted" style="margin-bottom:4px">Alt başlıkları görmek için › işaretine dokun; örneğin sadece Araçlarım › Araç'ı çıkarabilirsin.</div>${[...new Set([...Object.keys(catTree()),...D.allG,...AN.exG])].map(m=>{const subs=catTree()[m]||[];const exs=subs.filter(sb=>AN.exS.includes(m+'|'+sb)).length;
         return subs.length?`<details class="anf"><summary><label class="check" style="flex:1"><input type="checkbox" data-anx="G" value="${esc(m)}" ${AN.exG.includes(m)?'':'checked'}> ${esc(m)}${exs?` <span class="small" style="color:var(--warn)">· ${exs} alt başlık hariç</span>`:''}</label><span class="muted">›</span></summary><div style="padding-left:26px">${subs.map(sb=>`<label class="check"><input type="checkbox" data-anx="S" value="${esc(m+'|'+sb)}" ${AN.exS.includes(m+'|'+sb)||AN.exG.includes(m)?'':'checked'} ${AN.exG.includes(m)?'disabled':''}> ${esc(sb)}</label>`).join('')}</div></details>`
         :`<label class="check"><input type="checkbox" data-anx="G" value="${esc(m)}" ${AN.exG.includes(m)?'':'checked'}> ${esc(m)}</label>`}).join('')}
-      <div class="eyebrow" style="margin-top:10px">Gelir türleri</div>${[...new Set([...INCOME_SRC,...D.allI,...AN.exI])].map(m=>`<label class="check"><input type="checkbox" data-anx="I" value="${esc(m)}" ${AN.exI.includes(m)?'':'checked'}> ${esc(m)}</label>`).join('')}
+      <div class="eyebrow" style="margin-top:10px">Gelir türleri</div>${[...new Set([...incomeSrc(),...D.allI,...AN.exI])].map(m=>`<label class="check"><input type="checkbox" data-anx="I" value="${esc(m)}" ${AN.exI.includes(m)?'':'checked'}> ${esc(m)}</label>`).join('')}
       <button class="btn" style="width:100%;margin-top:10px" data-act="anfilt">Tamam</button></section>`}
   else if(!P.length){const mx=Math.max(1,gT,iT);
     body=`<section class="sec"><div class="anrow tap" data-act="ango" data-k="I"><div class="main"><div class="sumline" style="padding:0"><span style="font-weight:700">Gelir</span><b style="color:var(--plus)">${TL(iT)}</b></div><div class="bar" style="height:12px;margin-top:6px"><i style="width:${iT/mx*100}%;background:var(--plus)"></i></div></div>${chev}</div>
@@ -1621,7 +1631,7 @@ function formTx(x,type){
     <div class="f" data-for="gider" id="catWrap"><span class="lbl2">Kategori</span><input type="hidden" name="cat" value="${esc(catVal(x.category||'Market',x.sub))}">${catButton(catVal(x.category||'Market',x.sub),'form')}</div>
     <div class="two" data-for="gider"><label class="f">Taksit sayısı<input id="txInst" name="inst" type="number" min="1" max="36" value="${x.inst||1}"></label><label class="f">Kaçıncı taksit<input id="txInstNo" name="instNo" type="number" min="1" max="36" value="${x.nextDate?(x.instDone||0)+1:1}"></label></div>
     <div data-for="gider"><p class="small muted" style="margin:0 0 6px">Bankada "(2/2)" gibi görünen eski bir taksitse: taksit sayısı 2, kaçıncı taksit 2 yaz. Sadece kalan taksitler borca eklenir.</p><label class="check"><input type="checkbox" name="refund" ${x.amount<0?'checked':''}> İade</label></div>
-    <label class="f" data-for="gelir">Gelir türü<select id="txSrc" name="source">${INCOME_SRC.map(s=>opt(s,s,x.source||'Maaş')).join('')}</select></label>
+    <label class="f" data-for="gelir">Gelir türü<select id="txSrc" name="source">${incomeSrc().map(s=>opt(s,s,x.source||'Maaş')).join('')}</select></label>
     <label class="f" data-for="tahsilat verdim">Kişi<select id="txWho" name="who">${S.persons.map(p=>opt(p.id,p.name,x.personId)).join('')}</select></label>
     <div class="f"><span class="lbl2" id="srcLbl">Kart / hesap</span>${chipPick('src',srcChoices(),sv)}</div>
     <label class="f" data-for="transfer">Nereye<select id="txTo" name="to">${srcOpts(x.toCardId?'c:'+x.toCardId:(x.toAccount?'a:'+x.toAccount:''))}</select></label>
@@ -1702,6 +1712,7 @@ function settingsSheet(){
       <form data-form="budget" style="margin-top:8px"><div class="two"><label class="f">Kategori<select id="bCat" name="category">${Object.keys(catTree()).map(c=>opt(c,c,'Dışarıda Yemek')).join('')}</select></label><label class="f">Aylık limit (₺)<input id="bLim" name="limit" type="number" required placeholder="10000"></label></div><button class="btn sm" type="submit">Limit ekle</button></form></section>
     <section class="sec"><h2>Kartımı kullananlar</h2>${S.persons.map(p=>`<div class="row"><div class="main"><div class="t">${esc(p.name)}</div><div class="s">${holderCard(p.id)?'Ek kart · '+esc(holderCard(p.id).name):'Kartımı kullanıyor'}</div></div><button class="x" data-act="delperson" data-id="${p.id}" aria-label="Sil">✕</button></div>`).join('')}
       <form data-form="person" style="margin-top:8px"><label class="f">Yeni kişi<input id="perName" name="name" required></label><button class="btn sm" type="submit">Ekle</button></form></section>
+    <section class="sec"><h2>Gelir türleri<span class="sp"></span><button class="linkbtn" data-act="incedit">Düzenle</button></h2><div class="small muted">${incomeSrc().map(esc).join(' · ')}</div></section>
     <section class="sec"><h2>Harcama kategorileri<span class="sp"></span><button class="linkbtn" data-act="catsettings">Düzenle</button></h2><p class="small muted" style="margin:0 0 6px">Düzenle ile sırala, adını ve simgesini değiştir, ekle, sil.</p>
       ${Object.entries(catTree()).map(([m,subs])=>`<details class="catedit"><summary><span>${esc(m)}</span><span class="muted small">${subs.length?subs.length+' alt':''}</span></summary>
         ${subs.map(sb=>`<div class="row"><div class="main"><div class="t" style="font-weight:500">${esc(sb)}</div></div><button class="x" data-act="catdelsub" data-m="${esc(m)}" data-s="${esc(sb)}" aria-label="Sil">✕</button></div>`).join('')}
@@ -1808,7 +1819,7 @@ function rvRow(r,i){
     <div class="two"><label class="mini">${r.inst>1?'Aylık taksit (₺)':'Tutar (₺)'}<input type="number" step="0.01" inputmode="decimal" id="rv_amt_${i}" data-rv="${i}" data-f="amount" value="${r2(r.inst>1?r.amount/r.inst:r.amount)}"></label><label class="mini">Tarih<input type="date" id="rv_date_${i}" data-rv="${i}" data-f="date" value="${r.date}"></label></div>
     <div class="two"><label class="mini">Kim harcadı<select id="rv_per_${i}" data-rv="${i}" data-f="personId">${personOpts(r.personId)}</select></label><label class="mini">Tür<select id="rv_kind_${i}" data-rv="${i}" data-f="kind">${opt('gider','Harcama',r.kind)}${opt('iade','İade',r.kind)}${opt('gelir','Gelir',r.kind)}</select></label></div>
     ${r.kind!=='gelir'?`<div class="two"><label class="mini">Bir kısmı başkasının mı?<select id="rv_sp_${i}" data-rv="${i}" data-f="splitP">${opt('','Hayır',r.splitP||'')}${S.persons.map(p=>opt(p.id,p.name,r.splitP||'')).join('')}</select></label>${r.splitP?`<label class="mini">${esc(personName(r.splitP))} payı (${r.inst>1?'aylık ':''}₺)<input type="number" step="0.01" inputmode="decimal" id="rv_sa_${i}" data-rv="${i}" data-f="splitAmt" value="${r.splitAmt||''}"></label>`:'<span></span>'}</div>${r.splitP&&r.splitAmt>0?`<div class="small" style="color:var(--other);font-weight:600">${esc(personName(r.splitP))} ${TL2(r.splitAmt)} · senin payın ${TL2((r.inst>1?r.amount/r.inst:r.amount)-r.splitAmt)}</div>`:''}`:''}
-    ${r.kind==='gelir'?`<select id="rv_src2_${i}" data-rv="${i}" data-f="source" aria-label="Gelir türü">${INCOME_SRC.map(s=>opt(s,s,r.source)).join('')}</select>`:mine?`${!r.known?'<div class="ask">Bu işyerini tanımadım. Ne harcaması?</div>':''}${catButton(r.cat,"rv:"+i)}${!r.known?`<label class="check"><input type="checkbox" id="rv_rem_${i}" data-rv="${i}" data-f="remember" ${r.remember?'checked':''}> Bir dahakine kendim tanıyayım</label>`:''}`:`<div class="small" style="color:var(--other);font-weight:600">${esc(personName(r.personId))} harcaması · senin harcamana karışmaz</div>`}
+    ${r.kind==='gelir'?`<select id="rv_src2_${i}" data-rv="${i}" data-f="source" aria-label="Gelir türü">${incomeSrc().map(s=>opt(s,s,r.source)).join('')}</select>`:mine?`${!r.known?'<div class="ask">Bu işyerini tanımadım. Ne harcaması?</div>':''}${catButton(r.cat,"rv:"+i)}${!r.known?`<label class="check"><input type="checkbox" id="rv_rem_${i}" data-rv="${i}" data-f="remember" ${r.remember?'checked':''}> Bir dahakine kendim tanıyayım</label>`:''}`:`<div class="small" style="color:var(--other);font-weight:600">${esc(personName(r.personId))} harcaması · senin harcamana karışmaz</div>`}
   </div>`;
 }
 function renderReview(){
@@ -1979,6 +1990,13 @@ document.addEventListener('click',async e=>{
     case 'planreset':{const mk=el.dataset.v;const months={...(S.catplan?.months||{})};delete months[mk];await put({id:'catplan',k:'catplan',months});S.catplan={months};planSheet(mk);toast('Otomatik tahmine dönüldü');break}
     case 'yearsum':yearSheet(+el.dataset.v);break;
     case 'subsearch':gsQuery=el.dataset.q;gsFilter='all';searchSheet();break;
+    case 'incedit':incEditSheet();break;
+    case 'quickinopen':openSheet(formQuick('gelir'));break;
+    case 'incmv':{const L=[...incomeSrc()];const i=+el.dataset.i,j=i+(+el.dataset.d);if(j<0||j>=L.length)break;[L[i],L[j]]=[L[j],L[i]];await incSave(L);incEditSheet();break}
+    case 'incadd':{const n=(prompt('Yeni gelir türünün adı')||'').trim();if(!n)break;const L=[...incomeSrc()];if(L.includes(n)){toast('Bu ad zaten var');break}L.push(n);await incSave(L);incEditSheet();break}
+    case 'incdel':{const L=[...incomeSrc()];if(L.length<=1){toast('En az bir tür kalmalı');break}if(!armed(el,'Sil?'))break;L.splice(+el.dataset.i,1);await incSave(L);incEditSheet();toast('Silindi');break}
+    case 'incren':{const L=[...incomeSrc()];const i=+el.dataset.i;const old=L[i];const n=(prompt('Yeni adı',old)||'').trim();if(!n||n===old)break;if(L.includes(n)){toast('Bu ad zaten var');break}L[i]=n;await incSave(L);
+      const list=S.tx.filter(x=>x.type==='gelir'&&x.source===old).map(x=>({...x,source:n}));if(list.length)await saveTx(list);incEditSheet();toast('Adı değişti');break}
     case 'qamode':{const v=document.querySelector('.qa-amt')?.value||'';openSheet(formQuick(el.dataset.v));const a=document.querySelector('.qa-amt');if(a){a.value=v;a.focus()}break}
     case 'quickadd':openSheet(formQuick());setTimeout(()=>document.querySelector('.qa-amt')?.focus(),80);break;
     case 'qacat':{const f=el.closest('form');const m=el.dataset.m;f.querySelectorAll('.ct').forEach(b=>b.classList.toggle('sel',b===el));f.querySelector('input[name=cat]').value=catVal(m,'');const subs=catTree()[m]||[];
@@ -2082,7 +2100,7 @@ async function backup(kind){
     data='\ufeff'+['Tarih;Tür;Tutar;Açıklama;Kategori;Alt kategori;Gelir türü;Kişi;Kart/Hesap;Nereye;Taksit;Not;Kaynak',...S.tx.map(t=>row(t,'Kasa Defteri')),...S.arch.map(t=>row(t,'Money Pro arşivi'))].join('\r\n');
     filename=`kasa-defteri-${d}.csv`;
   }else{
-    data=JSON.stringify({exportedAt:new Date().toISOString(),months:S.months,archive:S.amonths,receipts:S.rmonths,cards:S.cards,accounts:S.accounts,persons:S.persons,budgets:S.budgets,assets:S.assets,debts:S.debts,plans:S.plans,stmts:S.stmts,cats:S.cats,recs:S.recs,merchants:S.merch,products:S.prod,prices:S.prices,meta:S.meta,catTree:S.catTree||null,catIcons:S.catIcons||{}},null,1);
+    data=JSON.stringify({exportedAt:new Date().toISOString(),months:S.months,archive:S.amonths,receipts:S.rmonths,cards:S.cards,accounts:S.accounts,persons:S.persons,budgets:S.budgets,assets:S.assets,debts:S.debts,plans:S.plans,stmts:S.stmts,cats:S.cats,recs:S.recs,merchants:S.merch,products:S.prod,prices:S.prices,meta:S.meta,catTree:S.catTree||null,catIcons:S.catIcons||{},incSrc:S.incSrc||null},null,1);
     filename=`kasa-defteri-yedek-${d}.json`;
   }
   try{const blob=new Blob([data],{type:kind==='csv'?'text/csv':'application/json'});const file=new File([blob],filename,{type:blob.type});
@@ -2104,6 +2122,7 @@ async function restoreFrom(file){
   if(j.products)add('products',{k:'products',map:j.products.map||{},alias:j.products.alias||{}});
   if(j.meta)add('meta',{...j.meta,k:'meta'});
   if(j.catTree)add('cattree',{k:'cattree',tree:j.catTree,icons:j.catIcons||{}});
+  if(j.incSrc)add('incsrc',{k:'incsrc',list:j.incSrc});
   if(j.prices&&Object.keys(j.prices).length)add('market/prices',j.prices);
   await replaceAll(E);closeSheet();goTab('ana');toast(`Yedek yüklendi · ${E.length} kayıt grubu`);
 }
@@ -2150,7 +2169,7 @@ document.addEventListener('submit',async e=>{
       const o={...(ex||{}),id:g('id')||undefined,k:'debt',dir:g('dir'),who:g('who').trim(),amount:num(g('amount')),dueDate:g('dueDate'),note:g('note')||'',payments,paid:!!ex?.paid};if(!o.paid&&debtLeft(o)<=0){o.paid=true;o.closedAt=today()}await put(o);closeSheet();toast('Kaydedildi');break}
     case 'plan':await put({id:g('id')||undefined,k:'plan',name:g('name'),who:g('who'),total:num(g('total')),installment:num(g('installment')),day:Math.round(num(g('day')))||1,already:num(g('already')),account:g('account')||''});closeSheet();toast('Kaydedildi');break;
     case 'rec':{const ex=S.recs.find(r=>r.id===g('id'));const no=Math.round(num(g('no')));await put({...(ex||{}),id:g('id')||undefined,k:'rec',dir:g('dir'),name:g('name').trim(),amount:num(g('amount')),day:Math.round(num(g('day')))||1,startMonth:no?planMonth:(ex?.startMonth||planMonth),startNo:no||undefined,count:Math.round(num(g('count')))||undefined,account:g('account')||''});closeSheet();toast('Kaydedildi');break}
-    case 'recdone':{const r=S.recs.find(x=>x.id===g('id'));const mk=g('mk');await saveTx([{id:newId(),type:r.dir==='gelir'?'gelir':'odeme',amount:Math.abs(num(g('amount'))),date:g('date')||today(),account:g('account')||'',merchant:r.name,source:r.dir==='gelir'?(INCOME_SRC.includes(r.name)?r.name:'Diğer'):undefined,recId:r.id,recMonth:mk,ts:Date.now(),via:'manuel'}]);closeSheet();toast('İşaretlendi');break}
+    case 'recdone':{const r=S.recs.find(x=>x.id===g('id'));const mk=g('mk');await saveTx([{id:newId(),type:r.dir==='gelir'?'gelir':'odeme',amount:Math.abs(num(g('amount'))),date:g('date')||today(),account:g('account')||'',merchant:r.name,source:r.dir==='gelir'?(incomeSrc().includes(r.name)?r.name:'Diğer'):undefined,recId:r.id,recMonth:mk,ts:Date.now(),via:'manuel'}]);closeSheet();toast('İşaretlendi');break}
     case 'asset':{const lent=fd.has('lent');const ow=String(g('owner')||'').trim();await put({id:g('id')||undefined,k:'asset',type:g('type'),qty:num(g('qty')),note:g('note')||'',value:g('type')==='esya'?num(g('value'))||0:undefined,name:g('type')==='esya'?String(g('name')||'').trim():undefined,owner:ow&&ow!=='Kendim'?ow:'',buyDate:g('buyDate')||'',costTL:num(g('costTL'))||0,usdRate:num(g('usdRate'))||0,eurRate:num(g('eurRate'))||0,lent,who:lent?String(g('who')||'').trim():'',since:lent?g('since')||'':'',dueDate:lent?g('dueDate')||'':''});closeSheet();setTimeout(assetsSheet,250);break}
     case 'prices':{const P=S.prices||{};const cur={};PRICED.forEach(k=>{const v=num(g(k));cur[k]=v>0?v:(P[k]||undefined)});const hist={...(P.history||{})};hist[today()]=clean(cur);await db.doc('market/prices').set(clean({...cur,updatedAt:new Date().toISOString(),source:'Elle girildi',history:hist}));closeSheet();toast('Fiyatlar güncellendi');break}
     case 'pay':{const t={id:newId(),type:'tahsilat',personId:g('personId'),amount:Math.abs(num(g('amount'))),date:g('date')||today(),account:g('account')||'',merchant:'Ödeme aldım',ts:Date.now(),via:'manuel'};
