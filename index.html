@@ -1658,6 +1658,26 @@ const iconKey=(m,sb)=>{const I=S.catIcons||{};const ok=k=>k&&ICONS[k]?k:null;ret
 const catIcon=(m,sb)=>svgIcon(iconKey(m,sb));
 let catEditMode=false,catCurMain=null;
 async function saveCatAll(t,icons){S.catTree=t;if(icons)S.catIcons=icons;await put({id:'cattree',k:'cattree',tree:t,icons:S.catIcons||{}});for(const c of S.cats)await del(c.id)}
+/* taşı: alt başlığı ana başlık yap / başka ana başlığın altına al; alt başlığı olmayan ana başlığı başka bir ana başlığın altına al. Eski kayıtlar da taşınır */
+async function catMove(m,sb,toMain){const t=catTree();const I={...(S.catIcons||{})};const non=new Set(I.__non||[]);
+  const name=sb||m;const fromKey=sb?m+'|'+sb:m;const toKey=toMain?toMain+'|'+name:name;
+  if(sb){t[m]=t[m].filter(x=>x!==sb)}else{if((t[m]||[]).length)throw new Error('Önce alt başlıklarını taşı ya da sil');delete t[m]}
+  if(toMain){t[toMain]=t[toMain]||[];if(!t[toMain].includes(name))t[toMain].push(name)}else{if(!t[name])t[name]=[]}
+  if(I[fromKey]){I[toKey]=I[fromKey];delete I[fromKey]}if(non.has(fromKey)){non.delete(fromKey);non.add(toKey)}I.__non=[...non];
+  await saveCatAll(t,I);
+  const match=x=>x.type==='gider'&&x.category===m&&(sb?x.sub===sb:true);
+  const list=S.tx.filter(match).map(x=>toMain?{...x,category:toMain,sub:name}:{...x,category:name,sub:''});if(list.length)await saveTx(list);
+  let ch=false;Object.values(S.merch).forEach(v=>{if(v.category===m&&(sb?v.sub===sb:true)){if(toMain){v.category=toMain;v.sub=name}else{v.category=name;v.sub=''}ch=true}});if(ch)await saveMerch();
+  if(!sb&&toMain)for(const b of S.budgets.filter(b=>b.category===m))await del(b.id);
+  return list.length}
+function catMoveSheet(m,sb){const t=catTree();const name=sb||m;const pc=document.querySelector('#catpop .popcard');
+  const targets=Object.keys(t).filter(k=>k!==m&&k!==name);
+  pc.innerHTML=`<div class="pophead"><button class="x" data-act="${sb?'catmain':'catback'}" data-m="${esc(m)}" aria-label="Geri">‹</button><b style="flex:1">"${esc(name)}" nereye taşınsın?</b></div>
+    ${!sb&&(t[m]||[]).length?`<p class="small" style="color:var(--warn)">${esc(m)}'in alt başlıkları var. Önce onları taşı ya da sil; sonra ${esc(m)}'i başka bir başlığın altına alabilirsin.</p>`:`
+    ${sb?`<button class="cg" style="width:100%;margin-bottom:10px" data-act="catmoveto" data-m="${esc(m)}" data-s="${esc(sb)}" data-to="">⬆ Ana başlık yap</button>`:''}
+    <div class="small muted" style="margin-bottom:6px">${sb?'ya da başka bir ana başlığın altına:':'Hangi ana başlığın altına alt başlık olarak girsin?'}</div>
+    <div class="catgrid3">${targets.map(k=>`<button class="ct" data-act="catmoveto" data-m="${esc(m)}" data-s="${esc(sb||'')}" data-to="${esc(k)}"><span class="ic">${catIcon(k,'')}</span><span class="nm">${esc(k)}</span></button>`).join('')}</div>
+    <p class="small muted" style="margin-top:8px">Bu başlıkla girilmiş eski kayıtlar da taşınır (Money Pro arşivi hariç).</p>`}`}
 async function catRename(m,sb,nn){const t=catTree();const I={...(S.catIcons||{})};
   if(sb){t[m]=t[m].map(x=>x===sb?nn:x);if(I[m+'|'+sb]){I[m+'|'+nn]=I[m+'|'+sb];delete I[m+'|'+sb]}}
   else{const o={};Object.entries(t).forEach(([k,v])=>o[k===m?nn:k]=v);Object.keys(t).forEach(k=>delete t[k]);Object.assign(t,o);Object.keys(I).forEach(k=>{if(k===m||k.startsWith(m+'|')){I[nn+k.slice(m.length)]=I[k];delete I[k]}})}
@@ -1673,7 +1693,7 @@ function openCatPop(target,main){
   const editHead=(title,back)=>`<div class="pophead">${back?`<button class="x" data-act="catback" aria-label="Geri">‹</button>`:''}<b style="flex:1">${title}</b><button class="btn sm ghost" data-act="catedit">${catEditMode?'Bitti':'Düzenle'}</button><button class="x" data-act="catclose" aria-label="Kapat">✕</button></div>`;
   const erow=(m,sb,i,n)=>`<div class="cer"><button class="ic" data-act="caticon" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Simgeyi değiştir">${catIcon(m,sb)}</button>${sb?`<span class="nm">${esc(sb)}</span>`:`<button class="nm linkbtn" data-act="catmain" data-m="${esc(m)}" style="text-align:left">${esc(m)} ›</button>`}
     <button class="x" data-act="catmv" data-m="${esc(m)}" data-s="${esc(sb||'')}" data-d="-1" ${i===0?'disabled':''} aria-label="Yukarı">↑</button><button class="x" data-act="catmv" data-m="${esc(m)}" data-s="${esc(sb||'')}" data-d="1" ${i===n-1?'disabled':''} aria-label="Aşağı">↓</button>
-    <button class="x ns ${nonSpend(m,sb)?'on':''}" data-act="catns" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Harcama sayılmasın" title="Harcama sayılmasın">⊘</button><button class="x" data-act="catren" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Adını değiştir">✎</button><button class="x" data-act="catdel" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Sil">🗑</button></div>`;
+    <button class="x" data-act="catmove" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Taşı" title="Taşı">⇄</button><button class="x ns ${nonSpend(m,sb)?'on':''}" data-act="catns" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Harcama sayılmasın" title="Harcama sayılmasın">⊘</button><button class="x" data-act="catren" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Adını değiştir">✎</button><button class="x" data-act="catdel" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Sil">🗑</button></div>`;
   if(main){const subs=t[main]||[];
     h=editHead(esc(main),true)+(catEditMode?`<div class="stack" style="gap:0">${subs.map((sb,i)=>erow(main,sb,i,subs.length)).join('')||'<div class="small muted">Alt başlık yok.</div>'}</div><button class="cg add" style="width:100%;margin-top:10px" data-act="catnewform" data-m="${esc(main)}">+ Yeni alt başlık</button>`
       :`<div class="catgrid3">${tile('catset',main,'',main+' (genel)')}${subs.map(sb=>tile('catset',main,sb,sb)).join('')}<button class="ct add" data-act="catnewform" data-m="${esc(main)}"><span class="ic">＋</span><span class="nm">Yeni alt başlık</span></button></div>`)}
@@ -2027,6 +2047,10 @@ document.addEventListener('click',async e=>{
     case 'caticon':{const m=el.dataset.m,sb=el.dataset.s;const cur=iconKey(m,sb);document.querySelector('#catpop .popcard').innerHTML=`<div class="pophead"><button class="x" data-act="${sb?'catmain':'catback'}" data-m="${esc(m)}" aria-label="Geri">‹</button><b style="flex:1">${esc(sb||m)} · simge seç</b></div><div class="icgrid">${Object.keys(ICONS).map(k=>`<button class="${k===cur?'on':''}" data-act="caticonset" data-m="${esc(m)}" data-s="${esc(sb||'')}" data-k="${k}" aria-label="${k}">${svgIcon(k)}</button>`).join('')}</div>`}break;
     case 'caticonset':{const m=el.dataset.m,sb=el.dataset.s;const I={...(S.catIcons||{})};I[sb?m+'|'+sb:m]=el.dataset.k;await saveCatAll(catTree(),I);openCatPop(undefined,sb?m:undefined)}break;
     case 'catns':{const m=el.dataset.m,sb=el.dataset.s;const I={...(S.catIcons||{})};const k=sb?m+'|'+sb:m;const L=new Set(I.__non||[]);if(L.has(k))L.delete(k);else L.add(k);I.__non=[...L];await saveCatAll(catTree(),I);openCatPop(undefined,sb?m:undefined);toast(L.has(k)?`${sb||m}: harcama sayılmayacak`:`${sb||m}: yeniden harcama`);break}
+    case 'catmove':catMoveSheet(el.dataset.m,el.dataset.s);break;
+    case 'catmoveto':{const m=el.dataset.m,sb=el.dataset.s||'',to=el.dataset.to||'';const name=sb||m;const t=catTree();
+      if(!to&&t[name]&&!(sb&&name===m)){toast(`"${name}" adında ana başlık zaten var`);break}if(to&&(t[to]||[]).includes(name)){toast(`${to} altında zaten "${name}" var`);break}
+      try{const n=await catMove(m,sb,to);catCurMain=to||null;openCatPop(undefined,to||undefined);toast(`${name} taşındı${n?` · ${n} kayıt güncellendi`:''}`)}catch(e){toast(e.message)}break}
     case 'catdel':{const m=el.dataset.m,sb=el.dataset.s;if(!armed(el,'Sil?'))break;const t=catTree();if(sb)t[m]=t[m].filter(x=>x!==sb);else delete t[m];await saveCatAll(t);openCatPop(undefined,sb?m:undefined);toast('Silindi. Eski kayıtların adı korunur.')}break;
     case 'catmain':catCurMain=el.dataset.m;openCatPop(undefined,el.dataset.m);break;
     case 'catback':catCurMain=null;openCatPop();break;
