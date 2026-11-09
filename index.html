@@ -206,6 +206,12 @@ details summary{cursor:pointer;font-weight:600;font-size:14px}
 .fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom));width:58px;height:58px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);font-size:30px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;z-index:20;line-height:1}
 .qa-amt{font-family:var(--f-display);font-size:34px;font-weight:700;width:100%;border:0;border-bottom:2px solid var(--line);background:none;color:var(--ink);padding:6px 0;text-align:center}
 .qa-amt:focus{outline:none;border-color:var(--accent)}
+.planrow{display:flex;align-items:center;gap:10px;padding-block:8px;border-top:1px solid var(--line)}
+.planrow:first-child{border-top:0}
+.planrow .main{flex:1;min-width:0}
+.planrow .t{font-weight:600}
+.planrow .s{font-size:12px;color:var(--muted)}
+.safe .total{font-size:34px}
 .owe{padding-block:8px;border-top:1px solid var(--line)}
 .owe:first-of-type{border-top:0}
 .grp{font-size:12px;color:var(--muted);font-weight:500}
@@ -590,7 +596,7 @@ function clean(o){const r={};Object.entries(o).forEach(([k,v])=>{if(v!==undefine
 async function put(obj){if(!base){toast('Kaydedilemedi: oturum bağlı değil');throw new Error('nodb')}const id=obj.id||newId();const {id:_,...rest}=obj;await serial(id,()=>base.doc(id).set(clean(rest)));return id}
 async function del(id){if(base)await serial(id,()=>base.doc(id).delete())}
 function flat(store){const a=[];Object.values(store).forEach(items=>Object.entries(items||{}).forEach(([id,t])=>a.push({...t,id})));a.sort((x,y)=>y.date.localeCompare(x.date)||(y.ts||0)-(x.ts||0));return a}
-function derive(){S.tx=flat(S.months);S.arch=flat(S.amonths);S.receipts=flat(S.rmonths);_ep=null;_ps=null;
+function derive(){S.tx=flat(S.months);S.arch=flat(S.amonths);S.receipts=flat(S.rmonths);_ep=null;_ps=null;_hc=null;_sh=null;
   const mn=t=>S.tx.filter(x=>x.type===t).reduce((a,x)=>x.date<a?x.date:a,START());S.cutG=mn('gider');S.cutI=mn('gelir')}
 async function saveTx(list,removeIds){
   if(!base){toast('Kaydedilemedi: oturum bağlı değil');throw new Error('nodb')}
@@ -621,6 +627,7 @@ function partition(docs){
     else if(v.k==='meta')S.meta=v;
     else if(v.k==='cattree'){S.catTree=v.tree;S.catIcons=v.icons||{}}
     else if(v.k==='networth')S.nw=v;
+    else if(v.k==='catplan')S.catplan=v;
     else if(arr[v.k])S[arr[v.k]].push({...v,id:d.id});
   });
   derive();
@@ -656,6 +663,7 @@ async function boot(){
   db=localDb;base=localDb.collection();
   base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render()});
   try{if(ls.get('kd_due1','')!=='1'){for(const c of S.cards){if(!c.cuts||!hasDays(c))continue;const nc=fixCuts(c.cuts,c.cutDay,c.dueDay);if(JSON.stringify(nc)!==JSON.stringify(c.cuts))await put({...c,cuts:nc})}ls.set('kd_due1','1')}}catch(e){}
+  try{if(ls.get('kd_sal1','')!=='1'){if(!S.recs.some(r=>r.dir==='gelir')){await put({k:'rec',dir:'gelir',name:'Maaş',amount:80000,day:15});await put({k:'rec',dir:'gelir',name:'Ek gelir 1',amount:10000,day:25});await put({k:'rec',dir:'gelir',name:'Ek gelir 2',amount:10000,day:30})}ls.set('kd_sal1','1')}}catch(e){}
   try{if(ls.get('kd_cash1','')!=='1'){if(!S.accounts.some(isCashAcc))await put({k:'account',name:'Nakit',balance:0,balanceAt:1,ts:Date.now()});ls.set('kd_cash1','1')}}catch(e){}
   try{if(ls.get('kd_grp1','')!=='1'){const hit=S.accounts.filter(a=>!a.group&&/SEBAHAT|MELIKE|AHMET/.test(asciiUp(a.name)));for(const a of hit)await put({...a,group:'Ticari hesap'});ls.set('kd_grp1','1')}}catch(e){}
   /* Parafly: kesim günündeki (25) harcamalar bankada yeni döneme yazılıyor; son gün 24 */
@@ -770,13 +778,48 @@ function recOcc(r,mk){
   const tx=S.tx.find(t=>t.recId===r.id&&t.recMonth===mk);
   return {date,amount:tx?tx.amount:r.amount,done:!!tx,txId:tx?.id,no,count:r.count};
 }
+/* ===== TAHMİN: kategori bazında aylık harcama tahmini ve hangi kart/hesaptan harcandığı ===== */
+const EST_SKIP=['Ticari Gider'];const EST_IRREG=['Gezi'];const EST_SEASON=['Faturalar'];
+let _hc=null;
+function catHist(mk){/* yeni harcama: taksit payları ve sabit gider kayıtları hariç (onlar zaten ayrı biliniyor) */
+  _hc=_hc&&_hc.key===S.tx.length+':'+S.arch.length+':'+today()?_hc:{key:S.tx.length+':'+S.arch.length+':'+today(),m:{}};if(_hc.m[mk])return _hc.m[mk];const by={};
+  if(!useArch(mk))livePortions().forEach(p=>{if(p.personId!==ME||p.pdate.slice(0,7)!==mk||p.pn>1||p.recId)return;const c=p.category||'Diğer';by[c]=(by[c]||0)+p.pamount});
+  else S.arch.forEach(t=>{if(t.type!=='gider'||t.personId!==ME||t.date.slice(0,7)!==mk)return;const c=t.category||'Diğer';by[c]=(by[c]||0)+t.amount});
+  return _hc.m[mk]=by}
+const median=a=>{if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);const m=Math.floor(b.length/2);return b.length%2?b[m]:(b[m-1]+b[m])/2};
+function estCat(c,mk){if(EST_SKIP.includes(c))return {v:0,src:'hesaba girmez'};const ov=S.catplan?.months?.[mk]?.[c];if(ov!=null)return {v:ov,src:'senin planın',set:true};
+  if(EST_IRREG.includes(c))return {v:0,src:'düzensiz · planlarsan ekle'};const cur=today().slice(0,7);
+  const ly=catHist(shiftMonth(mk,-12))[c]||0;if(EST_SEASON.includes(c)&&ly>0)return {v:ly,src:'geçen yıl aynı ay'};
+  const prev=[1,2,3,4,5,6].map(i=>shiftMonth(cur,-i)).filter(m=>Object.keys(catHist(m)).length).map(m=>catHist(m)[c]||0);
+  if(prev.length)return {v:median(prev),src:`son ${prev.length} ayın ortancası`};return {v:ly,src:ly?'geçen yıl aynı ay':'geçmiş yok'}}
+function estCats(mk){const cats=new Set([...Object.keys(catTree()),...Object.keys(catHist(mk))]);const out={};cats.forEach(c=>{if(EST_SKIP.includes(c))return;out[c]=estCat(c,mk)});return out}
+/* bir kategori hangi kart/hesaptan harcanıyor: son 6 ayın gerçek kayıtlarından */
+let _sh=null;
+function srcShares(){if(_sh&&_sh.key===S.tx.length)return _sh.v;const from=addMonths(today(),-6);const by={},all={};
+  const ok=src=>{if(src.startsWith('c:')){const c=cardById(src.slice(2));return c&&!c.ticari&&!c.holderId}return true};
+  livePortions().forEach(p=>{if(p.personId!==ME||p.pn>1||p.recId||p.pdate<from||EST_SKIP.includes(p.category))return;const src=p.cardId?'c:'+p.cardId:'a:'+(p.account||'');if(!ok(src))return;const c=p.category||'Diğer';
+    (by[c]=by[c]||{})[src]=(by[c][src]||0)+p.pamount;all[src]=(all[src]||0)+p.pamount});
+  const norm=o=>{const t=Object.values(o).reduce((a,v)=>a+v,0);const r={};Object.entries(o).forEach(([k,v])=>{if(v>0)r[k]=v/t});return r};
+  const def=S.cards.find(c=>!c.ticari&&!c.holderId&&hasDays(c));const v={by:{},all:Object.keys(all).length?norm(all):(def?{['c:'+def.id]:1}:{'a:':1})};Object.entries(by).forEach(([c,o])=>v.by[c]=norm(o));_sh={key:S.tx.length,v};return v}
+/* belli bir aralıkta (from..to, ikisi dahil) bir kaynağa düşecek tahmini yeni harcama */
+function estSpend(srcPred,from,to){if(to<from)return 0;const t=today();const sh=srcShares();let sum=0;let m=from.slice(0,7);
+  while(m<=to.slice(0,7)){const[y,mo]=m.split('-').map(Number);const days=new Date(y,mo,0).getDate();const ms=m+'-01',me=monthEnd(m);
+    const a=from>ms?from:ms,b=to<me?to:me;const isCur=m===t.slice(0,7);const restStart=isCur?addDays(t,1):ms;const restDays=Math.max(0,daysBetween(restStart,me)+1);
+    const ovl=Math.max(0,daysBetween(a>restStart?a:restStart,b)+1);
+    if(ovl>0&&restDays>0){const E=estCats(m);const H=isCur?catHist(m):{};
+      Object.entries(E).forEach(([c,e])=>{const left=Math.max(0,e.v-(H[c]||0));if(left<=0)return;const share=sh.by[c]||sh.all;Object.entries(share).forEach(([src,f])=>{if(srcPred(src))sum+=left*f*ovl/restDays})})}
+    m=shiftMonth(m,1)}
+  return sum}
+const ticariAmt=items=>items.filter(p=>p.category==='Ticari Gider').reduce((a,p)=>a+p.pamount,0);
 function cardDuesInMonth(c,mk){if(!hasDays(c))return [];return [...new Set(cutCands(c,mk+'-15'))].filter(cut=>dueFor(c,cut).slice(0,7)===mk).map(cut=>stmt(c,cut))}
 function monthPlan(mk){
   const ins=[],outs=[];const t=today();
   S.recs.forEach(r=>{const o=recOcc(r,mk);if(!o)return;(r.dir==='gelir'?ins:outs).push({k:'rec',id:r.id,title:r.name,date:o.date,amount:o.amount,done:o.done,tag:o.no?(o.count?`${o.no}/${o.count}`:`${o.no}`):'',goal:r.dir==='hedef'})});
-  S.cards.forEach(c=>cardDuesInMonth(c,mk).forEach(s=>{
-    if(s.total<=0.5)return;const est=s.cut>=t;
-    outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:s.total,done:s.paid,tag:est?'dönem açık':'',mine:s.by[ME]||0});
+  S.cards.filter(c=>!c.ticari).forEach(c=>cardDuesInMonth(c,mk).forEach(s=>{
+    const tic=ticariAmt(s.items);const prev=prevCut(c,s.cut);const open=s.cut>=t;
+    const est=open&&!c.holderId?estSpend(src=>src==='c:'+c.id,addDays(prev>t?prev:t,prev>t?1:1),s.cut):0;const cert=s.total-tic;
+    if(cert+est<=0.5)return;
+    outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:cert+est,cert,est,done:s.paid,tag:[open?'dönem açık':'',est>0.5?`${TL(cert)} kesin + ~${TL(est)} tahmini`:'',tic>0.5?`ticari ${TL(tic)} hariç`:''].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic+est});
     Object.entries(s.by).forEach(([pid,a])=>{if(pid===ME||a<=0.5)return;const L=owedLeft(pid,c.id,s.cut);
       if(L){const got=L.amt-L.left;if(L.left<=0.5){ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:L.amt,done:true,tag:c.name+' · alındı'});return}
         if(got>0.5)ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:got,done:true,tag:c.name+' · alındı'});
@@ -784,6 +827,7 @@ function monthPlan(mk){
       const got=S.tx.filter(x=>x.type==='tahsilat'&&x.personId===pid&&x.date.slice(0,7)===mk).reduce((q,x)=>q+x.amount,0);
       ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:a,done:got>=a-1,tag:c.name})});
   }));
+  if(mk>=t.slice(0,7)){const a=mk===t.slice(0,7)?t:mk+'-01';const v=estSpend(src=>src.startsWith('a:'),mk===t.slice(0,7)?addDays(t,1):a,monthEnd(mk));if(v>0.5)outs.push({k:'estcash',id:mk,title:'Nakit/hesaptan harcamalar',date:a,amount:v,done:false,tag:'tahmini'})}
   S.plans.forEach(pl=>{const s=planStatus(pl);const[y,m]=mk.split('-').map(Number);const date=dayIn(y,m-1,pl.day||1);
     const got=S.tx.filter(x=>x.type==='gelir'&&x.planId===pl.id&&x.date.slice(0,7)===mk).reduce((a,x)=>a+x.amount,0);
     const ahead=Math.max(0,monthsBetween(t.slice(0,7),mk));const left=s.remaining+(got?got:0)-ahead*(pl.installment||0);
@@ -799,6 +843,34 @@ function monthPlan(mk){
 }
 /* nakit akışı: bugünkü banka parasıyla başla, bekleyen gelir ve giderleri tarih sırasıyla işle; para yetmeyen ödemeyi işaretle */
 function cashNow(){return S.accounts.reduce((s,a)=>s+accBalance(a),0)}
+/* önümüzdeki 45 gün: bekleyen gelir/gider (tahminler dahil) gün gün; en dip bakiye = plan dışı rahat harcayabileceğin */
+/* ufuk: en az 45 gün; bir ay sonra yapacağın harcamaların kart ödemesi de içeride kalsın diye her kartın (bugün+30) dönemine ait son ödeme gününe kadar */
+function projDays(){const t=today();const d30=addDays(t,30);let h=addDays(t,45);S.cards.filter(c=>!c.ticari&&hasDays(c)).forEach(c=>{const due=dueFor(c,cutFor(c,d30));if(due>h)h=due});return Math.min(75,daysBetween(t,h))}
+function projection(days){days=days||projDays();const t=today();const end=addDays(t,days);const ev=[];let m=t.slice(0,7);
+  while(m<=end.slice(0,7)){const P=monthPlan(m);P.ins.forEach(x=>{if(!x.done&&x.date<=end&&!(x.k==='income'))ev.push({x,d:x.date<t?t:x.date,s:1})});P.outs.forEach(x=>{if(!x.done&&x.date<=end)ev.push({x,d:x.date<t?t:x.date,s:-1})});m=shiftMonth(m,1)}
+  ev.sort((a,b)=>a.d.localeCompare(b.d)||b.s-a.s);let bal=cashNow();const start=bal;let min={bal,d:t,x:null};const pts=[{d:t,bal}];
+  ev.forEach(e=>{bal+=e.s*e.x.amount;e.bal=bal;pts.push({d:e.d,bal});if(bal<min.bal)min={bal,d:e.d,x:e.x}});return {start,ev,min,end:bal,pts,days}}
+function safeBox(){if(!S.cards.length&&!S.recs.length)return '';const P=projection();const v=P.min.bal;
+  return `<section class="sec tap safe" data-act="projsheet"><div class="eyebrow">Plan dışı rahat harcayabileceğin · önümüzdeki ${P.days} gün</div>
+    <div class="total" style="color:${v<0?'var(--crit)':'var(--plus)'}">${v<0?'−'+TL(-v):TL(v)}</div>
+    <div class="small muted">${v<0?`⚠ ${fmtD(P.min.d)} · ${esc(P.min.x?.title||'')} gününde tahminen ${TL(-v)} açık`:P.min.x?`En sıkışık gün ${fmtD(P.min.d)} · ${esc(P.min.x.title)}`:'Bu süre içinde sıkışık gün yok'} · dokun: gün gün gör</div></section>`}
+function projSheet(){const P=projection();const W=340,H=120;const ts=P.pts.map(p=>daysBetween(today(),p.d));const vs=P.pts.map(p=>p.bal);const mn=Math.min(0,...vs),mx=Math.max(1,...vs);
+  const X=d=>d/P.days*W,Y=v=>H-8-(v-mn)/(mx-mn||1)*(H-16);let path='';P.pts.forEach((p,i)=>{const x=X(ts[i]),y=Y(p.bal);path+=(i?` H${x.toFixed(1)} V${y.toFixed(1)}`:`M${x.toFixed(1)} ${y.toFixed(1)}`)});
+  openSheet(head(`Nakit akışı · ${P.days} gün`)+`<section class="sec"><div class="eyebrow">Plan dışı rahat harcayabileceğin</div><div class="total" style="color:${P.min.bal<0?'var(--crit)':'var(--plus)'}">${P.min.bal<0?'−':''}${TL(Math.abs(P.min.bal))}</div>
+    <div class="small muted">Bugün hesaplarında ${TL(P.start)}. Market, yakıt, fatura gibi normal harcamaların tahmini aşağıda zaten düşüldü; bu rakam onların üstüne yapacağın ekstra harcama içindir. Ticari gelir ve giderler dahil değil.</div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;margin-top:10px" role="img" aria-label="Tahmini bakiye"><line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--crit)" stroke-dasharray="4 4" opacity=".6"/><path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2"/>${P.min.x?`<circle cx="${X(daysBetween(today(),P.min.d))}" cy="${Y(P.min.bal)}" r="4" fill="${P.min.bal<0?'var(--crit)':'var(--warn)'}"/>`:''}</svg>
+    <div class="sumline small"><span class="muted">${fmtD(today())}</span><span class="muted">${fmtD(addDays(today(),P.days))}</span></div>
+    <button class="btn ghost sm" data-act="plansheet" style="margin-top:6px">Harcama planını düzenle</button></section>
+    <section class="sec" style="margin-top:12px"><h2>Gün gün</h2>${P.ev.map(e=>`<div class="row"><div class="main"><div class="t">${esc(e.x.title)}</div><div class="s">${fmtD(e.d)}${e.x.tag?' · '+esc(e.x.tag):''}</div></div><div class="amt ${e.s>0?'plus':''}">${e.s>0?'+':'−'}${TL(e.x.amount)}<small style="color:${e.bal<0?'var(--crit)':'var(--muted)'}">kalan ${e.bal<0?'−':''}${TL(Math.abs(e.bal))}</small></div></div>`).join('')||'<div class="empty">Bekleyen hareket yok.</div>'}</section>`)}
+/* harcama planı: kategori tahminleri, bu ay harcanan, elle değiştir */
+let planEditMonth=null;
+function planSheet(mk){mk=mk||planEditMonth||today().slice(0,7);planEditMonth=mk;const E=estCats(mk);const H=mk===today().slice(0,7)?catHist(mk):{};const tot=Object.values(E).reduce((a,e)=>a+e.v,0);const spent=Object.values(H).reduce((a,v)=>a+v,0);
+  const rows=Object.entries(E).sort((a,b)=>b[1].v-a[1].v);
+  openSheet(head('Harcama planı')+`<div class="chips" style="margin-bottom:10px">${[0,1,2].map(i=>shiftMonth(today().slice(0,7),i)).map(m=>`<button class="${m===mk?'on':''}" data-act="planmon" data-v="${m}">${monthLabel(m)}</button>`).join('')}</div>
+    <section class="sec"><div class="eyebrow">${monthLabel(mk)} tahmini harcaman</div><div class="total">${TL(tot)}</div><div class="small muted">${H&&spent?`Şimdiye kadar ${TL(spent)} · `:''}Taksitler, sabit giderler ve ticari giderler hariç; onlar zaten ayrıca biliniyor.</div></section>
+    <section class="sec" style="margin-top:12px"><form data-form="catplan"><input type="hidden" name="mk" value="${mk}">${rows.map(([c,e])=>`<div class="planrow"><span class="anic">${catIcon(c,'')}</span><div class="main"><div class="t">${esc(c)}</div><div class="s">${esc(e.src)}${H[c]?` · harcanan ${TL(H[c])}`:''}</div></div><input class="inp" name="c_${esc(c)}" type="number" step="100" inputmode="numeric" value="${Math.round(e.v)}" data-orig="${Math.round(e.v)}" style="width:110px;text-align:right;${e.set?'border-color:var(--accent)':''}"></div>`).join('')}
+      <div class="btnrow" style="margin-top:10px"><button class="btn" type="submit">Kaydet</button><button class="btn ghost" type="button" data-act="planreset" data-v="${mk}">Otomatik tahmine dön</button></div></form>
+      <p class="small muted" style="margin-top:8px">Değiştirdiğin tutarlar sadece ${monthLabel(mk)} için geçerli. Örneğin gezi planlıyorsan Gezi'ye tutar yaz.</p></section>`)}
 function cashFlow(mk){
   const cur=today().slice(0,7);if(mk<cur)return null;const t=today();
   let bal=cashNow();
@@ -834,7 +906,7 @@ function planTableFlow(mk,F){
   const doneIn=P.ins.filter(x=>x.done),doneOut=P.outs.filter(x=>x.done);const goals=P.outs.filter(x=>x.goal);const cur=mk===today().slice(0,7);
   const startLine=`<div class="pl ${cur?"tap":""}" ${cur?"data-act=\"cashsheet\"":""}><div class="pr"><span class="pn">${cur?'Hesaplarımdaki para':'Önceki aydan devreden'}</span><b style="color:${F.start<0?'var(--crit)':'inherit'}">${TL(F.start)}</b></div><div class="pd">${cur?(F.withBal?'bugün':'<b style="color:var(--warn)">bakiyeleri gir</b>'):'tahmini'}</div></div>`;
   const warn=F.short.length?`<div class="banner" style="background:color-mix(in srgb,var(--crit) 16%,transparent);margin-top:10px;flex-direction:column;align-items:stretch;gap:4px"><b>⚠ Para bulman gereken ödemeler</b>${F.short.map(s=>`<div class="sumline small"><span>${fmtD(s.d)} · ${esc(s.x.title)}</span><b style="color:var(--crit)">${TL(s.miss)} eksik</b></div>`).join('')}<div class="small muted">Hesaplarındaki para ve o tarihe kadar gelecek alacaklar bu ödemeleri karşılamıyor.</div></div>`:'';
-  return `<section class="sec plan">${monthBar(mk,'pprev','pnext')}${warn}
+  return `<section class="sec plan">${monthBar(mk,'pprev','pnext')}<div class="btnrow" style="justify-content:center;margin-top:6px"><button class="btn ghost sm" data-act="plansheet">Harcama planı</button><button class="btn ghost sm" data-act="projsheet">Nakit akışı</button></div>${warn}
     <div class="cols" style="margin-top:10px">
       <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>${startLine}${pin.map(planLine).join('')}${doneIn.length?`<div class="pd" style="margin-top:4px">Gelenler (hesaba girdi)</div>${doneIn.map(planLine).join('')}`:''}
         <button class="addl" data-act="addticari">+ Ticari gelir</button><button class="addl" data-act="newrec" data-dir="gelir">+ Sabit gelir</button></div>
@@ -886,6 +958,7 @@ function bankCmpLine(c,open){const bc=c.bankCheck&&c.bankCheck.cut===open.cut?c.
 function planItemSheet(k,id){
   const mk=planMonth;
   if(k==='card'){goTab('kart');return}
+  if(k==='estcash'){planSheet(id);return}
   if(k==='person'){personSheet(id);return}
   if(k==='plan'){ledgerSheet();return}
   if(k==='debt'){openSheet(formDebt(S.debts.find(d=>d.id===id)));return}
@@ -975,7 +1048,7 @@ function viewHome(){
   const items=spendItems(S.cards.map(c=>c.id),'open');const mine=items.filter(p=>p.personId===ME);const tot=mine.reduce((a,p)=>a+p.pamount,0);
   const by={};mine.forEach(p=>{const k=p.category||'Diğer';by[k]=(by[k]||0)+p.pamount});let rows=Object.entries(by).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,8);
   const perCard=S.cards.map(c=>{const st=cardState(c);if(!st)return null;const m=st.open.by[ME]||0;const o=st.open.total-m;return {c,m,o,cut:st.open.cut}}).filter(Boolean);
-  return `${welcome()}${alertsHtml()}${backupNag()}${setupSteps()}
+  return `${welcome()}${alertsHtml()}${safeBox()}${backupNag()}${setupSteps()}
   ${planTable(planMonth)}
   ${owedSection()}
   ${heldSection()}
@@ -1510,6 +1583,7 @@ function formCard(c){
   return head(c.id?'Kartı düzenle':'Yeni kart')+`<form data-form="card"><input type="hidden" name="id" value="${esc(c.id||'')}">
     <label class="f">Kart adı<input id="cName" name="name" required value="${esc(c.name||'')}"></label>
     <div class="three"><label class="f">Limit (₺)<input id="cLim" name="limit" type="number" step="1" value="${c.limit||''}" placeholder="${c.limitOf?'ortak':''}"></label><label class="f">Kesim günü<input id="cCut" name="cutDay" type="number" min="1" max="31" required value="${c.cutDay||''}"></label><label class="f">Son ödeme<input id="cDue" name="dueDay" type="number" min="1" max="31" required value="${c.dueDay||''}"></label></div>
+    <label class="check"><input type="checkbox" name="ticari" ${c.ticari?'checked':''}> Bu kart sadece ticari giderler için (ödemesi ticari gelirden, nakit akışı hesabına girmez)</label>
     <label class="f">Kartı kim kullanıyor?<select id="cHolder" name="holderId">${opt('','Ben',c.holderId||'')}${S.persons.map(p=>opt(p.id,p.name,c.holderId||'')).join('')}</select></label>
     <label class="f">Limiti başka bir kartla ortak mı?<select id="cLimOf" name="limitOf">${opt('','Hayır, kendi limiti var',c.limitOf||'')}${S.cards.filter(x=>x.id!==c.id&&!x.limitOf).map(x=>opt(x.id,x.name+' ile ortak',c.limitOf||'')).join('')}</select></label>
     <p class="small muted" style="margin:0">Başka biri kullanıyorsa bu karttaki harcamaların hepsi ona yazılır, senin harcamana karışmaz. Ortak limitte limit ana kartta girilir.</p>
@@ -1837,6 +1911,10 @@ document.addEventListener('click',async e=>{
     case 'accgroup':accGroupSheet(id);break;
     case 'cashsheet':cashSheet();break;
     case 'nwsheet':nwSheet();break;
+    case 'projsheet':projSheet();break;
+    case 'plansheet':planSheet(today().slice(0,7));break;
+    case 'planmon':planSheet(el.dataset.v);break;
+    case 'planreset':{const mk=el.dataset.v;const months={...(S.catplan?.months||{})};delete months[mk];await put({id:'catplan',k:'catplan',months});S.catplan={months};planSheet(mk);toast('Otomatik tahmine dönüldü');break}
     case 'yearsum':yearSheet(+el.dataset.v);break;
     case 'subsearch':gsQuery=el.dataset.q;gsFilter='all';searchSheet();break;
     case 'quickadd':openSheet(formQuick());setTimeout(()=>document.querySelector('.qa-amt')?.focus(),80);break;
@@ -1991,7 +2069,7 @@ document.addEventListener('submit',async e=>{
       await saveTx([o,...extra]);closeSheet();if(type==='gider'&&o.personId===ME)setTimeout(()=>budgetAlert([o.category],'Kaydedildi'),300);else toast('Kaydedildi');break}
     case 'card':{const cut=Math.round(num(g('cutDay'))),due=Math.round(num(g('dueDay')));if(cut<1||cut>31||due<1||due>31){toast('Günler 1-31 arası olmalı');return}const ex=cardById(g('id'));
       const cuts=fixCuts(ex?.cuts,cut,due,ex?.cutDay);
-      await put({...(ex||{}),id:g('id')||undefined,k:'card',name:g('name').trim(),limit:g('limitOf')?0:(num(g('limit'))||0),limitOf:g('limitOf')||'',cutDay:cut,dueDay:due,cuts,holderId:g('holderId')||'',ts:ex?.ts||Date.now()});closeSheet();toast('Kart kaydedildi');break}
+      await put({...(ex||{}),id:g('id')||undefined,k:'card',name:g('name').trim(),limit:g('limitOf')?0:(num(g('limit'))||0),limitOf:g('limitOf')||'',cutDay:cut,dueDay:due,cuts,holderId:g('holderId')||'',ticari:fd.has('ticari'),ts:ex?.ts||Date.now()});closeSheet();toast('Kart kaydedildi');break}
     case 'paycard':{const c=cardById(g('cardId'));const amt=num(g('amount'));if(amt<=0)return;const d=g('date')||today();await saveTx([{id:newId(),type:'transfer',amount:amt,date:d,account:g('account')||'',toCardId:c.id,merchant:`${c.name} borç ödemesi`,ts:Date.now(),via:'manuel'}]);
       const st=cardState(c);if(st&&!st.noDays&&!st.last.paid&&st.last.total>0.5&&amt>=st.last.total-1){const ex=S.stmts.find(x=>x.cardId===c.id&&x.cut===st.last.cut);await put({...(ex||{}),id:ex?.id,k:'stmt',cardId:c.id,cut:st.last.cut,paid:true})}
       closeSheet();toast('Ödeme kaydedildi');break}
@@ -2027,6 +2105,9 @@ document.addEventListener('submit',async e=>{
     case 'bankcmp':{const c=cardById(g('id'));const st=cardState(c);await put({...c,bankCheck:{cut:st.open.cut,amount:num(g('amount')),at:today()}});closeSheet();break}
     case 'apikey':{ls.set('kd_apikey',String(g('key')||'').trim());toast('Anahtar kaydedildi');break}
     case 'prodedit':{const p=S.prod.map[g('pid')];p.name=g('name').trim()||p.name;p.group=g('group');await saveProd();_ps=null;closeSheet();render();break}
+    case 'catplan':{const mk=g('mk');const months={...(S.catplan?.months||{})};const cur={...(months[mk]||{})};
+      f.querySelectorAll('input[name^="c_"]').forEach(inp=>{const c=inp.name.slice(2);const v=num(inp.value);if(String(Math.round(v))!==inp.dataset.orig||cur[c]!=null)cur[c]=Math.max(0,v)});
+      months[mk]=cur;await put({id:'catplan',k:'catplan',months});S.catplan={months};toast('Plan kaydedildi');planSheet(mk);break}
     case 'quick':{const amt=num(g('amount'));if(!(amt>0)){toast('Tutar gir');return}const cv=g('cat');if(!cv){toast('Kategori seç');return}const c=parseCat(cv)||{category:'Diğer',sub:''};const pid=g('personId')||ME;const src=g('src')||'';
       await saveTx([clean({id:newId(),type:'gider',amount:amt,date:g('date')||today(),merchant:String(g('merchant')||'').trim(),...srcParse(src),personId:pid,category:pid===ME?c.category:'',sub:pid===ME?c.sub:'',inst:1,via:'hizli',ts:Date.now()})]);
       ls.set('kd_qa_src',src);closeSheet();budgetAlert(pid===ME?[c.category]:[],`${TL(amt)} eklendi`);break}
