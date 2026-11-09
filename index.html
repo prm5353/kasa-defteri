@@ -190,6 +190,13 @@ details summary{cursor:pointer;font-weight:600;font-size:14px}
 .plan .eyebrow{font-size:12.5px}
 .plan .cols.tot div{font-size:15px}
 .atype{padding-block:8px;border-top:1px solid var(--line)}
+.anrow{display:flex;align-items:center;gap:10px;padding-block:10px;border-top:1px solid var(--line)}
+.anrow:first-child{border-top:0}
+.anrow .main{flex:1;min-width:0}
+.anic{color:var(--muted);line-height:0;flex:none}
+.anic svg{width:24px;height:24px}
+.anic.big svg{width:36px;height:36px}
+.crumbs{margin:10px 2px;font-size:14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .owe{padding-block:8px;border-top:1px solid var(--line)}
 .owe:first-of-type{border-top:0}
 .grp{font-size:12px;color:var(--muted);font-weight:500}
@@ -1005,6 +1012,50 @@ function trendSvg(endK){
     s+=`<rect x="${cx-bw-1}" y="${y(v.inc)}" width="${bw}" height="${H-bot-y(v.inc)}" rx="3" fill="var(--inc)"><title>Gelir ${TL(v.inc)}</title></rect><rect x="${cx+1}" y="${y(v.mine)}" width="${bw}" height="${H-bot-y(v.mine)}" rx="3" fill="${k===endK?'var(--accent)':'var(--muted)'}"><title>Harcama ${TL(v.mine)}</title></rect><text x="${cx}" y="${H-6}" text-anchor="middle" ${k===endK?'style="fill:var(--ink);font-weight:700"':''}>${AYK[+k.slice(5)-1]}</text>`});
   return s+`</svg><div class="legend"><span><i style="background:var(--inc)"></i>Gelir</span><span><i style="background:var(--accent)"></i>Benim harcamam</span><span class="sp"></span><span>en yüksek ${TL(max)}</span></div>`;
 }
+/* ===== GEÇMİŞE DÖNÜK ANALİZ: tarih aralığı → gelir/gider → kategori → alt kategori → kayıtlar ===== */
+let AN=null;
+function anInit(){if(AN)return;let st={};try{st=JSON.parse(ls.get('kd_an','{}'))||{}}catch(e){}
+  const t=today();AN={from:st.from||addDays(addMonths(t,-3),1),to:st.to||t,path:[],exG:st.exG||[],exI:st.exI||[],filt:false}}
+function anSave(){ls.set('kd_an',JSON.stringify({from:AN.from,to:AN.to,exG:AN.exG,exI:AN.exI}))}
+function anData(){const ua={};const arch=mk=>ua[mk]??(ua[mk]=useArch(mk));const inR=d=>d>=AN.from&&d<=AN.to;
+  const G=[],I=[];
+  livePortions().forEach(p=>{if(p.personId!==ME||!inR(p.pdate)||arch(p.pdate.slice(0,7)))return;G.push({date:p.pdate,amt:p.pamount,m:p.category||'Diğer',sb:p.sub||'',merchant:p.merchant,src:srcLabel(p),id:p.id,portion:p.pn>1?`${p.pi}/${p.pn}`:''})});
+  S.arch.forEach(t=>{if(!inR(t.date)||!arch(t.date.slice(0,7)))return;if(t.type==='gider'&&t.personId===ME)G.push({date:t.date,amt:t.amount,m:t.category||'Diğer',sb:t.sub||'',merchant:t.merchant,src:srcLabel(t),id:t.id,arch:true});else if(t.type==='gelir')I.push({date:t.date,amt:t.amount,m:t.source||'Diğer',sb:'',merchant:t.merchant,src:srcLabel(t),id:t.id,arch:true})});
+  S.tx.forEach(t=>{if(t.type==='gelir'&&inR(t.date)&&!arch(t.date.slice(0,7)))I.push({date:t.date,amt:t.amount,m:t.source||'Diğer',sb:'',merchant:t.merchant,src:srcLabel(t),id:t.id})});
+  return {G:G.filter(x=>!AN.exG.includes(x.m)),I:I.filter(x=>!AN.exI.includes(x.m)),allG:[...new Set(G.map(x=>x.m))],allI:[...new Set(I.map(x=>x.m))]}}
+function anGroup(list,key){const g={};list.forEach(x=>{const k=key(x);(g[k]=g[k]||{k,v:0,n:0,items:[]}).v+=x.amt;g[k].n++;g[k].items.push(x)});return Object.values(g).sort((a,b)=>b.v-a.v)}
+function anBars(groups,total,act,iconOf){const mx=Math.max(1,...groups.map(g=>g.v));
+  return groups.map((g,i)=>`<div class="anrow tap" data-act="${act}" data-k="${esc(g.k)}">${iconOf?`<span class="anic">${iconOf(g.k)}</span>`:''}<div class="main"><div class="sumline" style="padding:0"><span style="font-weight:600">${esc(g.k||'Genel')}</span><b>${TL(g.v)}</b></div>
+    <div class="bar" style="height:6px;margin-top:5px"><i style="width:${Math.max(0,g.v)/mx*100}%;background:${PAL[i%PAL.length]}"></i></div><div class="small muted" style="margin-top:3px">%${total>0?(g.v/total*100).toFixed(1).replace('.',','):'0'} · ${g.n} kayıt</div></div>${chev}</div>`).join('')}
+function anTx(items){return [...items].sort((a,b)=>b.date.localeCompare(a.date)).map(x=>`<div class="row tap" data-act="${x.arch?'archtx':'edittx'}" data-id="${x.id}"><div class="main"><div class="t">${esc(x.merchant||x.sb||x.m)}</div><div class="s">${fmtDY(x.date)} · ${esc(x.src)}${x.portion?' · taksit '+x.portion:''}${x.arch?' · arşiv':''}</div></div><div class="amt ${x.amt<0?'plus':''}">${x.amt<0?'+':''}${TL(Math.abs(x.amt))}</div></div>`).join('')||'<div class="empty">Kayıt yok.</div>'}
+function analizSheet(){anInit();const D=anData();const gT=D.G.reduce((a,x)=>a+x.amt,0),iT=D.I.reduce((a,x)=>a+x.amt,0);const P=AN.path;
+  const crumbs=[['Özet',0],...P.map((p,i)=>[p==='G'?'Gider':p==='I'?'Gelir':p,i+1])];
+  const presets=[['bu','Bu ay'],['gecen','Geçen ay'],['3','Son 3 ay'],['6','Son 6 ay'],['yil','Bu yıl'],['gyil','Geçen yıl']];
+  const exN=AN.exG.length+AN.exI.length;
+  let body='';
+  if(AN.filt){
+    body=`<section class="sec"><h2>Toplama dahil olanlar</h2><div class="btnrow" style="margin-bottom:8px"><button class="btn sm ghost" data-act="anall">Hepsini dahil et</button>${D.allG.includes('Ticari Gider')||AN.exG.includes('Ticari Gider')?'<button class="btn sm ghost" data-act="anticari">Ticari giderler hariç</button><button class="btn sm ghost" data-act="anticonly">Sadece ticari</button>':''}</div>
+      <div class="eyebrow">Gider kategorileri</div>${[...new Set([...Object.keys(catTree()),...D.allG,...AN.exG])].map(m=>`<label class="check"><input type="checkbox" data-anx="G" value="${esc(m)}" ${AN.exG.includes(m)?'':'checked'}> ${esc(m)}</label>`).join('')}
+      <div class="eyebrow" style="margin-top:10px">Gelir türleri</div>${[...new Set([...INCOME_SRC,...D.allI,...AN.exI])].map(m=>`<label class="check"><input type="checkbox" data-anx="I" value="${esc(m)}" ${AN.exI.includes(m)?'':'checked'}> ${esc(m)}</label>`).join('')}
+      <button class="btn" style="width:100%;margin-top:10px" data-act="anfilt">Tamam</button></section>`}
+  else if(!P.length){const mx=Math.max(1,gT,iT);
+    body=`<section class="sec"><div class="anrow tap" data-act="ango" data-k="I"><div class="main"><div class="sumline" style="padding:0"><span style="font-weight:700">Gelir</span><b style="color:var(--plus)">${TL(iT)}</b></div><div class="bar" style="height:12px;margin-top:6px"><i style="width:${iT/mx*100}%;background:var(--plus)"></i></div></div>${chev}</div>
+      <div class="anrow tap" data-act="ango" data-k="G"><div class="main"><div class="sumline" style="padding:0"><span style="font-weight:700">Gider</span><b>${TL(gT)}</b></div><div class="bar" style="height:12px;margin-top:6px"><i style="width:${gT/mx*100}%;background:var(--crit)"></i></div></div>${chev}</div>
+      <div class="kalan"><span>FARK</span><b style="color:${iT-gT>=0?'var(--plus)':'var(--crit)'}">${TL(iT-gT)}</b></div></section>
+      ${gT>0?(()=>{const gs=anGroup(D.G,x=>x.m).slice(0,8);return `<section class="sec" style="margin-top:12px"><h2>Gider dağılımı</h2><div style="display:flex;gap:12px;align-items:center">${donut(gs.map(g=>({k:g.k,v:g.v})),gT,140)}<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${gs.map((g,i)=>`<div class="cl tap" data-act="anjump" data-k="${esc(g.k)}"><span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${PAL[i]};margin-right:5px"></i>${esc(g.k)}</span><b>%${(g.v/gT*100).toFixed(0)}</b></div>`).join('')}</div></div></section>`})():''}`}
+  else if(P[0]==='G'&&P.length===1){const gs=anGroup(D.G,x=>x.m);body=`<section class="sec"><div class="eyebrow">Gider toplamı</div><div class="total">${TL(gT)}</div></section><section class="sec" style="margin-top:12px">${anBars(gs,gT,'ango',k=>catIcon(k,''))||'<div class="empty">Bu aralıkta gider yok.</div>'}</section>`}
+  else if(P[0]==='G'&&P.length===2){const L=D.G.filter(x=>x.m===P[1]);const t=L.reduce((a,x)=>a+x.amt,0);const gs=anGroup(L,x=>x.sb);
+    body=`<section class="sec"><div style="display:flex;gap:10px;align-items:center"><span class="anic big">${catIcon(P[1],'')}</span><div><div class="eyebrow">${esc(P[1])}</div><div class="total">${TL(t)}</div><div class="small muted">Giderlerinin %${gT>0?(t/gT*100).toFixed(1).replace('.',','):0}'i</div></div></div></section>
+      ${gs.length>1||gs[0]?.k?`<section class="sec" style="margin-top:12px">${anBars(gs,t,'ango',k=>catIcon(P[1],k))}</section>`:`<section class="sec" style="margin-top:12px">${anTx(L)}</section>`}`}
+  else if(P[0]==='G'){const L=D.G.filter(x=>x.m===P[1]&&x.sb===(P[2]==='Genel'?'':P[2]));const t=L.reduce((a,x)=>a+x.amt,0);
+    body=`<section class="sec"><div class="eyebrow">${esc(P[1])} › ${esc(P[2])}</div><div class="total">${TL(t)}</div><div class="small muted">${L.length} kayıt</div></section><section class="sec" style="margin-top:12px">${anTx(L)}</section>`}
+  else if(P[0]==='I'&&P.length===1){const gs=anGroup(D.I,x=>x.m);body=`<section class="sec"><div class="eyebrow">Gelir toplamı</div><div class="total" style="color:var(--plus)">${TL(iT)}</div></section><section class="sec" style="margin-top:12px">${anBars(gs,iT,'ango')||'<div class="empty">Bu aralıkta gelir yok.</div>'}</section>`}
+  else{const L=D.I.filter(x=>x.m===P[1]);const t=L.reduce((a,x)=>a+x.amt,0);body=`<section class="sec"><div class="eyebrow">${esc(P[1])}</div><div class="total" style="color:var(--plus)">${TL(t)}</div></section><section class="sec" style="margin-top:12px">${anTx(L)}</section>`}
+  openSheet(head('Analiz')+`<section class="sec"><div class="two"><label class="f">Başlangıç<input type="date" id="anFrom" value="${AN.from}"></label><label class="f">Bitiş<input type="date" id="anTo" value="${AN.to}"></label></div>
+    <div class="chips" style="margin-top:4px">${presets.map(([k,l])=>`<button data-act="anpre" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="btnrow" style="margin-top:8px"><button class="btn sm ${exN?'':'ghost'}" data-act="anfilt">${exN?`Filtre · ${exN} hariç`:'Filtre: neler toplama girsin'}</button></div></section>
+    ${!AN.filt&&P.length?`<div class="crumbs">${crumbs.map(([l,i],j)=>j===crumbs.length-1?`<b>${esc(l)}</b>`:`<button class="linkbtn" data-act="anup" data-v="${i}">${esc(l)}</button> ›`).join(' ')}</div>`:''}
+    ${body}<p class="small muted" style="margin-top:10px">Sadece senin harcamaların sayılır. Yeni kaydın olmayan eski aylarda Money Pro arşivi kullanılır.</p>`)}
 function viewSpend(){
   const mk=viewMonth;const by=mineCats(mk);const tot=Object.values(by).reduce((a,c)=>a+c.v,0);
   const prev=mineTotal(shiftMonth(mk,-1)),ly=mineTotal(shiftMonth(mk,-12));
@@ -1017,7 +1068,7 @@ function viewSpend(){
   const inc=incomeTotal(mk);const oth=othersMonth(mk);const fromArch=useArch(mk)&&S.arch.some(x=>x.date.slice(0,7)===mk);
   let daily='';
   if(mk===today().slice(0,7)&&S.budgets.length){const bu=budgetUse(mk);const left=bu.reduce((a,b)=>a+Math.max(0,b.limit-b.spent),0);const d=new Date();const days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate()-d.getDate()+1;daily=`<div class="small" style="margin-top:8px"><b>Günlük harcama hakkın ${TL(left/days)}</b> <span class="muted">· bütçelerinde ${TL(left)} kaldı</span></div>`}
-  return `<section class="sec">${monthBar(mk)}
+  return `<button class="btn" style="width:100%;margin-bottom:12px" data-act="analiz">Geçmişe dönük analiz · tarih aralığı seç</button><section class="sec">${monthBar(mk)}
     <div style="margin-top:10px"><div class="eyebrow">Benim harcamam</div><div class="total">${TL(tot)}</div><div class="small muted">Gelir ${TL(inc)} · kalan ${TL(inc-tot)}${fromArch?' · Money Pro arşivinden':''}</div></div>
     <div class="cmp">${cell('Geçen ay',prev)}${cell('6 ay ortalaması',avg)}${cell('Geçen yıl bu ay',ly)}</div>${daily}</section>
   <section class="sec"><h2>Son 6 ay</h2>${trendSvg(mk)}</section>
@@ -1643,6 +1694,17 @@ document.addEventListener('click',async e=>{
     case 'account':accountSheet(id);break;
     case 'accgroup':accGroupSheet(id);break;
     case 'cashsheet':cashSheet();break;
+    case 'analiz':anInit();AN.path=[];AN.filt=false;analizSheet();break;
+    case 'ango':AN.path.push(el.dataset.k||'Genel');analizSheet();document.getElementById('sheet')?.scrollTo?.(0,0);break;
+    case 'anjump':AN.path=['G',el.dataset.k];analizSheet();break;
+    case 'anup':AN.path=AN.path.slice(0,+el.dataset.v);analizSheet();break;
+    case 'anfilt':AN.filt=!AN.filt;analizSheet();break;
+    case 'anall':AN.exG=[];AN.exI=[];anSave();analizSheet();break;
+    case 'anticari':AN.exG=['Ticari Gider'];anSave();analizSheet();break;
+    case 'anticonly':AN.exG=[...new Set([...Object.keys(catTree()),...anData().allG])].filter(m=>m!=='Ticari Gider');AN.exI=[];anSave();analizSheet();break;
+    case 'anpre':{const t=today();const d=parse(t);const y=d.getFullYear(),m=d.getMonth();const v=el.dataset.v;const f=x=>ymd(x);
+      if(v==='bu'){AN.from=f(new Date(y,m,1));AN.to=t}else if(v==='gecen'){AN.from=f(new Date(y,m-1,1));AN.to=f(new Date(y,m,0))}else if(v==='3'||v==='6'){AN.from=f(new Date(y,m-(+v)+1,1));AN.to=t}else if(v==='yil'){AN.from=f(new Date(y,0,1));AN.to=t}else{AN.from=f(new Date(y-1,0,1));AN.to=f(new Date(y-1,11,31))}
+      anSave();analizSheet();break}
     case 'assets':assetsSheet();break;
     case 'ledger':ledgerSheet();break;
     case 'flow':{const r=JSON.parse(el.dataset.ref);if(r.t==='card')goTab('kart');else if(r.t==='person')personSheet(r.id);else if(r.t==='debt')openSheet(formDebt(S.debts.find(d=>d.id===r.id)));else if(r.t==='plan')openSheet(formPlan(S.plans.find(p=>p.id===r.id)));else if(r.t==='rec')openSheet(formRec(S.recs.find(x=>x.id===r.id)));break}
@@ -1701,6 +1763,8 @@ document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='restoreFile'&&t.files?.[0]){restoreFrom(t.files[0]);return}
   if(t.id==='gsArch'){gsArch=t.checked;fillSearch();return}
+  if((t.id==='anFrom'||t.id==='anTo')&&AN){if(t.value){if(t.id==='anFrom')AN.from=t.value;else AN.to=t.value;if(AN.from>AN.to)[AN.from,AN.to]=[AN.to,AN.from];anSave();analizSheet()}return}
+  if(t.dataset&&t.dataset.anx&&AN){const key=t.dataset.anx==='G'?'exG':'exI';const set=new Set(AN[key]);if(t.checked)set.delete(t.value);else set.add(t.value);AN[key]=[...set];anSave();return}
   if(t.name==='lent'&&t.closest('form[data-form="asset"]')){const b=document.getElementById('lentBox');if(b)b.hidden=!t.checked;return}
   if(t.id==='apiModel'){ls.set('kd_model',t.value);toast('Okuma kalitesi değişti');return}
   if(t.id==='targetDate'){if(t.value){ls.set('kd3_target',t.value);render()}return}
