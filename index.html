@@ -206,6 +206,8 @@ details summary{cursor:pointer;font-weight:600;font-size:14px}
 .banner.crit{background:color-mix(in srgb,var(--crit) 16%,transparent)}
 .banner.warn{background:color-mix(in srgb,var(--warn) 14%,transparent)}
 .fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom));width:58px;height:58px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);font-size:30px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;z-index:20;line-height:1}
+.qtop{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.qtop .btn{flex:1;white-space:nowrap}
 .qa-amt{font-family:var(--f-display);font-size:34px;font-weight:700;width:100%;border:0;border-bottom:2px solid var(--line);background:none;color:var(--ink);padding:6px 0;text-align:center}
 .qa-amt:focus{outline:none;border-color:var(--accent)}
 .pgrp{margin-top:8px}
@@ -314,7 +316,6 @@ img{max-width:100%}
   <main id="view" class="stack"></main>
 </div>
 
-<button class="fab" data-act="add" aria-label="Yeni kayıt">+</button>
 
 <button class="fab" id="fab" data-act="quickadd" aria-label="Hızlı harcama ekle" hidden>+</button>
 <nav class="nav"><div class="in">
@@ -746,7 +747,8 @@ function forecastCat(cat,mk){const t=today();const by=mineCats(mk);const one=c=>
   if(cat)return one(cat);const cats=new Set([...Object.keys(by),...[1,2,3].flatMap(i=>Object.keys(mineCats(shiftMonth(mk,-i))))]);return [...cats].reduce((a,c)=>a+one(c),0)}
 /* hızlı ekle: tutar, kategori, kart; son kullanılan kart ve kişi seçili gelir */
 function formQuick(mode){
-  const seg=`<div class="seg" style="margin-bottom:10px"><button type="button" class="${mode!=='gelir'?'on':''}" data-act="qamode" data-v="gider">Gider</button><button type="button" class="${mode==='gelir'?'on':''}" data-act="qamode" data-v="gelir">Gelir</button></div>`;
+  const top=`<div class="qtop"><button type="button" class="btn sm" data-act="ss">📷 Banka ekran görüntüsü</button><button type="button" class="btn sm ghost" data-act="add">Diğer: ekstre, fiş, transfer…</button></div>`;
+  const seg=top+`<div class="seg" style="margin-bottom:10px"><button type="button" class="${mode!=='gelir'?'on':''}" data-act="qamode" data-v="gider">Gider</button><button type="button" class="${mode==='gelir'?'on':''}" data-act="qamode" data-v="gelir">Gelir</button></div>`;
   if(mode==='gelir'){const acc=ls.get('kd_qa_acc','')||S.accounts[0]?.name||'';
     return head('Hızlı gelir')+seg+`<form data-form="quickin"><input class="qa-amt" name="amount" type="number" step="0.01" inputmode="decimal" placeholder="0 ₺" required>
       <div class="f" style="margin-top:12px"><span class="lbl2" style="display:flex">Gelir türü<span style="flex:1"></span><button type="button" class="linkbtn" data-act="incedit">Düzenle</button></span>${chipPick('source',incomeSrc().map(x=>[x,x]),incomeSrc()[0])}</div>
