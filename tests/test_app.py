@@ -74,7 +74,7 @@ def main():
         check("taksit tutarı kuruşa yuvarlanır", page.evaluate("r2(333.33*3)") == 999.99)
 
         print("Ekranlar")
-        for t in ["ana", "kart", "harcama", "fis", "arsiv"]:
+        for t in ["ana", "kart", "analiz", "harcama", "fis"]:
             page.evaluate(f"goTab('{t}')"); page.wait_for_timeout(150)
         page.evaluate("settingsSheet()"); page.wait_for_timeout(150)
         page.evaluate("closeSheet()")
@@ -111,6 +111,33 @@ def main():
         check("işlem silinir", page.evaluate("!S.tx.some(t=>t.id==='t2')"))
         page.click(".toastbtn"); page.wait_for_timeout(400)
         check("Geri al ile işlem geri gelir", page.evaluate("S.tx.some(t=>t.id==='t2')"))
+
+        print("Analiz ve Hareketler (13 aylık örnek veri)")
+        import ornek_veri
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'o.json'))", ornek_veri.build()); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(600)
+        page.evaluate("viewMonth='2026-10';goTab('analiz')"); page.wait_for_timeout(300)
+        tot = page.evaluate("mineTotal('2026-10')")
+        check("Analiz: ayın toplamı büyük rakamla görünür", page.evaluate("document.querySelector('.vbig').textContent") == page.evaluate("TL(mineTotal('2026-10'))"))
+        segs = page.evaluate("[...document.querySelectorAll('.vdonut path')].length")
+        check("Analiz: halka en çok 7 dilim (6 kategori + Diğerleri)", 2 <= segs <= 7, segs)
+        legsum = page.evaluate("[...document.querySelectorAll('.vlegs > .vleg b, .vrest summary .vleg b')].reduce((a,b)=>a+Number(b.textContent.replace(/[^0-9,]/g,'').replace(',','.')),0)")
+        check("Analiz: liste toplamı ay toplamına eşit", abs(legsum - tot) < 2, (legsum, tot))
+        check("Analiz: 12 sütun", page.evaluate("document.querySelectorAll('.vyear [data-act=vmonth]').length") == 12)
+        check("Analiz: renkler sıraya değil kategoriye bağlı (ay değişince Market aynı renk)", page.evaluate("(()=>{const a=vizColors().Market;viewMonth='2026-07';render();const b=vizColors().Market;viewMonth='2026-10';render();return a&&a===b})()"))
+        page.locator(".vyear [data-act=vmonth]").nth(3).scroll_into_view_if_needed(); page.wait_for_timeout(400)
+        box = page.locator(".vyear [data-act=vmonth]").nth(3).bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] - 30); page.wait_for_timeout(100)
+        check("Analiz: grafik üstüne gelince bilgi kutusu çıkar", page.evaluate("!!document.querySelector('.vtip')&&!document.querySelector('.vtip').hidden"))
+        page.locator(".vyear [data-act=vmonth]").nth(3).click(); page.wait_for_timeout(200)
+        check("Analiz: sütuna dokununca o aya geçer", page.evaluate("viewMonth") != "2026-10", page.evaluate("viewMonth"))
+        page.evaluate("viewMonth='2026-10';goTab('harcama')"); page.wait_for_timeout(300)
+        n = page.evaluate("document.querySelectorAll('#txList .row').length")
+        check("Hareketler: Money Pro ayında arşiv kayıtları listelenir", n > 20, n)
+        page.fill("#txSearch", "shell"); page.wait_for_timeout(200)
+        check("Hareketler: arama arşivi de tarar", page.evaluate("document.querySelectorAll('#txList .row').length") > 5)
+        page.fill("#txSearch", "")
+        check("Analiz ve Hareketler hatasız", not errors, errors[:3])
 
         print("Güvenlik")
         check("içerik güvenlik politikası ihlali yok", not csp, csp[:2])

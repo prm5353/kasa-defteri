@@ -21,6 +21,9 @@ Tek dosyalık PWA. Yayın: GitHub Pages (main dalı, kök). Kişisel veri bu dep
 - Plan: `monthPlan(mk)` → ins/outs; `cashFlow`, `projection`, `planTableFlow` (gruplar: kartlar, yatırım hedefi, gönderilecek, sabit, tahmini)
 - Tahmin: `catHist`, `estCat/estCats` (mevsimsel: geçen yıl aynı ay; düzenli: 6 ay ortancası; Gezi: 0), `srcShares`, `estSpend`
 - Kişi payları ve ticari giderler plana/rahat harcamaya girmez; `card.ticari` kartlar hiç girmez
+- Sekmeler: Ana Sayfa, Kartlar, **Analiz** (`viewAnaliz`: özet, öne çıkanlar, kategori halkası, ay içi birikimli çizgi, son 12 ay, ortalamaya göre farklar, işyerleri), **Hareketler** (`viewSpend` + `fillTxList`; Money Pro ayında arşiv kayıtlarını salt okunur gösterir, arama arşivi de tarar), Fişler. Ayrı Arşiv sekmesi kaldırıldı
+- Grafik renkleri: `--v1..--v6` (doğrulanmış, renk körlüğüne uygun dizi), `--v0` Diğerleri; renk sıraya değil kategoriye bağlı (`vizColors`: son 12 ayın ilk 6 kategorisi). Fark grafiği `--vup` (fazla, kırmızı) / `--vdown` (az, mavi). `data-tip` taşıyan her öğe dokununca/üstüne gelince bilgi kutusu gösterir
+- Örnek veri: `tests/ornek_veri.py` (13 ay, kişisel değil) — testler ve ekran denemeleri için
 - Harcama: `mineCats` (nonSpend hariç), `useArch(mk)` (o ayda canlı kayıt yoksa arşiv), `budgetUse/budgetCarry` (devirli bütçe)
 - Analiz: `anData`, `analizSheet`, `yearSheet`
 - Birikim: `aPrice/aVal` (yarım=2, tam=4 çeyrek; esya elle değer), `pnl`, `goalRows`, `netWorth`

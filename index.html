@@ -16,11 +16,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: tek sütun mobil uygulama — Ana Sayfa tek bakışta özet; her satıra dokununca alttan detay açılır; altta 5 sekme */
+/* Layout: tek sütun mobil uygulama — Ana Sayfa tek bakışta özet; her satıra dokununca alttan detay açılır; altta 5 sekme: Ana Sayfa, Kartlar, Analiz, Hareketler, Fişler */
 :root{
   --bg:#EDF1EE; --surface:#FFFFFF; --ink:#15211C; --muted:#5A6A62; --line:#D5DDD8; --chip:#E2EAE5;
   --accent:#0D6A4D; --accent-ink:#FFFFFF; --accent-soft:#D5EBE1;
   --gold:#9C7019; --ok:#2B7A4B; --warn:#B0731B; --crit:#BE3A2C; --plus:#1F7A4A; --inc:#6E9E86; --other:#7A6AA8; --c1:#0D6A4D; --c2:#C2843A; --c3:#4A6FA5; --c4:#B4535D; --c5:#3E9C9C; --c6:#8E7CC3; --c7:#8C8C3A; --c8:#9E6B4F;
+  --vup:#e34948; --vdown:#2a78d6; --v0:#A9B3AE; --v1:#2a78d6; --v2:#eb6834; --v3:#1baf7a; --v4:#eda100; --v5:#e87ba4; --v6:#008300;
   --f-display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
   --f-body:"Figtree", "Segoe UI", system-ui, sans-serif;
   --r:14px;
@@ -28,11 +29,11 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0E1512; --surface:#17211D; --ink:#E5EDE8; --muted:#90A298; --line:#293630; --chip:#202D27;
   --accent:#43B98E; --accent-ink:#04120C; --accent-soft:#1B3A2E;
-  --gold:#D8AC52; --ok:#52C17F; --warn:#E3A64B; --crit:#EE6B5B; --plus:#5BCB8B; --inc:#3C6E58; --other:#A596D6; --c1:#43B98E; --c2:#E0A456; --c3:#7A9FD6; --c4:#E07B85; --c5:#5CC4C4; --c6:#AE9EE8; --c7:#BDBD5A; --c8:#C9926F; color-scheme:dark}}
+  --gold:#D8AC52; --ok:#52C17F; --warn:#E3A64B; --crit:#EE6B5B; --plus:#5BCB8B; --inc:#3C6E58; --other:#A596D6; --c1:#43B98E; --c2:#E0A456; --c3:#7A9FD6; --c4:#E07B85; --c5:#5CC4C4; --c6:#AE9EE8; --c7:#BDBD5A; --c8:#C9926F; --vup:#e66767; --vdown:#3987e5; --v0:#56645D; --v1:#3987e5; --v2:#d95926; --v3:#199e70; --v4:#c98500; --v5:#d55181; --v6:#008300; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0E1512; --surface:#17211D; --ink:#E5EDE8; --muted:#90A298; --line:#293630; --chip:#202D27;
   --accent:#43B98E; --accent-ink:#04120C; --accent-soft:#1B3A2E;
-  --gold:#D8AC52; --ok:#52C17F; --warn:#E3A64B; --crit:#EE6B5B; --plus:#5BCB8B; --inc:#3C6E58; --other:#A596D6; --c1:#43B98E; --c2:#E0A456; --c3:#7A9FD6; --c4:#E07B85; --c5:#5CC4C4; --c6:#AE9EE8; --c7:#BDBD5A; --c8:#C9926F; color-scheme:dark}
+  --gold:#D8AC52; --ok:#52C17F; --warn:#E3A64B; --crit:#EE6B5B; --plus:#5BCB8B; --inc:#3C6E58; --other:#A596D6; --c1:#43B98E; --c2:#E0A456; --c3:#7A9FD6; --c4:#E07B85; --c5:#5CC4C4; --c6:#AE9EE8; --c7:#BDBD5A; --c8:#C9926F; --vup:#e66767; --vdown:#3987e5; --v0:#56645D; --v1:#3987e5; --v2:#d95926; --v3:#199e70; --v4:#c98500; --v5:#d55181; --v6:#008300; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{background:var(--bg)}
 body{color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;font-variant-numeric:tabular-nums;-webkit-tap-highlight-color:transparent}
@@ -141,6 +142,40 @@ label.f input,label.f select,label.f textarea,.inp{border:1px solid var(--line);
 .mini{font-size:11px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:3px;min-width:0}
 .ask{font-size:13px;font-weight:600;color:var(--warn)}
 .bad-t{font-size:13px;font-weight:600;color:var(--crit)}
+
+/* ===== Analiz sekmesi ===== */
+.vhero .vbig{font-family:var(--f-display);font-size:40px;font-weight:700;letter-spacing:-.02em;line-height:1.1;margin:4px 0 6px}
+.vsub{font-size:14px;color:var(--muted);line-height:1.6}.vsub b{color:var(--ink)}
+.vchip{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--chip);color:var(--muted);white-space:nowrap}
+.vchip.up{background:color-mix(in srgb,var(--crit) 13%,transparent);color:var(--crit)}.vchip.down{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.vincome{margin-top:16px}.vbar{height:10px;border-radius:99px;background:var(--chip);overflow:hidden}.vbar i{display:block;height:100%;background:var(--accent);border-radius:99px}.vbar i.over{background:var(--crit)}.vbar.thin{height:6px;margin-top:6px}
+.vrow3{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--muted);margin-top:7px}.vrow3 b{color:var(--ink)}.vrow3 b.neg{color:var(--crit)}
+.vins{list-style:none;margin:0;padding:0;display:grid;gap:10px}.vins li{display:flex;gap:10px;align-items:baseline;font-size:14.5px;line-height:1.4}
+.vdot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--muted)}.vdot.up{background:var(--vup)}.vdot.down{background:var(--vdown)}
+.vdwrap{display:flex;justify-content:center;margin:2px 0 10px}.vdonut{width:190px;height:190px;overflow:visible}.vdonut path{cursor:pointer}
+.vdc1{font-size:9.5px;fill:var(--muted);font-family:var(--f-body)}.vdc2{font-size:18px;font-weight:700;fill:var(--ink);font-family:var(--f-display)}
+.vleg{display:grid;grid-template-columns:12px minmax(0,1fr) auto auto 44px;gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:14.5px}
+.vleg i{width:12px;height:12px;border-radius:4px}.vleg .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}.vleg .p{color:var(--muted);font-size:12.5px}.vleg b{font-weight:700}
+.vleg .d{font-size:12px;font-weight:700;text-align:right}.d.up{color:var(--vup)}.d.down{color:var(--vdown)}
+.vrest summary{list-style:none;cursor:pointer}.vrest summary::-webkit-details-marker{display:none}.vrest>.vleg{padding-left:12px;font-size:13.5px}.vrest summary .n::after{content:' ▾';color:var(--muted);font-weight:400}.vrest[open] summary .n::after{content:' ▴'}
+.vpace,.vyear{width:100%;height:auto;display:block;overflow:visible;touch-action:pan-y;font-family:var(--f-body)}
+.vgrid{stroke:var(--line);stroke-dasharray:2 3}.vbase{stroke:var(--line)}.vax{font-size:10px;fill:var(--muted)}.vax.on{fill:var(--ink);font-weight:700}
+.vl{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.vl.cur{stroke:var(--accent);stroke-width:2.5}.vl.avg{stroke:var(--muted);stroke-dasharray:4 4}.vl.fc{stroke:var(--accent);stroke-dasharray:3 4;opacity:.75}
+.vpt{stroke:var(--surface);stroke-width:2}.vpt.cur{fill:var(--accent)}.vpt.fc{fill:var(--surface);stroke:var(--accent)}
+.vlab{font-size:11px;font-weight:700}.vlab.cur{fill:var(--ink)}.vlab.avg{fill:var(--muted);font-weight:600}
+.vxh{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 2}
+.vb{fill:var(--muted);opacity:.32}.vb.sel{fill:var(--accent);opacity:1}.vavg{stroke:var(--muted);stroke-width:1.5;stroke-dasharray:4 3}
+.vkey{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:8px}.vkey span{display:inline-flex;align-items:center;gap:6px}
+.vkey i.ln{width:16px;height:0;border-top:2.5px solid var(--accent)}.vkey i.ln.avg{border-top:2px dashed var(--muted)}.vkey i.ln.fc{border-top:2px dashed var(--accent);opacity:.75}
+.vkey i.sq{width:11px;height:11px;border-radius:3px;background:var(--muted);opacity:.32}.vkey i.sq.sel{background:var(--accent);opacity:1}.vkey i.sq.up{background:var(--vup);opacity:1}.vkey i.sq.down{background:var(--vdown);opacity:1}
+.vkey i.sq.hatch{opacity:1;background:repeating-linear-gradient(45deg,var(--accent-soft) 0 2px,color-mix(in srgb,var(--accent) 55%,var(--accent-soft)) 2px 3.5px)}
+.vdiv{display:grid}.vdr{display:grid;grid-template-columns:minmax(0,96px) 1fr 58px;gap:8px;align-items:center;padding:8px 0;font-size:13.5px}
+.vdr .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}.vdr .track{position:relative;height:12px}.vdr .mid{position:absolute;left:50%;top:-4px;bottom:-4px;border-left:1px solid var(--muted);opacity:.6}
+.vdr i{position:absolute;top:0;height:12px;min-width:2px}.vdr i.up{background:var(--vup);border-radius:0 4px 4px 0}.vdr i.down{background:var(--vdown);border-radius:4px 0 0 4px}.vdr b{text-align:right;font-size:13px}
+.vshop{padding:9px 0;border-top:1px solid var(--line)}.vshop:first-of-type{border-top:0}.vshop .vbar i{opacity:.8}
+.vmore>summary{list-style:none;cursor:pointer}.vmore>summary::-webkit-details-marker{display:none}.vmore>summary h2{margin:0}.vmore>summary h2::after{content:'›';margin-left:auto;color:var(--muted);font-size:20px;line-height:1;transition:transform .2s}.vmore[open]>summary h2::after{transform:rotate(90deg)}.vmore[open]>summary{margin-bottom:10px}
+.vtip{position:fixed;z-index:60;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12.5px;font-weight:600;padding:6px 10px;border-radius:8px;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+.vmini{display:flex;gap:18px;align-items:flex-end;margin-top:12px}.vmini>div{display:flex;flex-direction:column}.vmini .k{font-size:12px;color:var(--muted)}.vmini b{font-size:19px;font-family:var(--f-display)}.vmini .linkbtn{margin-left:auto}
 .toastbtn{margin-left:12px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:0;cursor:pointer}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .spin{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -330,9 +365,9 @@ img{max-width:100%}
 <nav class="nav"><div class="in">
   <button data-tab="ana"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 12l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Ana Sayfa</button>
   <button data-tab="kart"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Kartlar</button>
-  <button data-tab="harcama"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Harcamam</button>
+  <button data-tab="analiz"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 3v9h9"/><path d="M20.5 15.5A9 9 0 1 1 8.5 3.7"/></svg>Analiz</button>
+  <button data-tab="harcama"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>Hareketler</button>
   <button data-tab="fis"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>Fişler</button>
-  <button data-tab="arsiv"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg>Arşiv</button>
 </div></nav>
 
 <div class="sheet" id="sheet" hidden><div class="bg" data-act="close"></div><div class="card" id="sheetBody"></div></div>
@@ -409,7 +444,7 @@ const normSize=s=>asciiUp(s).replace(/\s+/g,'').replace(',','.');
 let db=null,base=null,sampleFn=null,sampleCaps=null;
 const S={months:{},amonths:{},rmonths:{},tx:[],arch:[],receipts:[],cards:[],accounts:[],persons:[],budgets:[],assets:[],debts:[],plans:[],stmts:[],cats:[],recs:[],
   merch:{},prod:{map:{},alias:{}},prices:{},meta:{},loaded:false,error:null};
-let tab=ls.get('kd3_tab','ana');
+let tab=ls.get('kd3_tab','ana');if(tab==='arsiv')tab='harcama';
 let viewMonth=today().slice(0,7);
 let archMonth=null;
 let txWho=ME,txQuery='',archQuery='';
@@ -740,15 +775,15 @@ async function boot(){
 
 /* ===================== GÖRÜNÜMLER ===================== */
 function render(){
+  const _tip=document.querySelector('.vtip');if(_tip)_tip.hidden=true;
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const v=document.getElementById('view');
   if(S.error&&!S.loaded){v.innerHTML=`<section class="sec"><h2>Veriler açılamadı</h2><p class="muted">${S.error==='idb'?'Telefonun depolaması açılamadı. Safari\'de gizli sekmede açtıysan normal sekmede ya da ana ekrandaki simgeden aç.':'Bir sorun oluştu, sayfayı yeniden aç.'}</p></section>`;return}
   if(!S.loaded){v.innerHTML=`<section class="sec"><span class="spin"></span> <span class="muted">Kayıtların yükleniyor…</span></section>`;return}
-  v.innerHTML=({ana:viewHome,kart:viewCards,harcama:viewSpend,fis:viewFis,arsiv:viewArchive}[tab]||viewHome)();
-  const fab=document.getElementById('fab');if(fab)fab.hidden=!['ana','harcama','kart'].includes(tab);
+  v.innerHTML=({ana:viewHome,kart:viewCards,analiz:viewAnaliz,harcama:viewSpend,fis:viewFis}[tab]||viewHome)();
+  const fab=document.getElementById('fab');if(fab)fab.hidden=!['ana','harcama','kart','analiz'].includes(tab);
   if(tab==='harcama')fillTxList();
   if(tab==='fis')fillFisList();
-  if(tab==='arsiv')fillArchList();
 }
 const monthBar=(k,a1='mprev',a2='mnext')=>`<div class="monthbar"><button data-act="${a1}" aria-label="Önceki ay">‹</button><div class="m">${monthLabel(k)}</div><button data-act="${a2}" aria-label="Sonraki ay">›</button></div>`;
 const chev='<span class="chev" aria-hidden="true">›</span>';
@@ -1409,31 +1444,162 @@ function subscriptions(){const from=addMonths(today(),-6);const L=[];
 function subsSec(){const A=subscriptions();if(!A.length)return '';const mon=A.reduce((a,x)=>a+x.amt,0);const td=parse(today()).getDate();
   return `<section class="sec"><h2>Abonelikler ve düzenli ödemeler<span class="sp"></span><span class="sum">${TL(mon)}/ay</span></h2><div class="small muted" style="margin-bottom:6px">Yılda ${TL(mon*12)} · son 6 ayda her ay benzer tutarla tekrar edenler</div>
     ${A.map(x=>`<div class="row tap" data-act="subsearch" data-q="${esc(x.k)}"><div class="main"><div class="t">${esc(x.name)}</div><div class="s">${x.months} aydır · genelde ayın ${x.day}'i · ${x.thisMonth?'<span style="color:var(--plus)">bu ay ödendi</span>':td>x.day+3?'<span style="color:var(--warn)">bu ay henüz görünmedi</span>':'bu ay bekleniyor'}</div></div><div class="amt">${TL(x.amt)}<small>yılda ${TL(x.amt*12)}</small></div></div>`).join('')}</section>`}
-function viewSpend(){
-  const mk=viewMonth;const by=mineCats(mk);const tot=Object.values(by).reduce((a,c)=>a+c.v,0);
-  const prev=mineTotal(shiftMonth(mk,-1)),ly=mineTotal(shiftMonth(mk,-12));
-  const avgKs=[1,2,3,4,5,6].map(i=>shiftMonth(mk,-i));const avg=avgKs.reduce((a,k)=>a+mineTotal(k),0)/6;
-  const avgBy={};avgKs.forEach(k=>Object.entries(mineCats(k)).forEach(([c,o])=>avgBy[c]=(avgBy[c]||0)+o.v/6));
-  const bud=Object.fromEntries(budgetUse(mk).map(b=>[b.category,b]));
-  const cats=Object.entries(by).sort((a,b)=>b[1].v-a[1].v);const maxC=Math.max(1,...cats.map(c=>c[1].v));
-  const dch=(a,b)=>b>0?Math.round((a-b)/b*100):null;
-  const cell=(lbl,v)=>{const c=dch(tot,v);return `<div><div class="k">${lbl}</div><div class="v">${TL(v)}</div><div class="small" style="color:${c>10?'var(--crit)':c<-10?'var(--ok)':'var(--muted)'}">${c===null?'—':(c>0?'+':'')+c+'%'}</div></div>`};
-  const inc=incomeTotal(mk);const oth=othersMonth(mk);const fromArch=useArch(mk)&&S.arch.some(x=>x.date.slice(0,7)===mk);
-  let daily='';
-  if(mk===today().slice(0,7)&&S.budgets.length){const bu=budgetUse(mk);const left=bu.reduce((a,b)=>a+Math.max(0,b.limit-b.spent),0);const d=new Date();const days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate()-d.getDate()+1;daily=`<div class="small" style="margin-top:8px"><b>Günlük harcama hakkın ${TL(left/days)}</b> <span class="muted">· bütçelerinde ${TL(left)} kaldı</span></div>`}
-  return `<button class="btn" style="width:100%;margin-bottom:12px" data-act="analiz">Geçmişe dönük analiz · tarih aralığı seç</button><section class="sec">${monthBar(mk)}
-    <div style="margin-top:10px"><div class="eyebrow">Benim harcamam</div><div class="total">${TL(tot)}</div><div class="small muted">Gelir ${TL(inc)} · kalan ${TL(inc-tot)}${fromArch?' · Money Pro arşivinden':''}</div></div>
-    <div class="cmp">${cell('Geçen ay',prev)}${cell('6 ay ortalaması',avg)}${cell('Geçen yıl bu ay',ly)}</div>${daily}${mk===today().slice(0,7)&&tot>0?`<div class="small" style="margin-top:6px">Bu hızla ay sonu tahmini: <b>${TL(forecastCat(null,mk))}</b></div>`:''}</section>
-  ${(()=>{const N=nonSpendMonth(mk);return N.v>0.5?`<section class="sec"><div class="sumline"><span>Harcama sayılmayanlar <span class="small muted">· ${[...new Set(N.items.map(p=>p.sub||p.category))].map(esc).join(', ')}</span></span><b>${TL(N.v)}</b></div><div class="small muted">Borç ödemesi / varlık alımı: kart borcunda ve planda duruyor, toplama ve bütçeye girmiyor.</div></section>`:''})()}
-  ${ticariSec(mk)}
-  <section class="sec"><h2>Son 6 ay</h2>${trendSvg(mk)}</section>
-  ${subsSec()}
-  <section class="sec"><h2>Kategoriler<span class="sp"></span><button class="linkbtn" data-act="settings">Bütçe koy</button></h2>
-    ${cats.length?cats.map(([c,o])=>{const b=bud[c];const pct=b?o.v/b.limit*100:0;const cls=b?(pct>=100?'crit':pct>=80?'warn':''):'';const pc=dch(o.v,avgBy[c]||0);const subs=Object.entries(o.subs).sort((a,b)=>b[1]-a[1]).slice(0,3);
-      return `<div class="catbar tap" data-act="cat" data-c="${esc(c)}"><span>${esc(c)} ${b?`<span class="chip ${cls}">limit ${TL(b.limit)}</span>`:''}</span><b>${TL(o.v)} ${pc!==null&&Math.abs(pc)>=15?`<span class="small" style="color:${pc>0?'var(--crit)':'var(--ok)'}">${pc>0?'▲':'▼'}${Math.abs(pc)}%</span>`:''}</b><div class="bar"><i class="${cls}" style="width:${b?Math.min(100,pct):Math.max(0,o.v)/maxC*100}%"></i></div>${subs.length?`<div class="subs">${subs.map(([s,v])=>esc(s)+' '+TL(v)).join(' · ')}</div>`:''}</div>`}).join('')+'<p class="small muted" style="margin:6px 0 0">▲▼ son 6 ayın ortalamasına göre fark</p>'
-    :'<div class="empty">Bu ay senin harcaman yok.</div>'}</section>
-  ${Object.keys(oth).length?`<section class="sec"><h2>Kartımı kullananlar</h2><div class="small muted">Senin harcamana dahil değil</div>${Object.entries(oth).map(([p,v])=>`<div class="row tap" data-act="person" data-id="${p}"><div class="main"><div class="t">${esc(personName(p))}</div><div class="s">${holderCard(p)?'Ek kart':'Kartımı kullanıyor'}</div></div><div class="amt" style="color:var(--other)">${TL(v)}</div>${chev}</div>`).join('')}</section>`:''}
-  <input class="inp" id="txSearch" type="search" placeholder="Ara: işyeri, kategori" value="${esc(txQuery)}" aria-label="Hareketlerde ara">
+/* ===== ANALİZ SEKMESİ: seçili ayın harcaması tek ekranda, grafiklerle =====
+   Renk kategoriye bağlı (sıraya değil): son 12 ayda en çok harcanan 6 kategori sabit renk alır, gerisi gri "Diğerleri".
+   Grafiklerin üstüne gelince/dokununca (data-tip) küçük bilgi kutusu çıkar. */
+const VIZN=6;
+function vizColors(){const end=today().slice(0,7);const sum={};for(let i=0;i<12;i++)Object.entries(mineCats(shiftMonth(end,-i))).forEach(([c,o])=>sum[c]=(sum[c]||0)+o.v);
+  const top=Object.entries(sum).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,VIZN).map(x=>x[0]);const m={};top.forEach((c,i)=>m[c]=`var(--v${i+1})`);return m}
+const TLk=v=>{const a=Math.abs(v);return a>=1e6?nf1(v/1e6)+' mn':a>=1e3?nf0.format(Math.round(v/1e3))+' bin':nf0.format(Math.round(v))};
+const nf1=v=>(Math.round(v*10)/10).toString().replace('.',',');
+const pctS=(a,b)=>b>0?Math.round((a-b)/b*100):null;
+const dimOf=mk=>{const[y,m]=mk.split('-').map(Number);return new Date(y,m,0).getDate()};
+/* gün gün birikimli harcama (1..ay sonu) */
+function cumDays(mk){const n=dimOf(mk);const d=new Array(n+1).fill(0);Object.values(mineCats(mk)).forEach(c=>c.items.forEach(p=>{const dd=+String(p.pdate||p.date).slice(8,10);if(dd>=1&&dd<=n)d[dd]+=p.pamount}));for(let i=1;i<=n;i++)d[i]+=d[i-1];return d}
+function vizTip(attr){return `data-tip="${esc(attr)}"`}
+
+function viewAnaliz(){
+  const mk=viewMonth,cur=today().slice(0,7),isCur=mk===cur,future=mk>cur;
+  const by=mineCats(mk);const tot=Object.values(by).reduce((a,c)=>a+c.v,0);
+  const prevKs=[1,2,3,4,5,6].map(i=>shiftMonth(mk,-i));const hasHist=prevKs.filter(k=>mineTotal(k)>0);
+  const avg=hasHist.length?hasHist.reduce((a,k)=>a+mineTotal(k),0)/hasHist.length:0;
+  const avgBy={};hasHist.forEach(k=>Object.entries(mineCats(k)).forEach(([c,o])=>avgBy[c]=(avgBy[c]||0)+o.v/hasHist.length));
+  const fc=isCur?forecastCat(null,mk):tot;const ref=isCur?fc:tot;const ch=pctS(ref,avg);
+  const inc=incomeTotal(mk);const COL=vizColors();
+  const fromArch=useArch(mk)&&S.arch.some(x=>x.date.slice(0,7)===mk);
+  const chip=ch==null||!avg?'':Math.abs(ch)<5?`<span class="vchip">ortalama civarı</span>`:`<span class="vchip ${ch>0?'up':'down'}">${ch>0?'▲':'▼'} %${Math.abs(ch)} ${ch>0?'fazla':'az'}</span>`;
+  /* 1) özet */
+  let h=`<section class="sec vhero">${monthBar(mk)}
+    <div class="eyebrow" style="margin-top:12px">${isCur?'Bu ay şimdiye kadar':'Bu ay'} harcadığın</div>
+    <div class="vbig">${TL(tot)}</div>
+    <div class="vsub">${isCur&&tot>0?`Bu hızla ay sonu <b>${TL(fc)}</b> · `:''}${avg?`6 ay ortalaması ${TL(avg)} `:''}${chip}${fromArch?'<div class="small muted" style="margin-top:4px">Money Pro arşivinden</div>':''}</div>
+    ${inc>0?(()=>{const sp=Math.min(tot,inc),r=Math.round(tot/inc*100),left=inc-tot;return `<div class="vincome" ${vizTip(`Gelir ${TL(inc)} · harcama ${TL(tot)} · kalan ${TL(left)}`)}><div class="vbar"><i style="width:${Math.min(100,sp/inc*100)}%" class="${r>100?'over':''}"></i></div>
+      <div class="vrow3"><span>Gelir <b>${TL(inc)}</b></span><span>%${r} harcandı</span><span>${left>=0?'Kalan':'Açık'} <b class="${left<0?'neg':''}">${TL(Math.abs(left))}</b></span></div></div>`})():''}
+  </section>`;
+  if(future||(!tot&&!inc))return h+`<section class="sec"><div class="empty">${future?'Bu ay henüz gelmedi.':'Bu ay için harcama kaydı yok.'}</div></section>`+vizMore(mk);
+  /* 2) içgörüler */
+  const ins=vizInsights(mk,by,avgBy,tot,avg,isCur,inc);if(ins.length)h+=`<section class="sec"><h2>Öne çıkanlar</h2><ul class="vins">${ins.map(x=>`<li><span class="vdot ${x.k}"></span><span>${x.t}</span></li>`).join('')}</ul></section>`;
+  /* 3) kategori halkası */
+  h+=`<section class="sec"><h2>Nereye gitti</h2>${vizDonut(by,tot,avgBy,COL,isCur,mk)}</section>`;
+  /* 4) ay içi gidiş */
+  if(hasHist.length)h+=`<section class="sec"><h2>Ay içinde nasıl gitti</h2>${vizPace(mk,hasHist,isCur,fc)}</section>`;
+  /* 5) son 12 ay */
+  h+=`<section class="sec"><h2>Son 12 ay</h2>${vizYear(mk)}</section>`;
+  /* 6) ortalamaya göre */
+  if(hasHist.length)h+=`<section class="sec"><h2>Ortalamaya göre</h2>${vizDiverge(mk,by,avgBy,isCur)}</section>`;
+  /* 7) işyerleri */
+  h+=`<section class="sec"><h2>En çok harcadığın yerler</h2>${vizShops(by,tot)}</section>`;
+  return h+vizMore(mk);
+}
+
+function vizInsights(mk,by,avgBy,tot,avg,isCur,inc){const out=[];const val=c=>isCur?forecastCat(c,mk):(by[c]?.v||0);
+  const diffs=[...new Set([...Object.keys(by),...Object.keys(avgBy)])].map(c=>({c,d:val(c)-(avgBy[c]||0),a:avgBy[c]||0,v:val(c)})).filter(x=>Math.abs(x.d)>=500);
+  const up=diffs.filter(x=>x.d>0).sort((a,b)=>b.d-a.d)[0],dn=diffs.filter(x=>x.d<0).sort((a,b)=>a.d-b.d)[0];
+  if(up)out.push({k:'up',t:`<b>${esc(up.c)}</b> ${isCur?'bu hızla':''} ortalamadan <b>${TL(up.d)}</b> fazla${up.a>0?` (%${Math.round(up.d/up.a*100)})`:''}`});
+  if(dn)out.push({k:'down',t:`<b>${esc(dn.c)}</b> ${isCur?'bu hızla':''} ortalamadan <b>${TL(-dn.d)}</b> az`});
+  const top=Object.entries(by).sort((a,b)=>b[1].v-a[1].v)[0];if(top&&tot>0)out.push({k:'neu',t:`En büyük kalem <b>${esc(top[0])}</b>: harcamanın %${Math.round(top[1].v/tot*100)}'i`});
+  if(!isCur&&inc>0){const r=Math.round((inc-tot)/inc*100);out.push({k:r>=0?'down':'up',t:r>=0?`Gelirinin <b>%${r}</b>'ini biriktirdin`:`Gelirinden <b>${TL(tot-inc)}</b> fazla harcadın`})}
+  return out.slice(0,4)}
+
+/* kategori halkası + liste; küçük kategoriler "Diğerleri" altında toplanır */
+function vizDonut(by,tot,avgBy,COL,isCur,mk){
+  const all=Object.entries(by).filter(x=>x[1].v>0).sort((a,b)=>b[1].v-a[1].v);
+  const main=all.filter(([c])=>COL[c]);const rest=all.filter(([c])=>!COL[c]);const restV=rest.reduce((a,x)=>a+x[1].v,0);
+  const segs=[...main.map(([c,o])=>({c,v:o.v,col:COL[c]})),...(restV>0?[{c:'Diğerleri',v:restV,col:'var(--v0)',rest:true}]:[])];
+  const R=62,r=40,cx=80,cy=80,T=Math.max(1,segs.reduce((a,s)=>a+s.v,0));let a0=-Math.PI/2;
+  const arc=(a1,a2)=>{const big=a2-a1>Math.PI?1:0;const p=(rad,ang)=>`${(cx+rad*Math.cos(ang)).toFixed(2)} ${(cy+rad*Math.sin(ang)).toFixed(2)}`;return `M${p(R,a1)}A${R} ${R} 0 ${big} 1 ${p(R,a2)}L${p(r,a2)}A${r} ${r} 0 ${big} 0 ${p(r,a1)}Z`};
+  let svg=`<svg class="vdonut" viewBox="0 0 160 160" role="img" aria-label="Kategorilere göre harcama">`;
+  segs.forEach(s=>{const a1=a0,a2=a0+Math.max(0.0001,s.v/T*Math.PI*2);a0=a2;const full=segs.length===1;
+    svg+=full?`<circle cx="${cx}" cy="${cy}" r="${(R+r)/2}" fill="none" stroke="${s.col}" stroke-width="${R-r}" ${vizTip(`${s.c} · ${TL(s.v)}`)}/>`:`<path d="${arc(a1,a2)}" fill="${s.col}" stroke="var(--surface)" stroke-width="2" stroke-linejoin="round" ${s.rest?'':`data-act="cat" data-c="${esc(s.c)}"`} ${vizTip(`${s.c} · ${TL(s.v)} · %${Math.round(s.v/T*100)}`)}/>`});
+  svg+=`<text x="80" y="76" text-anchor="middle" class="vdc1">${all.length} kategori</text><text x="80" y="94" text-anchor="middle" class="vdc2">${TLk(tot)}</text></svg>`;
+  const row=(c,v,col,act)=>{const a=avgBy[c]||0;const vv=isCur?forecastCat(c,mk):v;const p=pctS(vv,a);
+    return `<div class="vleg${act?' tap':''}" ${act?`data-act="cat" data-c="${esc(c)}"`:''}><i style="background:${col}"></i><span class="n">${esc(c)}</span><span class="p">%${Math.round(v/Math.max(1,tot)*100)}</span><b>${TL(v)}</b>${p!=null&&a>0&&Math.abs(p)>=15?`<span class="d ${p>0?'up':'down'}" title="ortalamaya göre">${p>0?'▲':'▼'}${Math.abs(p)}%</span>`:'<span class="d"></span>'}</div>`};
+  return `<div class="vdwrap">${svg}</div><div class="vlegs">${main.map(([c,o])=>row(c,o.v,COL[c],true)).join('')}
+    ${rest.length?`<details class="vrest"><summary>${row('Diğerleri',restV,'var(--v0)',false)}</summary>${rest.map(([c,o])=>row(c,o.v,'var(--v0)',true)).join('')}</details>`:''}</div>
+    <p class="small muted" style="margin:8px 0 0">▲▼ son 6 ayın ortalamasına göre${isCur?' (ay sonu tahminiyle)':''}. Dokun: ayrıntı.</p>`;
+}
+
+/* birikimli harcama çizgisi: bu ay, 6 ay ortalaması, (bu aysa) ay sonu tahmini */
+function vizPace(mk,hist,isCur,fc){
+  const n=dimOf(mk);const c=cumDays(mk);const H=hist.map(cumDays);const avgAt=d=>H.reduce((a,x)=>a+x[Math.min(d,x.length-1)],0)/H.length;
+  const td=isCur?parse(today()).getDate():n;const avgEnd=avgAt(n);const mx=Math.max(1,c[td],avgEnd,isCur?fc:0)*1.08;
+  const W=340,Ht=170,L=6,Rt=58,T=10,B=22;const x=d=>L+(W-L-Rt)*(d-1)/Math.max(1,n-1),y=v=>T+(Ht-T-B)*(1-v/mx);
+  const pts=(arr,from,to)=>{let s='';for(let d=from;d<=to;d++)s+=`${d===from?'M':'L'}${x(d).toFixed(1)} ${y(arr(d)).toFixed(1)}`;return s};
+  let s=`<svg class="vpace" viewBox="0 0 ${W} ${Ht}" role="img" aria-label="Ay içinde birikimli harcama">`;
+  [0.5,1].forEach(f=>{const v=mx/1.08*f;s+=`<line x1="${L}" x2="${W-Rt}" y1="${y(v)}" y2="${y(v)}" class="vgrid"/><text x="${L+2}" y="${y(v)-4}" class="vax">${TLk(v)}</text>`});
+  s+=`<line x1="${L}" x2="${W-Rt}" y1="${y(0)}" y2="${y(0)}" class="vbase"/>`;
+  [1,10,20,n].forEach(d=>s+=`<text x="${x(d)}" y="${Ht-6}" text-anchor="middle" class="vax">${d}</text>`);
+  s+=`<path d="${pts(avgAt,1,n)}" class="vl avg"/>`;
+  if(isCur&&td<n)s+=`<path d="M${x(td)} ${y(c[td])}L${x(n)} ${y(fc)}" class="vl fc"/><circle cx="${x(n)}" cy="${y(fc)}" r="4" class="vpt fc"/>`;
+  s+=`<path d="${pts(d=>c[d],1,td)}" class="vl cur"/><circle cx="${x(td)}" cy="${y(c[td])}" r="4.5" class="vpt cur"/>`;
+  /* sağ uçta doğrudan etiketler (çakışırsa aralanır) */
+  let l1=y(isCur&&td<n?fc:c[td]),l2=y(avgEnd);if(Math.abs(l1-l2)<14){if(l1<l2)l2=l1+14;else l1=l2+14}
+  s+=`<text x="${W-Rt+9}" y="${l1+4}" class="vlab cur">${TLk(isCur&&td<n?fc:c[td])}</text><text x="${W-Rt+9}" y="${l2+4}" class="vlab avg">${TLk(avgEnd)}</text>`;
+  /* dokunma şeritleri: gün gün değer */
+  s+=`<line class="vxh" x1="0" x2="0" y1="${T}" y2="${Ht-B}" style="display:none"/>`;
+  for(let d=1;d<=n;d++){const w=(W-L-Rt)/Math.max(1,n-1);s+=`<rect x="${x(d)-w/2}" y="${T}" width="${w}" height="${Ht-T-B}" fill="transparent" data-cx="${x(d)}" ${vizTip(`${d} ${AYK[+mk.slice(5)-1]} · ${d<=td?`bu ay ${TL(c[d])} · `:''}ortalama ${TL(avgAt(d))}`)}/>`}
+  s+=`</svg>`;
+  return s+`<div class="vkey"><span><i class="ln cur"></i>${isCur?'Bu ay':monthLabel(mk).split(' ')[0]}</span><span><i class="ln avg"></i>6 ay ortalaması</span>${isCur&&td<n?'<span><i class="ln fc"></i>Ay sonu tahmini</span>':''}</div>
+    <p class="small muted" style="margin:6px 0 0">${(()=>{const a=avgAt(td),v=c[td];const ah=v>a*1.05,bh=v<a*0.95;return isCur?(ah?`Bugüne kadar ortalamanın <b>${TL(v-a)}</b> önündesin.`:bh?`Bugüne kadar ortalamanın <b>${TL(a-v)}</b> gerisindesin.`:'Ortalama hızda gidiyorsun.'):(ah?`Ayı ortalamanın <b>${TL(v-a)}</b> üstünde kapattın.`:bh?`Ayı ortalamanın <b>${TL(a-v)}</b> altında kapattın.`:'Ayı ortalama civarında kapattın.')})()}</p>`;
+}
+
+/* son 12 ay sütunları; seçili ay vurgulu, bu ayın kalan tahmini taralı; dokun: o aya git */
+function vizYear(mk){
+  const cur=today().slice(0,7);const end=mk>shiftMonth(cur,-11)&&mk<=cur?cur:mk;const ks=[...Array(12)].map((_,i)=>shiftMonth(end,i-11));
+  const V=ks.map(k=>({k,v:mineTotal(k),f:k===cur?forecastCat(null,k):0}));const has=V.filter(x=>x.v>0);const av=has.length?has.reduce((a,x)=>a+x.v,0)/has.length:0;
+  const mx=Math.max(1,...V.map(x=>Math.max(x.v,x.f)))*1.1;const W=340,Ht=170,L=4,Rt=40,T=12,B=22;const bw=(W-L-Rt)/12;const y=v=>T+(Ht-T-B)*(1-v/mx);
+  let s=`<svg class="vyear" viewBox="0 0 ${W} ${Ht}" role="img" aria-label="Son 12 ay harcama"><defs><pattern id="vhatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="var(--accent-soft)"/><line x1="0" y1="0" x2="0" y2="5" stroke="var(--accent)" stroke-width="1.6" opacity=".55"/></pattern></defs>`;
+  s+=`<line x1="${L}" x2="${W-Rt}" y1="${y(0)}" y2="${y(0)}" class="vbase"/>`;
+  V.forEach((o,i)=>{const x0=L+bw*i+2,w=bw-4,sel=o.k===mk;const top=y(o.v);
+    if(o.f>o.v)s+=`<path d="${vbarPath(x0,y(o.f),w,y(o.v)-y(o.f),true)}" fill="url(#vhatch)"/>`;
+    if(o.v>0)s+=`<path d="${vbarPath(x0,top,w,y(0)-top,!(o.f>o.v))}" class="vb${sel?' sel':''}"/>`;
+    s+=`<text x="${x0+w/2}" y="${Ht-6}" text-anchor="middle" class="vax${sel?' on':''}">${AYK[+o.k.slice(5)-1]}</text>`;
+    s+=`<rect x="${L+bw*i}" y="${T}" width="${bw}" height="${Ht-T-B+16}" fill="transparent" class="tap" data-act="vmonth" data-mk="${o.k}" ${vizTip(`${monthLabel(o.k)} · ${TL(o.v)}${o.f>o.v?` · tahmin ${TL(o.f)}`:''}`)}/>`});
+  if(av)s+=`<line x1="${L}" x2="${W-Rt}" y1="${y(av)}" y2="${y(av)}" class="vavg"/><text x="${W-Rt+4}" y="${y(av)-2}" class="vlab avg">ort.</text><text x="${W-Rt+4}" y="${y(av)+10}" class="vlab avg">${TLk(av)}</text>`;
+  s+=`</svg>`;
+  return s+`<div class="vkey"><span><i class="sq sel"></i>Seçili ay</span><span><i class="sq"></i>Diğer aylar</span>${V.some(o=>o.f>o.v)?'<span><i class="sq hatch"></i>Bu ayın tahmini</span>':''}<span><i class="ln avg"></i>Ortalama</span></div>`;
+}
+/* üst köşeleri 4px yuvarlak, tabana oturan sütun */
+function vbarPath(x,y,w,h,round){if(h<=0)return '';const r=round?Math.min(4,h,w/2):0;return `M${x} ${y+h}V${y+r}${r?`Q${x} ${y} ${x+r} ${y}`:''}H${x+w-r}${r?`Q${x+w} ${y} ${x+w} ${y+r}`:''}V${y+h}Z`}
+
+/* kategori başına ortalamadan fark: sağa fazla (kırmızı), sola az (mavi) */
+function vizDiverge(mk,by,avgBy,isCur){
+  const val=c=>isCur?forecastCat(c,mk):(by[c]?.v||0);
+  const L=[...new Set([...Object.keys(by),...Object.keys(avgBy)])].map(c=>({c,d:val(c)-(avgBy[c]||0)})).filter(x=>Math.abs(x.d)>=100).sort((a,b)=>Math.abs(b.d)-Math.abs(a.d)).slice(0,6).sort((a,b)=>b.d-a.d);
+  if(!L.length)return '<div class="empty">Kategoriler ortalamaya çok yakın.</div>';
+  const mx=Math.max(...L.map(x=>Math.abs(x.d)));
+  return `<div class="vdiv">${L.map(x=>{const w=Math.abs(x.d)/mx*50;return `<div class="vdr tap" data-act="cat" data-c="${esc(x.c)}" ${vizTip(`${x.c}: ortalama ${TL(avgBy[x.c]||0)} · ${isCur?'tahmin':'bu ay'} ${TL(val(x.c))}`)}><span class="n">${esc(x.c)}</span><span class="track"><span class="mid"></span><i class="${x.d>0?'up':'down'}" style="${x.d>0?`left:50%`:`right:50%`};width:${w}%"></i></span><b class="${x.d>0?'up':'down'}">${x.d>0?'+':'−'}${TLk(Math.abs(x.d))}</b></div>`}).join('')}</div>
+    <div class="vkey"><span><i class="sq down"></i>Ortalamadan az</span><span><i class="sq up"></i>Ortalamadan fazla</span></div>${isCur?'<p class="small muted" style="margin:4px 0 0">Bu ay için ay sonu tahmini kullanılıyor.</p>':''}`;
+}
+
+/* işyerleri: ilk 6 */
+function vizShops(by,tot){const g={};Object.values(by).forEach(o=>o.items.forEach(p=>{const k=(p.merchant||p.category||'Diğer').trim();(g[k]=g[k]||{k,v:0,n:0}).v+=p.pamount;g[k].n++}));
+  const L=Object.values(g).sort((a,b)=>b.v-a.v).slice(0,6);if(!L.length)return '<div class="empty">Kayıt yok.</div>';const mx=L[0].v;
+  return L.map(x=>`<div class="vshop" ${vizTip(`${x.k} · ${x.n} kez · ortalama ${TL(x.v/x.n)}`)}><div class="sumline" style="padding:0"><span>${esc(x.k)} <span class="small muted">· ${x.n} kez</span></span><b>${TL(x.v)}</b></div><div class="vbar thin"><i style="width:${Math.max(0,x.v)/mx*100}%"></i></div></div>`).join('')}
+
+/* ayrıntılar: varsayılan kapalı */
+function vizMore(mk){const N=nonSpendMonth(mk);const oth=othersMonth(mk);const t=ticariSec(mk);const sub=subsSec();
+  const parts=[];
+  if(N.v>0.5)parts.push(`<div class="sumline"><span>Harcama sayılmayanlar <span class="small muted">· ${[...new Set(N.items.map(p=>p.sub||p.category))].map(esc).join(', ')}</span></span><b>${TL(N.v)}</b></div><div class="small muted" style="margin-bottom:8px">Borç ödemesi / varlık alımı: kart borcunda ve planda duruyor, toplama girmiyor.</div>`);
+  if(Object.keys(oth).length)parts.push(`<div class="eyebrow" style="margin-top:6px">Kartımı kullananlar · senin harcamana dahil değil</div>${Object.entries(oth).map(([p,v])=>`<div class="row tap" data-act="person" data-id="${p}"><div class="main"><div class="t">${esc(personName(p))}</div></div><div class="amt" style="color:var(--other)">${TL(v)}</div>${chev}</div>`).join('')}`);
+  return `${parts.length?`<details class="sec vmore"><summary><h2>Toplama girmeyenler</h2></summary>${parts.join('')}</details>`:''}
+    ${t}${sub?`<details class="sec vmore"><summary><h2>Düzenli ödemeler</h2></summary>${sub.replace(/^<section class="sec">|<\/section>$/g,'')}</details>`:''}
+    <button class="btn ghost" style="width:100%;margin-top:4px" data-act="analiz">Tarih aralığıyla ayrıntılı analiz</button>`}
+
+/* grafik bilgi kutusu: fareyle üstüne gelince ya da parmakla dokununca/kaydırınca */
+(function(){let tipEl=null;const show=(el,ev)=>{if(!tipEl){tipEl=document.createElement('div');tipEl.className='vtip';document.body.append(tipEl)}
+  tipEl.textContent=el.dataset.tip;tipEl.hidden=false;const r=tipEl.getBoundingClientRect();let x=ev.clientX-r.width/2,y=ev.clientY-r.height-14;x=Math.max(8,Math.min(innerWidth-r.width-8,x));if(y<8)y=ev.clientY+18;tipEl.style.left=x+'px';tipEl.style.top=y+'px';
+  const svg=el.ownerSVGElement;const xh=svg&&svg.querySelector('.vxh');if(xh){if(el.dataset.cx){xh.setAttribute('x1',el.dataset.cx);xh.setAttribute('x2',el.dataset.cx);xh.style.display=''}else xh.style.display='none'}};
+  const hide=()=>{if(tipEl)tipEl.hidden=true;document.querySelectorAll('.vxh').forEach(x=>x.style.display='none')};
+  const at=ev=>{const el=document.elementFromPoint(ev.clientX,ev.clientY);return el&&el.closest&&el.closest('[data-tip]')};
+  document.addEventListener('pointermove',ev=>{const el=at(ev);if(el)show(el,ev);else hide()},{passive:true});
+  document.addEventListener('pointerdown',ev=>{const el=at(ev);if(el)show(el,ev);else hide()},{passive:true});
+  document.addEventListener('scroll',hide,{passive:true,capture:true});})();
+
+/* ===== HAREKETLER: ayın kayıtları; Money Pro ayında arşiv kayıtları (salt okunur) ===== */
+function viewSpend(){const mk=viewMonth;const tot=mineTotal(mk),inc=incomeTotal(mk);const arch=useArch(mk)&&S.arch.some(x=>x.date.slice(0,7)===mk);
+  return `<section class="sec">${monthBar(mk)}<div class="vmini"><div><span class="k">Benim harcamam</span><b>${TL(tot)}</b></div><div><span class="k">Gelir</span><b style="color:var(--plus)">${TL(inc)}</b></div><button class="linkbtn" data-act="goanaliz">Analiz ›</button></div>${arch?'<div class="ro" style="margin-top:10px">Money Pro arşivinden · sadece görüntülenir</div>':''}</section>
+  <input class="inp" id="txSearch" type="search" placeholder="Ara: işyeri, kategori, kişi (arşiv dahil)" value="${esc(txQuery)}" aria-label="Hareketlerde ara">
   <div class="chips">${[[ME,'Benim'],...S.persons.map(p=>[p.id,p.name]),['gelir','Gelir'],['all','Tümü']].map(([k,l])=>`<button class="${txWho===k?'on':''}" data-act="who" data-v="${esc(k)}">${esc(l)}</button>`).join('')}</div>
   <section class="sec" id="txList"></section>`;
 }
@@ -1453,14 +1619,15 @@ function txRow(x){
   return `<div class="row tap" data-act="${ro?'archtx':'edittx'}" data-id="${x.id}"><div class="main"><div class="t">${esc(title)}</div><div class="s">${s}</div></div><div class="amt ${neutral?'muted':plus?'plus':''}">${plus&&!neutral?'+':''}${TL(Math.abs(x.amount))}</div></div>`;
 }
 function fillTxList(){
-  const el=document.getElementById('txList');if(!el)return;const q=asciiUp(txQuery.trim());
-  let list=S.tx.slice();
-  if(!q)list=list.filter(x=>x.date.slice(0,7)===viewMonth);
-  else list=list.filter(x=>asciiUp([x.merchant,x.category,x.sub,x.note,x.source,personName(x.personId),srcLabel(x)].join(' ')).includes(q));
+  const el=document.getElementById('txList');if(!el)return;const q=asciiUp(txQuery.trim());const inM=x=>x.date.slice(0,7)===viewMonth;
+  const hay=x=>asciiUp([x.merchant,x.category,x.sub,x.note,x.source,personName(x.personId),srcLabel(x),x.toAccount].join(' '));
+  let list=q?[...S.tx,...S.arch.map(x=>({...x,arch:true}))].filter(x=>hay(x).includes(q)):useArch(viewMonth)?S.arch.filter(inM).map(x=>({...x,arch:true})):S.tx.filter(inM);
   if(txWho==='gelir')list=list.filter(x=>x.type==='gelir'||x.type==='tahsilat');
   else if(txWho!=='all')list=list.filter(x=>x.type==='gider'&&x.personId===txWho);
+  list.sort((a,b)=>b.date.localeCompare(a.date));
+  const sum=list.filter(x=>x.type==='gider').reduce((a,x)=>a+x.amount,0);
   const groups={};list.slice(0,400).forEach(x=>(groups[x.date]=groups[x.date]||[]).push(x));
-  el.innerHTML=list.length?Object.entries(groups).map(([d,l])=>`<div class="daygrp">${fmtDY(d)}</div>${l.map(txRow).join('')}`).join(''):`<div class="empty">${!q&&useArch(viewMonth)&&S.arch.some(x=>x.date.slice(0,7)===viewMonth)?'Bu ayın Money Pro kayıtları Arşiv sekmesinde.':'Bu filtrede kayıt yok.'}</div>`;
+  el.innerHTML=(q?`<div class="small muted" style="margin-bottom:4px">${list.length} kayıt · gider toplamı ${TL(sum)}${list.length>400?' · ilk 400 gösteriliyor':''}</div>`:'')+(list.length?Object.entries(groups).map(([d,l])=>`<div class="daygrp">${fmtDY(d)}</div>${l.map(txRow).join('')}`).join(''):'<div class="empty">Bu filtrede kayıt yok.</div>');
 }
 function catSheet(c,sub){
   const by=mineCats(viewMonth)[c];if(!by)return;let items=[...by.items].sort((a,b)=>b.pdate.localeCompare(a.pdate));
@@ -1478,28 +1645,6 @@ function catSheet(c,sub){
 
 /* ---------- arşiv ---------- */
 function archKeys(){return [...new Set(S.arch.map(t=>t.date.slice(0,7)))].sort()}
-function viewArchive(){
-  const ks=archKeys();if(!ks.length)return '<section class="sec"><h2>Arşiv boş</h2></section>';
-  if(!archMonth||!ks.includes(archMonth))archMonth=ks[ks.length-1];
-  const items=S.arch.filter(t=>t.date.slice(0,7)===archMonth);
-  const inc=items.filter(t=>t.type==='gelir').reduce((a,t)=>a+t.amount,0);
-  const mine=items.filter(t=>t.type==='gider'&&t.personId===ME).reduce((a,t)=>a+t.amount,0);
-  const others=items.filter(t=>(t.type==='gider'&&t.personId!==ME)||t.type==='verdim').reduce((a,t)=>a+t.amount,0);
-  const by={};items.filter(t=>t.type==='gider'&&t.personId===ME).forEach(t=>by[t.category||'Diğer']=(by[t.category||'Diğer']||0)+t.amount);const mx=Math.max(1,...Object.values(by));
-  return `<div class="ro">Money Pro'dan gelen geçmiş (Tem 2025 – 8 Kas 2026). Sadece görüntülemek için; değiştirilemez. Harcamam sekmesindeki karşılaştırmalar da buradan beslenir.</div>
-  <section class="sec">${monthBar(archMonth,'aprev','anext')}
-    <div class="cmp"><div><div class="k">Gelir</div><div class="v" style="color:var(--plus)">${TL(inc)}</div></div><div><div class="k">Benim harcamam</div><div class="v">${TL(mine)}</div></div><div><div class="k">Kişilere</div><div class="v" style="color:var(--other)">${TL(others)}</div></div></div></section>
-  <section class="sec"><h2>Kategoriler</h2>${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div class="catbar"><span>${esc(c)}</span><b>${TL(v)}</b><div class="bar"><i style="width:${Math.max(0,v)/mx*100}%"></i></div></div>`).join('')||'<div class="empty">Yok</div>'}</section>
-  <input class="inp" id="archSearch" type="search" placeholder="Tüm arşivde ara: işyeri, kişi, açıklama" value="${esc(archQuery)}" aria-label="Arşivde ara">
-  <section class="sec" id="archList"></section>`;
-}
-function fillArchList(){
-  const el=document.getElementById('archList');if(!el)return;const q=asciiUp(archQuery.trim());
-  const list=q?S.arch.filter(x=>asciiUp([x.merchant,x.category,x.sub,x.note,x.source,personName(x.personId),srcLabel(x),x.toAccount].join(' ')).includes(q)):S.arch.filter(t=>t.date.slice(0,7)===archMonth);
-  const sum=list.filter(x=>x.type==='gider').reduce((a,x)=>a+x.amount,0);
-  const groups={};list.slice(0,400).forEach(x=>(groups[x.date]=groups[x.date]||[]).push(x));
-  el.innerHTML=(q?`<div class="small muted">${list.length} kayıt · gider toplamı ${TL(sum)}</div>`:'')+(list.length?Object.entries(groups).map(([d,l])=>`<div class="daygrp">${fmtDY(d)}</div>${l.map(x=>txRow({...x,arch:true})).join('')}`).join(''):'<div class="empty">Kayıt yok.</div>');
-}
 function archTxSheet(id){
   const t=S.arch.find(x=>x.id===id);if(!t)return;
   openSheet(head('Arşiv kaydı')+`<div class="ro" style="margin-bottom:10px">Money Pro kaydı · değiştirilemez</div><section class="sec"><div class="kv">
@@ -2091,7 +2236,7 @@ document.addEventListener('click',async e=>{
     case 'bankcmp':openSheet(formBankCmp(id));break;
     case 'hidesetup':ls.set('kd3_setup_hide','1');render();break;
     case 'tabkart':goTab('kart');break;
-    case 'tabharcama':viewMonth=today().slice(0,7);goTab('harcama');break;
+    case 'tabharcama':viewMonth=today().slice(0,7);goTab('analiz');break;
     case 'projection':projectionSheet();break;
     case 'incomesheet':incomeSheet();break;
     case 'pprev':planMonth=shiftMonth(planMonth,-1);render();break;
@@ -2160,7 +2305,8 @@ document.addEventListener('click',async e=>{
     case 'flow':{const r=JSON.parse(el.dataset.ref);if(r.t==='card')goTab('kart');else if(r.t==='person')personSheet(r.id);else if(r.t==='debt')openSheet(formDebt(S.debts.find(d=>d.id===r.id)));else if(r.t==='plan')openSheet(formPlan(S.plans.find(p=>p.id===r.id)));else if(r.t==='rec')openSheet(formRec(S.recs.find(x=>x.id===r.id)));break}
     case 'mprev':viewMonth=shiftMonth(viewMonth,-1);render();break;
     case 'mnext':viewMonth=shiftMonth(viewMonth,1);render();break;
-    case 'aprev':case 'anext':{const ks=archKeys();const i=ks.indexOf(archMonth)+(a==='aprev'?-1:1);if(i>=0&&i<ks.length){archMonth=ks[i];render()}break}
+    case 'vmonth':viewMonth=el.dataset.mk;render();break;
+    case 'goanaliz':goTab('analiz');break;
     case 'who':txWho=el.dataset.v;fillTxList();document.querySelectorAll('[data-act="who"]').forEach(b=>b.classList.toggle('on',b.dataset.v===txWho));break;
     case 'cat':catSheet(el.dataset.c);break;
     case 'catsub':catSheet(el.dataset.c,el.dataset.s);break;
@@ -2207,7 +2353,6 @@ document.addEventListener('click',async e=>{
 document.addEventListener('input',e=>{
   if(e.target.id==='txSearch'){txQuery=e.target.value;fillTxList()}
   if(e.target.id==='gSearch'){gsQuery=e.target.value;fillSearch()}
-  if(e.target.id==='archSearch'){archQuery=e.target.value;fillArchList()}
   if(e.target.id==='fisSearch'){fisQuery=e.target.value;fillFisList()}
 });
 document.addEventListener('change',e=>{
