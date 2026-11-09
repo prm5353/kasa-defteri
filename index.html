@@ -430,8 +430,8 @@ function flows(T){
   ins.sort((a,b)=>a.date.localeCompare(b.date));outs.sort((a,b)=>a.date.localeCompare(b.date));
   return {ins,outs,inSum:ins.reduce((a,x)=>a+x.amount,0),outSum:outs.reduce((a,x)=>a+x.amount,0)};
 }
-/* Money Pro arşivi sadece yeni defter başlamadan önceki aylar için kullanılır; Kasım 2026 ve sonrası tamamen yeni kayıtlardan hesaplanır */
-const useArch=mk=>mk<START().slice(0,7);
+/* Money Pro arşivi kartlara, borçlara, hesaplara hiç girmez. Sadece içinde hiç yeni kayıt olmayan geçmiş aylar için analizde gösterilir; yeni kayıt olan ayda (ör. Ekim) yalnız yeni kayıtlar sayılır. */
+const useArch=mk=>!S.tx.some(x=>x.date.slice(0,7)===mk)&&!livePortions().some(p=>p.pdate.slice(0,7)===mk);
 function mineCats(mk){
   const by={};
   const add=(cat,sub,v,item)=>{const c=by[cat||'Diğer']=by[cat||'Diğer']||{v:0,subs:{},items:[]};c.v+=v;if(sub)c.subs[sub]=(c.subs[sub]||0)+v;c.items.push(item)};
@@ -863,11 +863,11 @@ function viewSpend(){
   const cats=Object.entries(by).sort((a,b)=>b[1].v-a[1].v);const maxC=Math.max(1,...cats.map(c=>c[1].v));
   const dch=(a,b)=>b>0?Math.round((a-b)/b*100):null;
   const cell=(lbl,v)=>{const c=dch(tot,v);return `<div><div class="k">${lbl}</div><div class="v">${TL(v)}</div><div class="small" style="color:${c>10?'var(--crit)':c<-10?'var(--ok)':'var(--muted)'}">${c===null?'—':(c>0?'+':'')+c+'%'}</div></div>`};
-  const inc=incomeTotal(mk);const oth=othersMonth(mk);const st=START().slice(0,7);
+  const inc=incomeTotal(mk);const oth=othersMonth(mk);const fromArch=useArch(mk)&&S.arch.some(x=>x.date.slice(0,7)===mk);
   let daily='';
   if(mk===today().slice(0,7)&&S.budgets.length){const bu=budgetUse(mk);const left=bu.reduce((a,b)=>a+Math.max(0,b.limit-b.spent),0);const d=new Date();const days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate()-d.getDate()+1;daily=`<div class="small" style="margin-top:8px"><b>Günlük harcama hakkın ${TL(left/days)}</b> <span class="muted">· bütçelerinde ${TL(left)} kaldı</span></div>`}
   return `<section class="sec">${monthBar(mk)}
-    <div style="margin-top:10px"><div class="eyebrow">Benim harcamam</div><div class="total">${TL(tot)}</div><div class="small muted">Gelir ${TL(inc)} · kalan ${TL(inc-tot)}${mk<st?' · Money Pro arşivinden':''}</div></div>
+    <div style="margin-top:10px"><div class="eyebrow">Benim harcamam</div><div class="total">${TL(tot)}</div><div class="small muted">Gelir ${TL(inc)} · kalan ${TL(inc-tot)}${fromArch?' · Money Pro arşivinden':''}</div></div>
     <div class="cmp">${cell('Geçen ay',prev)}${cell('6 ay ortalaması',avg)}${cell('Geçen yıl bu ay',ly)}</div>${daily}</section>
   <section class="sec"><h2>Son 6 ay</h2>${trendSvg(mk)}</section>
   <section class="sec"><h2>Kategoriler<span class="sp"></span><button class="linkbtn" data-act="settings">Bütçe koy</button></h2>
@@ -895,14 +895,14 @@ function txRow(x){
   return `<div class="row tap" data-act="${ro?'archtx':'edittx'}" data-id="${x.id}"><div class="main"><div class="t">${esc(title)}</div><div class="s">${s}</div></div><div class="amt ${neutral?'muted':plus?'plus':''}">${plus&&!neutral?'+':''}${TL(Math.abs(x.amount))}</div></div>`;
 }
 function fillTxList(){
-  const el=document.getElementById('txList');if(!el)return;const q=asciiUp(txQuery.trim());const st=START();
-  let list=S.tx.filter(x=>x.date>=st||x.type==='gider');
+  const el=document.getElementById('txList');if(!el)return;const q=asciiUp(txQuery.trim());
+  let list=S.tx.slice();
   if(!q)list=list.filter(x=>x.date.slice(0,7)===viewMonth);
   else list=list.filter(x=>asciiUp([x.merchant,x.category,x.sub,x.note,x.source,personName(x.personId),srcLabel(x)].join(' ')).includes(q));
   if(txWho==='gelir')list=list.filter(x=>x.type==='gelir'||x.type==='tahsilat');
   else if(txWho!=='all')list=list.filter(x=>x.type==='gider'&&x.personId===txWho);
   const groups={};list.slice(0,400).forEach(x=>(groups[x.date]=groups[x.date]||[]).push(x));
-  el.innerHTML=list.length?Object.entries(groups).map(([d,l])=>`<div class="daygrp">${fmtDY(d)}</div>${l.map(txRow).join('')}`).join(''):`<div class="empty">${viewMonth<st.slice(0,7)?'Bu ayın kayıtları Arşiv sekmesinde.':'Bu filtrede kayıt yok.'}</div>`;
+  el.innerHTML=list.length?Object.entries(groups).map(([d,l])=>`<div class="daygrp">${fmtDY(d)}</div>${l.map(txRow).join('')}`).join(''):`<div class="empty">${!q&&useArch(viewMonth)&&S.arch.some(x=>x.date.slice(0,7)===viewMonth)?'Bu ayın Money Pro kayıtları Arşiv sekmesinde.':'Bu filtrede kayıt yok.'}</div>`;
 }
 function catSheet(c){
   const by=mineCats(viewMonth)[c];if(!by)return;const items=[...by.items].sort((a,b)=>b.pdate.localeCompare(a.pdate));
