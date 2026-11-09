@@ -825,7 +825,7 @@ function monthPlan(mk){
     const oth=Object.entries(s.by).filter(([pid,v])=>pid!==ME&&v>0.5);const othT=oth.reduce((a,[,v])=>a+v,0);
     /* başkalarının payı kendi günlerinde ödendiği için plana girmez; sadece benim payım */
     const cert=s.total-tic-othT;
-    if(cert>0.5||s.paid)outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:Math.max(0,cert),done:s.paid,tag:[open?'dönem açık':'',tic>0.5?`ticari ${TL(tic)} hariç`:'',...oth.map(([pid,v])=>`${personName(pid)} ${TL(v)} kendisi öder`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic});
+    if(cert>0.5)outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:Math.max(0,cert),done:s.paid,tag:[open?'dönem açık':'',tic>0.5?`ticari ${TL(tic)} hariç`:'',...oth.map(([pid,v])=>`${personName(pid)} ${TL(v)} kendisi öder`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic});
     /* kesime kadar yapılacağı tahmin edilen harcama ayrı satır */
     if(est>0.5&&!s.paid)outs.push({k:'estcard',id:mk,est:true,title:c.name,date:s.due,amount:est,done:false,tag:`kesime (${fmtD(s.cut)}) kadar tahmini harcama`});
     Object.entries(s.by).forEach(([pid,a])=>{if(pid===ME||a<=0.5)return;const L=owedLeft(pid,c.id,s.cut);
@@ -1026,7 +1026,10 @@ function spendCatSheet(cat){
 }
 /* başkalarının kart payları: her kart ve son ödeme tarihi ayrı; aldığım ödemeler en eski ekstreden düşülür */
 function owedByDue(){
-  const lines=[];S.cards.filter(hasDays).forEach(c=>{const st=cardState(c);[st.last,st.open].forEach((s,i)=>{if(i===0&&s.paid)return;Object.entries(s.by).forEach(([pid,v])=>{if(pid!==ME&&v>0.5)lines.push({pid,card:c,cut:s.cut,due:s.due,amt:v,open:s.cut>=today()})})})});
+  /* kartı ben ödemiş olsam da kişinin payı, o bana ödeyene kadar durur: tüm dönemlerdeki payları topla (açık dönem dahil, gelecek taksitler hariç) */
+  const lines=[];const t=today();S.cards.filter(hasDays).forEach(c=>{const st=cardState(c);if(!st)return;const g={};
+    livePortions().forEach(p=>{if(p.cardId!==c.id||p.personId===ME||!p.personId)return;const cut=p.pcut||cutFor(c,p.pdate);if(cut>st.open.cut)return;const k=p.personId+'|'+cut;(g[k]=g[k]||{pid:p.personId,cut,amt:0}).amt+=p.pamount});
+    Object.values(g).forEach(x=>{if(x.amt>0.5)lines.push({pid:x.pid,card:c,cut:x.cut,due:dueFor(c,x.cut),amt:x.amt,open:x.cut>=t})})});
   lines.sort((a,b)=>a.due.localeCompare(b.due));
   const out={};lines.forEach(l=>(out[l.pid]=out[l.pid]||{pid:l.pid,lines:[],got:0}).lines.push(l));
   const first=lines.length?lines.reduce((a,l)=>l.cut<a?l.cut:a,'9999'):null;
