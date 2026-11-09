@@ -1,0 +1,20 @@
+name: Gümüş kuru
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: gumus
+jobs:
+  kur:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 .github/gumus.py
+      - name: data dalına yaz
+        run: |
+          mkdir -p /tmp/out && cp gumus.json /tmp/out/ && cd /tmp/out
+          git init -q -b data && git config user.name "kur-bot" && git config user.email "actions@users.noreply.github.com"
+          git add gumus.json && git commit -qm "Gümüş kuru" && git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data

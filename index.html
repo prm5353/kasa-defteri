@@ -612,6 +612,8 @@ function partition(docs){
 /* otomatik kur: Harem Altın'ın canlı fiyat bağlantısından (websocket) alış fiyatları. İnternet varken açılışta ve 15 dakikada bir; yoksa son kur kalır. Gümüş elle girilir. Yarım/tam = 2/4 çeyrek. */
 const KUR_WS='wss://hrmsocketonly.haremaltin.com/socket.io/?EIO=4&transport=websocket';
 const KUR_MAP={gram:'KULCEALTIN',ceyrek:'CEYREK_YENI',usd:'USDTRY',eur:'EURTRY'};
+const GUMUS_URL='https://raw.githubusercontent.com/prm5353/kasa-defteri/data/gumus.json';
+async function gumusFetch(){const r=await fetch(GUMUS_URL+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error(r.status);const j=await r.json();const v=num(j.alis);if(!(v>0))throw new Error('boş');return {v,at:j.updated||j.at}}
 let kurBusy=false;
 function kurFetch(){return new Promise((res,rej)=>{let ws;const got={};const done=()=>{try{ws&&ws.close()}catch(e){}};
   const to=setTimeout(()=>{done();Object.keys(got).length?res(got):rej(new Error('zaman aşımı'))},15000);
@@ -623,9 +625,10 @@ function kurFetch(){return new Promise((res,rej)=>{let ws;const got={};const don
       if(Object.keys(KUR_MAP).every(k=>got[k])){clearTimeout(to);done();res(got)}}catch(e){}}}})}
 async function autoPrices(force){if(kurBusy||!db||(typeof navigator!=='undefined'&&navigator.onLine===false))return;const P=S.prices||{};
   if(!force&&P.autoCheck&&Date.now()-P.autoCheck<14*60*1000)return;kurBusy=true;
-  try{const got=await kurFetch();const cur={};Object.entries(got).forEach(([k,o])=>cur[k]=o.v);
+  try{const [h,g]=await Promise.allSettled([kurFetch(),gumusFetch()]);if(h.status!=='fulfilled'&&g.status!=='fulfilled')throw h.reason||g.reason;
+    const got=h.status==='fulfilled'?h.value:{};const cur={};Object.entries(got).forEach(([k,o])=>cur[k]=o.v);if(g.status==='fulfilled'){cur.gumus=g.value.v;cur.gumusAt=g.value.at}
     const hist={...(P.history||{})};hist[today()]=clean({...(hist[today()]||{}),...PRICED.reduce((o,k)=>(P[k]?{...o,[k]:P[k]}:o),{}),...cur});
-    await db.doc('market/prices').set(clean({...P,...cur,history:hist,updatedAt:new Date().toISOString(),source:'Harem Altın · alış',autoCheck:Date.now(),autoErr:Object.keys(KUR_MAP).every(k=>got[k])?'':'eksik'}));
+    await db.doc('market/prices').set(clean({...P,...cur,history:hist,updatedAt:new Date().toISOString(),source:'Harem Altın · alış',autoCheck:Date.now(),autoErr:Object.keys(KUR_MAP).every(k=>got[k])&&g.status==='fulfilled'?'':'eksik'}));
   }catch(e){try{await db.doc('market/prices').set(clean({...P,autoCheck:Date.now(),autoErr:String(e.message||e)}))}catch(_){}}
   finally{kurBusy=false}}
 async function boot(){
@@ -1233,7 +1236,7 @@ function assetsSheet(){
           ${ct>0?`<div class="small muted">Toplam maliyet ${TL(ct)}${t!=='tl'&&cq>0?` · ortalama ${TL2(ct/cq)} / ${t==='gram'||t==='gumus'?'gr':t==='usd'?'$':t==='eur'?'€':'adet'}`:''}${cq<q-0.0001?` · ${nfq.format(q-cq)} için maliyet girilmedi`:''}</div>${pnlLine(pnl(L,P),false)}`:'<div class="small muted">Maliyet girilmedi</div>'}
           <details style="margin-top:4px"><summary class="small">Alışları göster</summary>${L.map(lot).join('')}</details></div>`}).join('')}</section>`}).join('')||'<section class="sec" style="margin-top:12px"><div class="empty">Varlık yok.</div></section>'}
     <button class="btn" style="width:100%;margin-top:12px" data-act="newasset">+ Varlık ekle</button>
-    <section class="sec" style="margin-top:12px"><h2>Fiyatlar<span class="sp"></span><button class="linkbtn" data-act="kurnow">Şimdi çek</button><button class="linkbtn" data-act="prices" style="margin-left:10px">Elle</button></h2><div class="small muted" style="margin-bottom:6px">Gram, çeyrek, dolar, euro: Harem Altın alış fiyatı, internet varken 15 dakikada bir. Gümüşü elle gir.</div><div class="kv">${PRICED.map(k=>[k,ASSET_TYPES[k]]).map(([k,l])=>`<span class="k">${l}</span><b>${P[k]?TL2(num(P[k])):'—'}</b>`).join('')}${num(P.ceyrek)?`<span class="k">Yarım altın (2 çeyrek)</span><b>${TL2(aPrice(P,'yarim'))}</b><span class="k">Tam altın (4 çeyrek)</span><b>${TL2(aPrice(P,'tam'))}</b>`:''}</div></section>`);
+    <section class="sec" style="margin-top:12px"><h2>Fiyatlar<span class="sp"></span><button class="linkbtn" data-act="kurnow">Şimdi çek</button><button class="linkbtn" data-act="prices" style="margin-left:10px">Elle</button></h2><div class="small muted" style="margin-bottom:6px">Gram, çeyrek, dolar, euro: Harem Altın alış. Gümüş: Fibabanka FX Market alış. İnternet varken 15 dakikada bir.</div><div class="kv">${PRICED.map(k=>[k,ASSET_TYPES[k]]).map(([k,l])=>`<span class="k">${l}</span><b>${P[k]?TL2(num(P[k])):'—'}</b>`).join('')}${num(P.ceyrek)?`<span class="k">Yarım altın (2 çeyrek)</span><b>${TL2(aPrice(P,'yarim'))}</b><span class="k">Tam altın (4 çeyrek)</span><b>${TL2(aPrice(P,'tam'))}</b>`:''}</div></section>`);
 }
 function ledgerSheet(){
   const open=S.debts.filter(d=>!d.paid),closed=S.debts.filter(d=>d.paid);
