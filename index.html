@@ -644,7 +644,11 @@ function monthPlan(mk){
   S.cards.forEach(c=>cardDuesInMonth(c,mk).forEach(s=>{
     if(s.total<=0.5)return;const est=s.cut>=t;
     outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:s.total,done:s.paid,tag:est?'dönem açık':'',mine:s.by[ME]||0});
-    Object.entries(s.by).forEach(([pid,a])=>{if(pid===ME||a<=0.5)return;const got=S.tx.filter(x=>x.type==='tahsilat'&&x.personId===pid&&x.date.slice(0,7)===mk).reduce((q,x)=>q+x.amount,0);
+    Object.entries(s.by).forEach(([pid,a])=>{if(pid===ME||a<=0.5)return;const L=owedLeft(pid,c.id,s.cut);
+      if(L){const got=L.amt-L.left;if(L.left<=0.5){ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:L.amt,done:true,tag:c.name+' · alındı'});return}
+        if(got>0.5)ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:got,done:true,tag:c.name+' · alındı'});
+        ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:L.left,done:false,tag:c.name+(got>0.5?' · kalan':'')});return}
+      const got=S.tx.filter(x=>x.type==='tahsilat'&&x.personId===pid&&x.date.slice(0,7)===mk).reduce((q,x)=>q+x.amount,0);
       ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:a,done:got>=a-1,tag:c.name})});
   }));
   S.plans.forEach(pl=>{const s=planStatus(pl);const[y,m]=mk.split('-').map(Number);const date=dayIn(y,m-1,pl.day||1);
@@ -774,8 +778,11 @@ function owedByDue(){
   const first=lines.length?lines.reduce((a,l)=>l.cut<a?l.cut:a,'9999'):null;
   Object.values(out).forEach(o=>{let got=S.tx.filter(x=>x.type==='tahsilat'&&x.personId===o.pid&&x.date>=addDays(START(),-40)).reduce((a,x)=>a+x.amount,0);o.got=got;
     o.lines.forEach(l=>{const d=Math.min(got,l.amt);l.left=l.amt-d;got-=d});o.left=o.lines.reduce((a,l)=>a+l.left,0)});
-  return Object.values(out).filter(o=>o.left>0.5);
+  _owAll=Object.values(out);return _owAll.filter(o=>o.left>0.5);
 }
+let _owAll=[];
+/* aylık tabloda kişi payı: aldığım ödemeler düşülmüş kalan */
+function owedLeft(pid,cardId,cut){owedByDue();for(const o of _owAll)if(o.pid===pid)for(const l of o.lines)if(l.card.id===cardId&&l.cut===cut)return l;return null}
 function owedSection(){const O=owedByDue();if(!O.length)return '';const tot=O.reduce((a,o)=>a+o.left,0);
   return `<section class="sec"><h2>Bana ödenecek kart payları<span class="sp"></span><span class="sum" style="color:var(--other)">${TL(tot)}</span></h2>
     ${O.map(o=>`<div class="owe tap" data-act="person" data-id="${o.pid}"><div class="sumline" style="font-weight:700"><span>${esc(personName(o.pid))}</span><b>${TL(o.left)}</b></div>
