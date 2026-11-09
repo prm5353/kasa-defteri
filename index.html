@@ -674,7 +674,7 @@ function cashFlow(mk){
   for(let m=cur;m<mk;m=shiftMonth(m,1)){const P=monthPlan(m);P.ins.filter(x=>!x.done).forEach(x=>bal+=x.amount);P.outs.filter(x=>!x.done).forEach(x=>bal-=x.amount)}
   const start=bal;const P=monthPlan(mk);
   const ev=[...P.ins.filter(x=>!x.done).map(x=>({x,d:x.date<t?t:x.date,s:1})),...P.outs.filter(x=>!x.done).map(x=>({x,d:x.date<t?t:x.date,s:-1}))]
-    .sort((a,b)=>a.d.localeCompare(b.d)||a.s-b.s);
+    .sort((a,b)=>a.d.localeCompare(b.d)||b.s-a.s);
   const short=[];ev.forEach(e=>{bal+=e.s*e.x.amount;if(e.s<0&&bal<-0.5){const miss=Math.min(e.x.amount,-bal);e.x.short=miss;short.push({x:e.x,d:e.d,miss})}});
   return {P,start,end:bal,short,withBal:S.accounts.some(a=>a.balanceAt)};
 }
