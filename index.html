@@ -402,12 +402,13 @@ function cardInstallments(c){
     return ps.length?{t,left:ps.length,n:ps[0].pn,per:ps[0].pamount,leftTotal:ps.reduce((a,p)=>a+p.pamount,0),next:ps[0].pdate,personId:t.personId}:null;
   }).filter(Boolean).sort((a,b)=>b.leftTotal-a.leftTotal);
 }
+const isCashAcc=a=>asciiUp(a.name)==='NAKIT';
 function accBalance(a){
-  const at=a.balanceAt||0;let b=num(a.balance);
+  const at=a.balanceAt||0;let b=a.balanceAt?num(a.balance):0;const cashA=isCashAcc(a);const mine=n=>n===a.name||(cashA&&!n);
   S.tx.forEach(t=>{
     if((t.ts||0)<=at)return;const amt=t.amount||0;
-    if(t.account===a.name&&!t.cardId){if(t.type==='gelir'||t.type==='tahsilat')b+=amt;else if(t.type==='gider'||t.type==='verdim'||t.type==='transfer'||t.type==='odeme')b-=amt}
-    if(t.type==='transfer'&&t.toAccount===a.name&&!t.toCardId)b+=amt;
+    if(mine(t.account)&&!t.cardId){if(t.type==='gelir'||t.type==='tahsilat')b+=amt;else if(t.type==='gider'||t.type==='verdim'||t.type==='transfer'||t.type==='odeme')b-=amt}
+    if(t.type==='transfer'&&!t.toCardId&&(t.toAccount===a.name||(cashA&&!t.toAccount)))b+=amt;
   });
   return b;
 }
@@ -579,6 +580,7 @@ async function boot(){
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
   db=localDb;base=localDb.collection();
   base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render()});
+  try{if(ls.get('kd_cash1','')!=='1'){if(!S.accounts.some(isCashAcc))await put({k:'account',name:'Nakit',balance:0,balanceAt:1,ts:Date.now()});ls.set('kd_cash1','1')}}catch(e){}
   try{if(ls.get('kd_grp1','')!=='1'){const hit=S.accounts.filter(a=>!a.group&&/SEBAHAT|MELIKE|AHMET/.test(asciiUp(a.name)));for(const a of hit)await put({...a,group:'Ticari hesap'});ls.set('kd_grp1','1')}}catch(e){}
   /* Parafly: kesim günündeki (25) harcamalar bankada yeni döneme yazılıyor; son gün 24 */
   try{const pf=S.cards.find(c=>c.id==='card-parafly');if(pf&&pf.cuts&&pf.cuts['2026-10-25']){const cuts={};Object.entries(pf.cuts).forEach(([k,v])=>{cuts[k.endsWith('-25')?k.slice(0,8)+'24':k]=v});await put({...pf,cuts,cutDay:24})}}catch(e){}
@@ -665,7 +667,7 @@ function monthPlan(mk){
   return {ins,outs,inT,outT,left:inT-outT,goalT};
 }
 /* nakit akışı: bugünkü banka parasıyla başla, bekleyen gelir ve giderleri tarih sırasıyla işle; para yetmeyen ödemeyi işaretle */
-function cashNow(){return S.accounts.reduce((s,a)=>s+(a.balanceAt?accBalance(a):0),0)}
+function cashNow(){return S.accounts.reduce((s,a)=>s+accBalance(a),0)}
 function cashFlow(mk){
   const cur=today().slice(0,7);if(mk<cur)return null;const t=today();
   let bal=cashNow();
@@ -821,6 +823,8 @@ function heldMoney(){const since=addDays(START(),-40);const out={};
   S.tx.filter(x=>x.type==='tahsilat'&&x.personId&&x.personId!==ME&&x.date>=since).forEach(x=>{const o=out[x.personId]=out[x.personId]||{pid:x.personId,got:0,paid:0,where:{}};o.got+=x.amount;const w=x.account||'Nakit';o.where[w]=(o.where[w]||0)+x.amount});
   S.cards.forEach(c=>{const T=cardTotals(c);if(T.paid<=0.5||T.spent<=0.5)return;Object.entries(T.by).forEach(([pid,v])=>{if(out[pid])out[pid].paid+=T.paid*Math.max(0,v)/T.spent})});
   return Object.values(out).map(o=>({...o,held:Math.max(0,o.got-o.paid)})).filter(o=>o.held>0.5)}
+function heldByAcc(){const m={};heldMoney().forEach(o=>{const tot=Object.values(o.where).reduce((a,v)=>a+v,0);Object.entries(o.where).forEach(([w,v])=>{const k=w||'Nakit';(m[k]=m[k]||[]).push({pid:o.pid,amt:o.held*v/tot})})});return m}
+function heldNote(names){const m=heldByAcc();const by={};names.forEach(n=>(m[n]||[]).forEach(x=>by[x.pid]=(by[x.pid]||0)+x.amt));const e=Object.entries(by).filter(([,v])=>v>0.5);return e.length?`<div class="s" style="color:var(--other)">${e.map(([p,v])=>`içinde ${esc(personName(p))} parası ${TL(v)} · karta ödenecek`).join(' · ')}</div>`:''}
 function heldSection(){const H=heldMoney();if(!H.length)return '';const tot=H.reduce((a,o)=>a+o.held,0);
   return `<section class="sec"><h2>Elimde duran, karta ödenecek para<span class="sp"></span><span class="sum">${TL(tot)}</span></h2>
     ${H.map(o=>`<div class="owe tap" data-act="person" data-id="${o.pid}"><div class="sumline" style="font-weight:700"><span>${esc(personName(o.pid))} · aldığım</span><b>${TL(o.held)}</b></div>
@@ -832,7 +836,7 @@ function owedSection(){const O=owedByDue();if(!O.length)return '';const tot=O.re
       ${o.lines.filter(l=>l.left>0.5).map(l=>`<div class="sumline small"><span class="muted">${esc(l.card.name)} · son ödeme ${fmtD(l.due)}${l.open?' · dönem açık':''}</span><b>${TL(l.left)}</b></div>`).join('')}
       ${o.got>0.5?`<div class="small muted">${TL(o.got)} ödedi, düşüldü</div>`:''}</div>`).join('')}</section>`}
 function viewHome(){
-  const accs=S.accounts.map(a=>({a,b:accBalance(a)}));const cash=accs.reduce((s,x)=>s+(x.a.balanceAt?x.b:0),0);
+  const accs=S.accounts.map(a=>({a,b:accBalance(a)}));const cash=accs.reduce((s,x)=>s+x.b,0);
   const P=S.prices||{};const assetVal=S.assets.reduce((s,a)=>s+a.qty*num(P[a.type]),0);
   const items=spendItems(S.cards.map(c=>c.id),'open');const mine=items.filter(p=>p.personId===ME);const tot=mine.reduce((a,p)=>a+p.pamount,0);
   const by={};mine.forEach(p=>{const k=p.category||'Diğer';by[k]=(by[k]||0)+p.pamount});let rows=Object.entries(by).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,8);
@@ -852,13 +856,14 @@ function viewHome(){
   <section class="sec tap" data-act="ledger"><h2>Alacak ve borç defteri<span class="sp"></span>${chev}</h2><div class="small muted">Fatih, Caner ve diğer alacak-borçlar</div></section>`;
 }
 
+function accAmt(a,b){return a.balanceAt||isCashAcc(a)?TL(b):`${TL(b)}<small>bakiye girilmedi</small>`}
 function accRows(accs){const seen=new Set();return accs.map(({a,b})=>{
-    if(a.group){if(seen.has(a.group))return '';seen.add(a.group);const g=accs.filter(x=>x.a.group===a.group);const sum=g.reduce((s,x)=>s+(x.a.balanceAt?x.b:0),0);
-      return `<div class="row tap" data-act="accgroup" data-id="${esc(a.group)}"><div class="main"><div class="t">${esc(a.group)}</div><div class="s">${g.map(x=>esc(x.a.name)).join(' · ')}</div></div><div class="amt">${TL(sum)}</div>${chev}</div>`}
-    return `<div class="row tap" data-act="account" data-id="${a.id}"><div class="main"><div class="t">${esc(a.name)}</div></div><div class="amt">${a.balanceAt?TL(b):'<span class="muted small">Bakiye gir</span>'}</div>${chev}</div>`}).join('')}
-function accGroupSheet(gname){const g=S.accounts.filter(a=>a.group===gname).map(a=>({a,b:accBalance(a)}));const sum=g.reduce((s,x)=>s+(x.a.balanceAt?x.b:0),0);
+    if(a.group){if(seen.has(a.group))return '';seen.add(a.group);const g=accs.filter(x=>x.a.group===a.group);const sum=g.reduce((s,x)=>s+x.b,0);
+      return `<div class="row tap" data-act="accgroup" data-id="${esc(a.group)}"><div class="main"><div class="t">${esc(a.group)}</div><div class="s">${g.map(x=>esc(x.a.name)).join(' · ')}</div>${heldNote(g.map(x=>x.a.name))}</div><div class="amt">${TL(sum)}</div>${chev}</div>`}
+    return `<div class="row tap" data-act="account" data-id="${a.id}"><div class="main"><div class="t">${esc(a.name)}</div>${heldNote([a.name])}</div><div class="amt">${accAmt(a,b)}</div>${chev}</div>`}).join('')}
+function accGroupSheet(gname){const g=S.accounts.filter(a=>a.group===gname).map(a=>({a,b:accBalance(a)}));const sum=g.reduce((s,x)=>s+x.b,0);
   openSheet(head(esc(gname))+`<section class="sec"><div class="eyebrow">Toplam</div><div class="total">${TL(sum)}</div></section>
-    <section class="sec" style="margin-top:12px">${g.map(({a,b})=>`<div class="row tap" data-act="account" data-id="${a.id}"><div class="main"><div class="t">${esc(a.name)}</div></div><div class="amt">${a.balanceAt?TL(b):'<span class="muted small">Bakiye gir</span>'}</div>${chev}</div>`).join('')}</section>
+    <section class="sec" style="margin-top:12px">${g.map(({a,b})=>`<div class="row tap" data-act="account" data-id="${a.id}"><div class="main"><div class="t">${esc(a.name)}</div>${heldNote([a.name])}</div><div class="amt">${accAmt(a,b)}</div>${chev}</div>`).join('')}</section>
     <p class="small muted">Bir hesabı gruptan çıkarmak için hesaba dokun, "Grup" alanını boşalt.</p>`)}
 function projectionSheet(){
   const T=targetDate();const cash=S.accounts.reduce((s,a)=>s+(a.balanceAt?accBalance(a):0),0);const f=flows(T);
@@ -870,8 +875,8 @@ function projectionSheet(){
 }
 function accountSheet(id){
   const a=S.accounts.find(x=>x.id===id);if(!a)return;const b=accBalance(a);
-  const moves=S.tx.filter(t=>((t.account===a.name&&!t.cardId)||(t.type==='transfer'&&t.toAccount===a.name))&&(t.ts||0)>(a.balanceAt||0)).slice(0,60);
-  openSheet(head(esc(a.name))+`<section class="sec"><div class="eyebrow">Güncel bakiye</div><div class="total">${a.balanceAt?TL(b):'Girilmedi'}</div>${a.balanceAt?`<div class="small muted">${fmtDY(ymd(new Date(a.balanceAt)))} tarihinde ${TL(a.balance)} girdin; sonraki hareketler eklendi.</div>`:''}
+  const moves=S.tx.filter(t=>{const m=n=>n===a.name||(isCashAcc(a)&&!n);return ((m(t.account)&&!t.cardId)||(t.type==='transfer'&&!t.toCardId&&m(t.toAccount)))&&(t.ts||0)>(a.balanceAt||0)}).sort((x,y)=>y.date.localeCompare(x.date)||(y.ts||0)-(x.ts||0)).slice(0,60);
+  openSheet(head(esc(a.name))+`<section class="sec"><div class="eyebrow">Güncel bakiye</div><div class="total">${TL(b)}</div>${!a.balanceAt?'<div class="small muted">Başlangıç bakiyesi girilmedi; sadece girdiğin hareketler toplandı. Aşağıdan bankadaki bakiyeyi yaz.</div>':''}${a.balanceAt>1?`<div class="small muted">${fmtDY(ymd(new Date(a.balanceAt)))} tarihinde ${TL(a.balance)} girdin; sonraki hareketler eklendi.</div>`:''}
     <form data-form="accbal" style="margin-top:10px"><input type="hidden" name="id" value="${a.id}"><div class="two"><label class="f">Bankadaki bakiye (₺)<input id="abVal" name="balance" type="number" step="0.01" inputmode="decimal" value="${a.balanceAt?r2(b):''}" required></label><div style="display:flex;align-items:flex-end"><button class="btn" type="submit" style="width:100%">Güncelle</button></div></div></form></section>
     <section class="sec" style="margin-top:12px"><h2>Son hareketler</h2>${moves.length?moves.map(txRow).join(''):'<div class="empty">Bakiye girildikten sonra hareket yok.</div>'}</section>
     <form data-form="accren" style="margin-top:12px"><input type="hidden" name="id" value="${a.id}"><div class="two"><label class="f">Hesabın adı<input class="inp" name="name" value="${esc(a.name)}" required></label><div style="display:flex;align-items:flex-end"><button class="btn ghost" type="submit" style="width:100%">Adı değiştir</button></div></div></form>
@@ -1130,11 +1135,12 @@ function personSheet(pid){
 /* ===================== FORMLAR ===================== */
 const opt=(v,l,sel)=>`<option value="${esc(v)}" ${String(sel)===String(v)?'selected':''}>${esc(l)}</option>`;
 const personOpts=sel=>[opt(ME,'Ben',sel),...S.persons.map(p=>opt(p.id,p.name,sel))].join('');
-const srcOpts=sel=>`<optgroup label="Kartlar">${S.cards.map(c=>opt('c:'+c.id,c.name,sel)).join('')}</optgroup><optgroup label="Hesaplar">${S.accounts.map(a=>opt('a:'+a.name,a.name,sel)).join('')}${opt('','Nakit / diğer',sel)}</optgroup>`;
-const accOpts=sel=>S.accounts.map(a=>opt(a.name,a.name,sel)).join('')+opt('','Nakit / diğer',sel);
+const srcOpts=sel=>`<optgroup label="Kartlar">${S.cards.map(c=>opt('c:'+c.id,c.name,sel)).join('')}</optgroup><optgroup label="Hesaplar">${S.accounts.map(a=>opt('a:'+a.name,a.name,sel)).join('')}${hasCashAcc()?'':opt('','Nakit / diğer',sel)}</optgroup>`;
+const hasCashAcc=()=>S.accounts.some(isCashAcc);
+const accOpts=sel=>S.accounts.map(a=>opt(a.name,a.name,sel)).join('')+(hasCashAcc()?'':opt('','Nakit / diğer',sel));
 function catOpts(selV){const t=catTree();return Object.entries(t).map(([m,subs])=>subs.length?`<optgroup label="${esc(m)}">${opt(catVal(m,''),m+' (genel)',selV)}${subs.map(s=>opt(catVal(m,s),catLabel(m,s),selV)).join('')}</optgroup>`:opt(catVal(m,''),m,selV)).join('')}
 function chipPick(name,options,sel){return `<input type="hidden" name="${name}" value="${esc(sel??'')}"><div class="pick" data-pick="${name}">${options.map(([v,l])=>`<button type="button" class="${String(v)===String(sel??'')?'on':''}" data-act="pick" data-name="${name}" data-v="${esc(v)}">${esc(l)}</button>`).join('')}</div>`}
-const srcChoices=()=>[...S.cards.map(c=>['c:'+c.id,c.name]),...S.accounts.map(a=>['a:'+a.name,a.name]),['','Nakit']];
+const srcChoices=()=>[...S.cards.map(c=>['c:'+c.id,c.name]),...S.accounts.map(a=>['a:'+a.name,a.name]),...(hasCashAcc()?[]:[['','Nakit']])];
 /* kategori seçici: önce ana başlıklar, sonra alt başlıklar, hepsi düğme */
 function catButton(v,target){const [m,sb]=String(v||'Diğer|').split('|');return `<button type="button" class="catbtn" data-act="catpick" data-target="${esc(target)}"><span>${esc(catLabel(m,sb))}</span><b aria-hidden="true">▾</b></button>`}
 let catTarget=null;
@@ -1190,7 +1196,7 @@ function formCard(c){
     <p class="small muted" style="margin:0">Başka biri kullanıyorsa bu karttaki harcamaların hepsi ona yazılır, senin harcamana karışmaz. Ortak limitte limit ana kartta girilir.</p>
     <button class="btn" type="submit">Kaydet</button>${c.id?`<button class="btn danger" type="button" data-act="delcard" data-id="${c.id}">Kartı sil</button>`:''}</form>`;
 }
-function formPayCard(cardId){const c=cardById(cardId);const st=cardState(c);const np=nextPay(c,st);return head(`${esc(c.name)} · ödeme`)+`<form data-form="paycard"><input type="hidden" name="cardId" value="${cardId}"><div class="two"><label class="f">Ödenen tutar (₺)<input name="amount" type="number" step="0.01" inputmode="decimal" value="${np&&np.amt>0?r2(np.amt):''}" required></label><label class="f">Tarih<input name="date" type="date" value="${today()}"></label></div><div class="f"><span class="lbl2">Hangi hesaptan</span>${chipPick('account',[...S.accounts.map(a=>[a.name,a.name]),['','Nakit']],S.accounts[0]?.name||'')}</div><p class="small muted" style="margin:0">Kartın toplam borcundan ve hesabının bakiyesinden düşülür.</p><button class="btn" type="submit">Kaydet</button></form>`}
+function formPayCard(cardId){const c=cardById(cardId);const st=cardState(c);const np=nextPay(c,st);return head(`${esc(c.name)} · ödeme`)+`<form data-form="paycard"><input type="hidden" name="cardId" value="${cardId}"><div class="two"><label class="f">Ödenen tutar (₺)<input name="amount" type="number" step="0.01" inputmode="decimal" value="${np&&np.amt>0?r2(np.amt):''}" required></label><label class="f">Tarih<input name="date" type="date" value="${today()}"></label></div><div class="f"><span class="lbl2">Hangi hesaptan</span>${chipPick('account',[...S.accounts.map(a=>[a.name,a.name+(a.balanceAt||isCashAcc(a)?' · '+TL(accBalance(a)):'')]),...(hasCashAcc()?[]:[['','Nakit']])],S.accounts[0]?.name||'')}</div><p class="small muted" style="margin:0">Kartın borcundan düşülür, kart limiti açılır ve seçtiğin hesabın bakiyesinden düşülür.</p><button class="btn" type="submit">Kaydet</button></form>`}
 function formPayStmt(cardId,cut){const c=cardById(cardId);const s=stmt(c,cut);return head(`${esc(c.name)} ödemesi`)+`<form data-form="paystmt"><input type="hidden" name="cardId" value="${cardId}"><input type="hidden" name="cut" value="${cut}"><div class="two"><label class="f">Ödenen (₺)<input id="psAmt" name="amount" type="number" step="0.01" value="${r2(s.total)}"></label><label class="f">Hangi hesaptan<select id="psAcc" name="account">${accOpts(S.accounts[0]?.name||'')}</select></label></div><p class="small muted" style="margin:0">Hesabının bakiyesinden düşülür.</p><button class="btn" type="submit">Kaydet</button></form>`}
 function formDebt(d){
   d=d||{dir:'alacak'};const left=d.id?debtLeft(d):0;
