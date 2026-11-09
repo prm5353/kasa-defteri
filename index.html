@@ -246,6 +246,10 @@ form.inline .inp{flex:1;padding:8px 10px;font-size:15px}
 .ct.near .ic,.ct.near .bd{color:var(--warn)}
 .ct.near{border-color:var(--warn)}
 .ct.sel{border-color:var(--ink);border-width:2px;background:var(--line)}
+.qasubs{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px;border-radius:14px;background:var(--line)}
+.ct.sm{min-height:70px;padding:8px 4px;gap:4px}
+.ct.sm .ic svg{width:22px;height:22px}
+.ct.sm .nm{font-size:11.5px}
 .ct.add{border-style:dashed;color:var(--muted)}
 .ct.add .ic{font-size:26px;line-height:1}
 .icgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
@@ -704,7 +708,6 @@ function formQuick(){const src=ls.get('kd_qa_src','')||defaultSrc();const t=catT
   return head('Hızlı harcama')+`<form data-form="quick"><input class="qa-amt" name="amount" type="number" step="0.01" inputmode="decimal" placeholder="0 ₺" required autofocus>
     <input class="inp" name="merchant" placeholder="Nereye? (isteğe bağlı)" style="margin-top:10px">
     <input type="hidden" name="cat" value=""><div class="catgrid3" style="margin-top:12px">${Object.keys(t).map(m=>`<button type="button" class="ct" data-act="qacat" data-m="${esc(m)}"><span class="ic">${catIcon(m,'')}</span><span class="nm">${esc(m)}</span></button>`).join('')}</div>
-    <div id="qaSubs" class="pick" style="margin-top:8px"></div>
     <div class="f" style="margin-top:10px"><span class="lbl2">Hangi kart / hesap</span>${chipPick('src',srcChoices(),src)}</div>
     ${S.persons.length?`<div class="f"><span class="lbl2">Kim harcadı</span>${chipPick('personId',[[ME,'Ben'],...S.persons.map(p=>[p.id,p.name])],ME)}</div>`:''}
     <label class="f">Tarih<input type="date" name="date" value="${today()}"></label>
@@ -1829,8 +1832,13 @@ document.addEventListener('click',async e=>{
     case 'subsearch':gsQuery=el.dataset.q;gsFilter='all';searchSheet();break;
     case 'quickadd':openSheet(formQuick());setTimeout(()=>document.querySelector('.qa-amt')?.focus(),80);break;
     case 'qacat':{const f=el.closest('form');const m=el.dataset.m;f.querySelectorAll('.ct').forEach(b=>b.classList.toggle('sel',b===el));f.querySelector('input[name=cat]').value=catVal(m,'');const subs=catTree()[m]||[];
-      f.querySelector('#qaSubs').innerHTML=subs.map(sb=>`<button type="button" data-act="qasub" data-m="${esc(m)}" data-s="${esc(sb)}">${esc(sb)}</button>`).join('');break}
-    case 'qasub':{const f=el.closest('form');const on=!el.classList.contains('on');el.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('on',on&&b===el));f.querySelector('input[name=cat]').value=catVal(el.dataset.m,on?el.dataset.s:'');break}
+      f.querySelector('#qaSubs')?.remove();if(!subs.length)break;
+      /* alt başlıklar dokunulan kutucuğun hemen altındaki satıra açılır */
+      const tiles=[...f.querySelectorAll('.catgrid3 > .ct')];const i=tiles.indexOf(el);const end=tiles[Math.min(tiles.length-1,Math.floor(i/3)*3+2)];
+      const box=document.createElement('div');box.id='qaSubs';box.className='qasubs';
+      box.innerHTML=subs.map(sb=>`<button type="button" class="ct sm" data-act="qasub" data-m="${esc(m)}" data-s="${esc(sb)}"><span class="ic">${catIcon(m,sb)}</span><span class="nm">${esc(sb)}</span></button>`).join('');
+      end.after(box);break}
+    case 'qasub':{const f=el.closest('form');const on=!el.classList.contains('sel');el.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('sel',on&&b===el));f.querySelector('input[name=cat]').value=catVal(el.dataset.m,on?el.dataset.s:'');break}
     case 'kurnow':toast('Kurlar çekiliyor…');await autoPrices(true);setTimeout(()=>{assetsSheet();toast(S.prices?.autoErr?'Alınamadı, son kur kullanılıyor':'Kurlar güncellendi')},300);break;
     case 'analiz':anInit();AN.path=[];AN.filt=false;analizSheet();break;
     case 'ango':AN.path.push(el.dataset.k||'Genel');analizSheet();document.getElementById('sheet')?.scrollTo?.(0,0);break;
