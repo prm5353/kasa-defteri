@@ -27,6 +27,13 @@ Tek dosyalık PWA. Yayın: GitHub Pages (main dalı, kök). Kişisel veri bu dep
 - Kurlar: `autoPrices` → Harem websocket (`hrmsocketonly.haremaltin.com`, KULCEALTIN/CEYREK_YENI/USDTRY/EURTRY alış) + `gumus.json` (raw.githubusercontent)
 - Yapay zekâ okuma: tarayıcıdan doğrudan Anthropic API (`anthropic-dangerous-direct-browser-access`), anahtar telefonda localStorage `kd_key`, model `kd_model` (varsayılan claude-haiku-5-5)
 
+## Güvenlik ve yedek
+- Sayfada içerik güvenlik politikası (CSP) var: yeni bir dış adrese bağlanılacaksa `index.html` başındaki `connect-src` (ya da ilgili) listesine eklenmeli, yoksa tarayıcı engeller
+- Yedek yükleme iki adımlı (`restoreFrom` özet + onay → `restoreApply`). Yüklemeden önce şimdiki hâl ayrı IndexedDB'ye (`kasaDefteriOnce`) kopyalanır; `restoreUndo` geri döner
+- Silmeler `delUndoable` / `toast(msg,0,geriAlFn)` ile geri alınabilir
+- Kişisel isimler koda yazılmaz; veriden (kişiler, kategori ağacı) okunur
+
 ## Çalışma düzeni
+- Otomatik testler: `python3 tests/test_app.py` (Playwright + Chromium; tarih 10 Kasım 2026'ya sabit, örnek veriyle). Her değişiklikten sonra çalıştır; hesap mantığı değişirse testteki beklenen tutarları bilerek güncelle
 - Değişiklik → `node --check` (script'i ayıklayıp) → Playwright ile `restoreFrom(new File([JSON]))` ile örnek veri yükleyip test → `sw.js` sürümünü artır → commit → push
 - Commit kimliği: Claude <noreply@anthropic.com>
