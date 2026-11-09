@@ -557,7 +557,13 @@ function incomeBy(mk){const by={};const add=(x)=>{const k=x.source||'Diğer';(by
 function monthEnd(mk){const[y,m]=mk.split('-').map(Number);return dayIn(y,m-1,31)}
 function incomeTotal(mk){return (useArch(mk)?S.arch:S.tx).filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk).reduce((a,x)=>a+x.amount,0)}
 function othersMonth(mk){const by={};livePortions().filter(p=>p.personId!==ME&&p.pdate.slice(0,7)===mk).forEach(p=>by[p.personId]=(by[p.personId]||0)+p.pamount);return by}
-function budgetUse(mk){const by=mineCats(mk);return S.budgets.map(b=>{const spent=by[b.category]?.v||0;return {...b,spent,pct:b.limit>0?spent/b.limit*100:0}}).sort((a,b)=>b.pct-a.pct)}
+/* devirli bütçe: kullanılmayan kısım sonraki aya geçer (aşım da sonraki ayı azaltır), başlangıç ayından itibaren */
+function budgetCarry(b,mk){if(!b.rollover)return 0;let c=0;for(let m=b.since||mk;m<mk;m=shiftMonth(m,1))c+=b.limit-(mineCats(m)[b.category]?.v||0);return c}
+function budgetUse(mk){const by=mineCats(mk);return S.budgets.map(b=>{const spent=by[b.category]?.v||0;const carry=budgetCarry(b,mk);const lim=b.limit+carry;return {...b,base:b.limit,carry,limit:lim,spent,pct:lim>0?spent/lim*100:(spent>0?100:0)}}).sort((a,b)=>b.pct-a.pct)}
+/* geçmiş 12 ay (Money Pro arşivi dahil): hiç harcama olmayan aylar da sayılarak aylık ortalama */
+function budgetSuggest(){const cur=today().slice(0,7);const ms=Array.from({length:12},(_,i)=>shiftMonth(cur,-12+i));const R={};
+  ms.forEach(m=>Object.entries(mineCats(m)).forEach(([c,o])=>{if(EST_SKIP.includes(c))return;(R[c]=R[c]||{c,tot:0,n:0}).tot+=o.v;if(o.v>0)R[c].n++}));
+  return Object.values(R).filter(r=>r.tot>0).map(r=>({...r,avg:r.tot/12})).sort((a,b)=>b.avg-a.avg)}
 let _ps=null;
 function productStats(){
   if(_ps)return _ps;const st={};
@@ -1390,7 +1396,7 @@ function viewSpend(){
   const prev=mineTotal(shiftMonth(mk,-1)),ly=mineTotal(shiftMonth(mk,-12));
   const avgKs=[1,2,3,4,5,6].map(i=>shiftMonth(mk,-i));const avg=avgKs.reduce((a,k)=>a+mineTotal(k),0)/6;
   const avgBy={};avgKs.forEach(k=>Object.entries(mineCats(k)).forEach(([c,o])=>avgBy[c]=(avgBy[c]||0)+o.v/6));
-  const bud=Object.fromEntries(S.budgets.map(b=>[b.category,b]));
+  const bud=Object.fromEntries(budgetUse(mk).map(b=>[b.category,b]));
   const cats=Object.entries(by).sort((a,b)=>b[1].v-a[1].v);const maxC=Math.max(1,...cats.map(c=>c[1].v));
   const dch=(a,b)=>b>0?Math.round((a-b)/b*100):null;
   const cell=(lbl,v)=>{const c=dch(tot,v);return `<div><div class="k">${lbl}</div><div class="v">${TL(v)}</div><div class="small" style="color:${c>10?'var(--crit)':c<-10?'var(--ok)':'var(--muted)'}">${c===null?'—':(c>0?'+':'')+c+'%'}</div></div>`};
@@ -1776,8 +1782,11 @@ function settingsSheet(){
     <section class="sec"><h2>Hesaplarım</h2>${S.accounts.map(a=>`<div class="row"><div class="main tap" data-act="account" data-id="${a.id}"><div class="t">${esc(a.name)}</div><div class="s">${a.balanceAt?TL(accBalance(a)):'Bakiye girilmedi, dokun'}</div></div><button class="x" data-act="deldoc" data-id="${a.id}" aria-label="Sil">✕</button></div>`).join('')}
       <form data-form="account" style="margin-top:8px"><div class="two"><label class="f">Yeni hesap<input id="accName" name="name" required></label><label class="f">Bakiye (₺)<input id="accBal" name="balance" type="number" step="0.01"></label></div><button class="btn sm" type="submit">Ekle</button></form></section>
     <section class="sec"><h2>Düzenli gelir ve giderler<span class="sp"></span><button class="linkbtn" data-act="newrec">+ Ekle</button></h2>${S.recs.map(r=>`<div class="row tap" data-act="editrec" data-id="${r.id}"><div class="main"><div class="t">${esc(r.name)}</div><div class="s">Her ayın ${r.day}'i · ${r.dir==='gelir'?'gelir':'gider'}</div></div><div class="amt ${r.dir==='gelir'?'plus':''}">${TL(r.amount)}</div></div>`).join('')||'<div class="empty">Maaşını ekle; tahmin ona göre hesaplanır.</div>'}</section>
-    <section class="sec"><h2>Bütçe limitleri</h2>${S.budgets.map(b=>`<div class="row"><div class="main"><div class="t">${esc(b.category)}</div></div><div class="amt">${TL(b.limit)}/ay</div><button class="x" data-act="deldoc" data-id="${b.id}" aria-label="Sil">✕</button></div>`).join('')||'<div class="empty">Limit yok.</div>'}
-      <form data-form="budget" style="margin-top:8px"><div class="two"><label class="f">Kategori<select id="bCat" name="category">${Object.keys(catTree()).map(c=>opt(c,c,'Dışarıda Yemek')).join('')}</select></label><label class="f">Aylık limit (₺)<input id="bLim" name="limit" type="number" required placeholder="10000"></label></div><button class="btn sm" type="submit">Limit ekle</button></form></section>
+    <section class="sec"><h2>Bütçe limitleri</h2>${budgetUse(today().slice(0,7)).map(b=>`<div class="row"><div class="main"><div class="t">${esc(b.category)}</div><div class="s">${b.rollover?`devirli · ${b.carry>=0?'devreden +':'aşım −'}${TL(Math.abs(b.carry))} · bu ay kullanılabilir ${TL(b.limit-b.spent)}`:'aylık'}</div></div><div class="amt">${TL(b.base)}/ay</div><button class="x" data-act="deldoc" data-id="${b.id}" aria-label="Sil">✕</button></div>`).join('')||'<div class="empty">Limit yok.</div>'}
+      <form data-form="budget" style="margin-top:8px"><div class="two"><label class="f">Kategori<select id="bCat" name="category">${Object.keys(catTree()).map(c=>opt(c,c,'Dışarıda Yemek')).join('')}</select></label><label class="f">Aylık limit (₺)<input id="bLim" name="limit" type="number" step="any" required placeholder="10000"></label></div>
+        <label class="check"><input type="checkbox" name="rollover" checked> Kullanılmayan kısım sonraki aya devretsin (gezi, alışveriş gibi her ay olmayan harcamalar için)</label>
+        <button class="btn sm" type="submit">Limit ekle</button></form>
+      ${(()=>{const R=budgetSuggest();return R.length?`<details style="margin-top:10px"><summary class="small">Geçmiş 12 aya göre öneriler (Money Pro dahil)</summary><div class="small muted" style="margin:6px 0">Hiç harcama olmayan aylar da sayılarak aylık ortalama. Dokununca forma yazılır.</div>${R.map(r=>`<div class="sumline tap" data-act="budsug" data-c="${esc(r.c)}" data-v="${Math.round(r.avg/100)*100}"><span>${esc(r.c)} <span class="muted small">· son 12 ayda ${r.n} ay harcama · yıllık ${TL(r.tot)}</span></span><b>${TL(Math.round(r.avg/100)*100)}/ay</b></div>`).join('')}</details>`:''})()}</section>
     <section class="sec"><h2>Kartımı kullananlar</h2>${S.persons.map(p=>`<div class="row"><div class="main"><div class="t">${esc(p.name)}</div><div class="s">${holderCard(p.id)?'Ek kart · '+esc(holderCard(p.id).name):'Kartımı kullanıyor'}</div></div><button class="x" data-act="delperson" data-id="${p.id}" aria-label="Sil">✕</button></div>`).join('')}
       <form data-form="person" style="margin-top:8px"><label class="f">Yeni kişi<input id="perName" name="name" required></label><button class="btn sm" type="submit">Ekle</button></form></section>
     <section class="sec"><h2>Gelir türleri<span class="sp"></span><button class="linkbtn" data-act="incedit">Düzenle</button></h2><div class="small muted">${incomeSrc().map(esc).join(' · ')}</div></section>
@@ -2049,6 +2058,7 @@ document.addEventListener('click',async e=>{
     case 'nwsheet':nwSheet();break;
     case 'transfer':openSheet(formTransfer(el.dataset.from));break;
     case 'nofee':PENDFEE=null;closeSheet();toast('Kaydedildi');break;
+    case 'budsug':{const sel=document.getElementById('bCat');const lim=document.getElementById('bLim');if(sel){if(![...sel.options].some(o=>o.value===el.dataset.c))sel.add(new Option(el.dataset.c,el.dataset.c));sel.value=el.dataset.c}if(lim){lim.value=el.dataset.v;lim.scrollIntoView({block:'center'})}break}
     case 'payamt':{const f=el.closest('form');f.querySelectorAll('.payopts button').forEach(b=>b.classList.toggle('on',b===el));const i=f.querySelector('input[name=amount]');i.value=el.dataset.v;if(!el.dataset.v)i.focus();break}
     case 'excessapply':{const x=S.tx.find(t=>t.id===id);if(x){const o={...x};const back=S.tx.filter(v=>v.excessOf===x.id).reduce((a,v)=>a+v.amount,0);if(back>0.5)o.cardAlloc=x.amount-back;else delete o.cardAlloc;await saveTx([o]);closeSheet();toast('Fazlası sonraki kart payından düşülecek')}break}
     case 'payyes':if(PENDPAY){await saveTx([PENDPAY.t]);PENDPAY=null;closeSheet();toast('Kaydedildi · fazlası sonraki ödemesinden düşüldü')}break;
@@ -2247,7 +2257,7 @@ document.addEventListener('submit',async e=>{
       if(first&&t.amount>first.left+1){PENDPAY={t,first:first.left,next:o.lines.filter(l=>l.left>0.5&&l!==first),line:first};payAsk();break}
       await saveTx([t]);closeSheet();toast('Kaydedildi');break}
     case 'opening':{const p=S.persons.find(x=>x.id===g('id'));await put({...p,opening:num(g('opening')),since:g('since')||START()});closeSheet();toast('Kaydedildi');break}
-    case 'budget':{const cat=g('category');const ex=S.budgets.find(b=>b.category===cat);await put({id:ex?.id,k:'budget',category:cat,limit:num(g('limit'))});setTimeout(settingsSheet,250);break}
+    case 'budget':{const cat=g('category');const ex=S.budgets.find(b=>b.category===cat);await put({...(ex||{}),id:ex?.id,k:'budget',category:cat,limit:num(g('limit')),rollover:fd.has('rollover'),since:ex?.since||today().slice(0,7)});setTimeout(settingsSheet,250);break}
     case 'person':await put({k:'person',name:g('name').trim(),opening:0,ts:Date.now()});setTimeout(settingsSheet,250);break;
     case 'catadd':case 'catnew':{const t=catTree();const m=String(g('main')||'').trim();const sb=String(g('sub')||'').trim();if(!m)return;if(!t[m])t[m]=[];if(sb&&!t[m].includes(sb))t[m].push(sb);await saveTree(t);
       if(f.dataset.form==='catnew'){if(catEditMode||!catTarget)openCatPop(undefined,sb?m:undefined);else setCat(catVal(m,sb))}else{toast('Eklendi');setTimeout(()=>{settingsSheet();const d=[...document.querySelectorAll('.catedit')].find(x=>x.querySelector('summary span')?.textContent===m);if(d)d.open=true},150)}break}
