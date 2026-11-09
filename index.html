@@ -664,10 +664,23 @@ function monthPlan(mk){
   const inT=ins.reduce((a,x)=>a+x.amount,0),outT=outs.reduce((a,x)=>a+x.amount,0);const goalT=outs.filter(x=>x.goal).reduce((a,x)=>a+x.amount,0);
   return {ins,outs,inT,outT,left:inT-outT,goalT};
 }
+/* nakit akışı: bugünkü banka parasıyla başla, bekleyen gelir ve giderleri tarih sırasıyla işle; para yetmeyen ödemeyi işaretle */
+function cashNow(){return S.accounts.reduce((s,a)=>s+(a.balanceAt?accBalance(a):0),0)}
+function cashFlow(mk){
+  const cur=today().slice(0,7);if(mk<cur)return null;const t=today();
+  let bal=cashNow();
+  for(let m=cur;m<mk;m=shiftMonth(m,1)){const P=monthPlan(m);P.ins.filter(x=>!x.done).forEach(x=>bal+=x.amount);P.outs.filter(x=>!x.done).forEach(x=>bal-=x.amount)}
+  const start=bal;const P=monthPlan(mk);
+  const ev=[...P.ins.filter(x=>!x.done).map(x=>({x,d:x.date<t?t:x.date,s:1})),...P.outs.filter(x=>!x.done).map(x=>({x,d:x.date<t?t:x.date,s:-1}))]
+    .sort((a,b)=>a.d.localeCompare(b.d)||a.s-b.s);
+  const short=[];ev.forEach(e=>{bal+=e.s*e.x.amount;if(e.s<0&&bal<-0.5){const miss=Math.min(e.x.amount,-bal);e.x.short=miss;short.push({x:e.x,d:e.d,miss})}});
+  return {P,start,end:bal,short,withBal:S.accounts.some(a=>a.balanceAt)};
+}
 function planLine(x){
-  return `<div class="pl tap ${x.done?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pr"><span class="pn">${esc(x.title)}</span><b>${TL(x.amount)}</b></div><div class="pd">${fmtD(x.date)}${x.tag?` · ${esc(x.tag)}`:''}${x.done?' · ✓':''}${x.mine!=null&&Math.abs(x.mine-x.amount)>1?` · benim ${TL(x.mine)}`:''}${x.goal?' · hedef':''}</div></div>`;
+  return `<div class="pl tap ${x.done?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pr"><span class="pn">${esc(x.title)}</span><b>${TL(x.amount)}</b></div><div class="pd">${fmtD(x.date)}${x.tag?` · ${esc(x.tag)}`:''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' · ✓':''}${x.mine!=null&&Math.abs(x.mine-x.amount)>1?` · benim ${TL(x.mine)}`:''}${x.goal?' · hedef':''}</div></div>`;
 }
 function planTable(mk){
+  const F=cashFlow(mk);if(F)return planTableFlow(mk,F);
   const P=monthPlan(mk);const doneIn=P.ins.filter(x=>x.done).reduce((a,x)=>a+x.amount,0),doneOut=P.outs.filter(x=>x.done).reduce((a,x)=>a+x.amount,0);
   const goals=P.outs.filter(x=>x.goal);
   return `<section class="sec plan">${monthBar(mk,'pprev','pnext')}
@@ -683,6 +696,26 @@ function planTable(mk){
     <div class="small muted" style="text-align:center;margin-top:4px">Gerçekleşen: gelen ${TL(doneIn)} · ödenen ${TL(doneOut)}</div>
   </section>`;
 }
+function planTableFlow(mk,F){
+  const P=F.P;const pin=P.ins.filter(x=>!x.done),pout=P.outs.filter(x=>!x.done);const inT=F.start+pin.reduce((a,x)=>a+x.amount,0),outT=pout.reduce((a,x)=>a+x.amount,0);
+  const doneIn=P.ins.filter(x=>x.done),doneOut=P.outs.filter(x=>x.done);const goals=P.outs.filter(x=>x.goal);const cur=mk===today().slice(0,7);
+  const startLine=`<div class="pl ${cur?"tap":""}" ${cur?"data-act=\"cashsheet\"":""}><div class="pr"><span class="pn">${cur?'Hesaplarımdaki para':'Önceki aydan devreden'}</span><b style="color:${F.start<0?'var(--crit)':'inherit'}">${TL(F.start)}</b></div><div class="pd">${cur?(F.withBal?'bugün':'<b style="color:var(--warn)">bakiyeleri gir</b>'):'tahmini'}</div></div>`;
+  const warn=F.short.length?`<div class="banner" style="background:color-mix(in srgb,var(--crit) 16%,transparent);margin-top:10px;flex-direction:column;align-items:stretch;gap:4px"><b>⚠ Para bulman gereken ödemeler</b>${F.short.map(s=>`<div class="sumline small"><span>${fmtD(s.d)} · ${esc(s.x.title)}</span><b style="color:var(--crit)">${TL(s.miss)} eksik</b></div>`).join('')}<div class="small muted">Hesaplarındaki para ve o tarihe kadar gelecek alacaklar bu ödemeleri karşılamıyor.</div></div>`:'';
+  return `<section class="sec plan">${monthBar(mk,'pprev','pnext')}${warn}
+    <div class="cols" style="margin-top:10px">
+      <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>${startLine}${pin.map(planLine).join('')}${doneIn.length?`<div class="pd" style="margin-top:4px">Gelenler (hesaba girdi)</div>${doneIn.map(planLine).join('')}`:''}
+        <button class="addl" data-act="addticari">+ Ticari gelir</button><button class="addl" data-act="newrec" data-dir="gelir">+ Sabit gelir</button></div>
+      <div class="col"><div class="eyebrow">Giderler</div>${pout.map(planLine).join('')||'<div class="small muted">Bekleyen gider yok</div>'}${doneOut.length?`<div class="pd" style="margin-top:4px">Ödenenler</div>${doneOut.map(planLine).join('')}`:''}
+        <button class="addl" data-act="newrec" data-dir="gider">+ Sabit gider</button>${goals.length?'':'<button class="addl" data-act="newrec" data-dir="hedef">+ Birikim hedefi</button>'}</div>
+    </div>
+    <div class="cols tot"><div><span>Toplam</span><b style="color:var(--plus)">${TL(inT)}</b></div><div><span>Toplam</span><b>${TL(outT)}</b></div></div>
+    <div class="kalan"><span>AY SONU KALAN</span><b style="color:${F.end>=0?'var(--plus)':'var(--crit)'}">${TL(F.end)}</b></div>
+    ${goals.length?`<div class="small muted" style="text-align:center">Birikim hedefin (${TL(P.goalT)}) giderlere dahil.</div>`:''}
+    <div class="small muted" style="text-align:center;margin-top:4px">Toplamlara sadece bekleyenler girer; gelen ve ödenenler zaten hesaplarındaki paraya yansıdı.</div>
+  </section>`;
+}
+function cashSheet(){const accs=S.accounts.map(a=>({a,b:accBalance(a)}));
+  openSheet(head('Hesaplarımdaki para')+`<section class="sec"><div class="total">${TL(cashNow())}</div><div class="small muted">Sadece bakiyesini girdiğin hesaplar sayılır. Bakiyeyi güncellemek için hesaba dokun.</div></section><section class="sec" style="margin-top:12px">${accRows(accs)}</section>`)}
 let gsQuery='',gsFilter='all',gsArch=false;
 function searchSheet(){
   openSheet(head('Ara')+`<input class="inp" id="gSearch" type="search" placeholder="İşyeri, kişi, banka, kategori, not, tutar…" value="${esc(gsQuery)}" aria-label="Ara" autofocus>
@@ -1453,6 +1486,7 @@ document.addEventListener('click',async e=>{
     case 'backupcsv':case 'backupjson':await backup(a==='backupcsv'?'csv':'json');break;
     case 'account':accountSheet(id);break;
     case 'accgroup':accGroupSheet(id);break;
+    case 'cashsheet':cashSheet();break;
     case 'assets':assetsSheet();break;
     case 'ledger':ledgerSheet();break;
     case 'flow':{const r=JSON.parse(el.dataset.ref);if(r.t==='card')goTab('kart');else if(r.t==='person')personSheet(r.id);else if(r.t==='debt')openSheet(formDebt(S.debts.find(d=>d.id===r.id)));else if(r.t==='plan')openSheet(formPlan(S.plans.find(p=>p.id===r.id)));else if(r.t==='rec')openSheet(formRec(S.recs.find(x=>x.id===r.id)));break}
