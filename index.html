@@ -219,6 +219,7 @@ details summary{cursor:pointer;font-weight:600;font-size:14px}
 .pl2 .r1{display:flex;justify-content:space-between;gap:6px;align-items:baseline}
 .pl2 .n{font-weight:600;font-size:13.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pl2 b{white-space:nowrap;font-size:13.5px}
+.pl2 .r3{font-size:11px;color:var(--other);text-align:right;margin-top:-1px}
 .pl2 .r2{font-size:11.5px;color:var(--muted);margin-top:1px}
 .pl2.done{opacity:.5}
 .ptot{display:flex;justify-content:space-around;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:13px}
@@ -863,7 +864,7 @@ function monthPlan(mk){
     const oth=Object.entries(s.by).filter(([pid,v])=>pid!==ME&&v>0.5);const othT=oth.reduce((a,[,v])=>a+v,0);
     /* başkalarının payı kendi günlerinde ödendiği için plana girmez; sadece benim payım */
     const cert=s.total-tic-othT;
-    if(cert>0.5)outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:Math.max(0,cert),done:s.paid,tag:[open?'dönem açık':'',tic>0.5?`ticari ${TL(tic)} hariç`:'',...oth.map(([pid,v])=>`${personName(pid)} ${TL(v)} kendisi öder`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic});
+    if(cert>0.5||othT>0.5)outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:Math.max(0,cert),total:s.total-tic,done:s.paid,tag:[open?'dönem açık':'',tic>0.5?`ticari ${TL(tic)} hariç`:'',...oth.map(([pid,v])=>`${personName(pid)} ${TL(v)} kendisi öder`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic});
     /* kesime kadar yapılacağı tahmin edilen harcama ayrı satır */
     if(est>0.5&&!s.paid)outs.push({k:'estcard',id:mk,est:true,title:c.name,date:s.due,amount:est,done:false,stag:`kesime (${fmtD(s.cut)}) kadar`,tag:`kesime (${fmtD(s.cut)}) kadar tahmini harcama`});
     Object.entries(s.by).forEach(([pid,a])=>{if(pid===ME||a<=0.5)return;const L=owedLeft(pid,c.id,s.cut);
@@ -932,7 +933,7 @@ function cashFlow(mk){
 }
 /* aylık tablo satırı: ad ve tutar, altında sadece tarih ve kısa not; ayrıntı dokununca */
 function planRow(x){const note=x.stag||(x.k==='card'&&x.tag&&x.tag.includes('dönem açık')?'dönem açık':'')||(x.k==='rec'&&x.tag?x.tag:'');
-  return `<div class="pl2 tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="r1"><span class="n">${esc(x.title)}</span><b>${x.est?'~':''}${TL(x.amount)}</b></div><div class="r2">${fmtD(x.date)}${note?' · '+esc(note):''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' ✓':''}</div></div>`}
+  return `<div class="pl2 tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="r1"><span class="n">${esc(x.title)}</span><b>${x.est?'~':''}${TL(x.amount)}</b></div>${x.total!=null&&x.total-x.amount>0.5?`<div class="r3">toplam ${TL(x.total)}</div>`:''}<div class="r2">${fmtD(x.date)}${note?' · '+esc(note):''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' ✓':''}</div></div>`}
 const grp=(title,items,cls)=>items.length?`<div class="pgrp ${cls||''}"><div class="ph">${title}<span>${TL(items.reduce((a,x)=>a+x.amount,0))}</span></div>${items.sort((a,b)=>a.date.localeCompare(b.date)).map(planRow).join('')}</div>`:'';
 function planLine(x){
   return `<div class="pl tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pr"><span class="pn">${esc(x.title)}</span><b>${TL(x.amount)}</b></div><div class="pd">${fmtD(x.date)}${x.tag?` · ${esc(x.tag)}`:''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' · ✓':''}${x.mine!=null&&Math.abs(x.mine-x.amount)>1?` · benim ${TL(x.mine)}`:''}${x.goal?' · hedef':''}</div></div>`;
