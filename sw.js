@@ -1,6 +1,6 @@
 // Kasa Defteri: çevrimdışı çalışma. Uygulama dosyaları önce ağdan güncel sürüm dener (3 sn), olmazsa önbellekten açılır.
 // Yazı tipleri ilk açılışta önbelleğe alınır, internetsizken de aynı görünür.
-const CACHE='kasa-defteri-v54';
+const CACHE='kasa-defteri-v55';
 const FILES=['./','index.html','manifest.webmanifest','icon-192.png','icon-512.png','apple-touch-icon.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE&&k!=='kd-fonts').map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});

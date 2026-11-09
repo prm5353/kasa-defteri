@@ -858,13 +858,15 @@ function monthPlan(mk){
     else if(x.type==='transfer'&&x.toCardId)outs.push({k:'sched',id:x.id,title:(cardById(x.toCardId)?.name||'Kart')+' ödemesi',date:x.date,amount:x.amount,done:false,stag:acc});
     else if(x.type==='gelir'||x.type==='tahsilat')ins.push({k:'sched',id:x.id,title:x.merchant||x.source||(x.personId?personName(x.personId):'Gelir'),date:x.date,amount:x.amount,done:false,stag:acc,info:x.type==='tahsilat'&&x.personId&&x.personId!==ME})});
   S.recs.forEach(r=>{const o=recOcc(r,mk);if(!o)return;(r.dir==='gelir'?ins:outs).push({k:'rec',id:r.id,title:r.name,date:o.date,amount:o.amount,done:o.done,tag:o.no?(o.count?`${o.no}/${o.count}`:`${o.no}`):'',goal:r.dir==='hedef'})});
-  S.cards.filter(c=>!c.ticari).forEach(c=>cardDuesInMonth(c,mk).forEach(s=>{
+  S.cards.filter(c=>!c.ticari).forEach(c=>{const cst=cardState(c);const D=debtSplit(c,cst);cardDuesInMonth(c,mk).forEach(s=>{
     const tic=ticariAmt(s.items);const prev=prevCut(c,s.cut);const open=s.cut>=t;
+    /* karta yapılan ödemeler önce eski ekstreye: bu ekstrenin bankada kalan borcu ve bana düşen kalan */
+    const bankRem=!D?s.total:s.cut<cst.open.cut?(s.cut===cst.last.cut?D.old:0):s.cut===cst.open.cut?D.cur:s.total;const paidTo=Math.max(0,s.total-bankRem);
     const est=open&&!c.holderId?estSpend(src=>src==='c:'+c.id,addDays(prev>t?prev:t,prev>t?1:1),s.cut):0;
     const oth=Object.entries(s.by).filter(([pid,v])=>pid!==ME&&v>0.5);const othT=oth.reduce((a,[,v])=>a+v,0);
     /* başkalarının payı kendi günlerinde ödendiği için plana girmez; sadece benim payım */
-    const cert=s.total-tic-othT;
-    if(cert>0.5||othT>0.5)outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:Math.max(0,cert),total:s.total-tic,done:s.paid,tag:[open?'dönem açık':'',tic>0.5?`ticari ${TL(tic)} hariç`:'',...oth.map(([pid,v])=>`${personName(pid)} ${TL(v)} kendisi öder`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic});
+    const cert=Math.max(0,s.total-tic-othT-paidTo);const fully=s.paid||bankRem<=0.5;
+    if(s.total-tic-othT>0.5||othT>0.5)outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:fully?Math.max(0,s.total-tic-othT):cert,total:fully?s.total-tic:bankRem,paidTo,done:fully||cert<=0.5&&othT<=0.5,stag:paidTo>0.5&&!fully?`${TL(paidTo)} ödendi`:'',tag:[open?'dönem açık':'',tic>0.5?`ticari ${TL(tic)} hariç`:'',...oth.map(([pid,v])=>`${personName(pid)} ${TL(v)} kendisi öder`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic});
     /* kesime kadar yapılacağı tahmin edilen harcama ayrı satır */
     if(est>0.5&&!s.paid)outs.push({k:'estcard',id:mk,est:true,title:c.name,date:s.due,amount:est,done:false,stag:`kesime (${fmtD(s.cut)}) kadar`,tag:`kesime (${fmtD(s.cut)}) kadar tahmini harcama`});
     Object.entries(s.by).forEach(([pid,a])=>{if(pid===ME||a<=0.5)return;const L=owedLeft(pid,c.id,s.cut);
@@ -873,7 +875,7 @@ function monthPlan(mk){
         ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:L.left,done:false,tag:c.name+(got>0.5?' · kalan':'')});return}
       const got=S.tx.filter(x=>x.type==='tahsilat'&&x.personId===pid&&x.date.slice(0,7)===mk).reduce((q,x)=>q+x.amount,0);
       ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:a,done:got>=a-1,tag:c.name})});
-  }));
+  })});
   if(mk>=t.slice(0,7)){const a=mk===t.slice(0,7)?t:mk+'-01';const v=estSpend(src=>src.startsWith('a:'),mk===t.slice(0,7)?addDays(t,1):a,monthEnd(mk));if(v>0.5)outs.push({k:'estcash',id:mk,est:true,title:'Nakit/hesaptan harcamalar',date:a,amount:v,done:false,tag:'tahmini'})}
   S.plans.forEach(pl=>{const s=planStatus(pl);const[y,m]=mk.split('-').map(Number);const date=dayIn(y,m-1,pl.day||1);
     const got=S.tx.filter(x=>x.type==='gelir'&&x.planId===pl.id&&x.date.slice(0,7)===mk).reduce((a,x)=>a+x.amount,0);
