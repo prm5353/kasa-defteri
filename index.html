@@ -1041,6 +1041,18 @@ function heldNote(names){const m=heldByAcc();const by={};names.forEach(n=>(m[n]|
 /* başkalarından alıp henüz karta yatırmadığım ve hesabımda duran para: benim param değil */
 function heldTotal(){const M=heldByAcc();return Object.values(M).flat().reduce((a,x)=>a+x.amt,0)}
 let PENDPAY=null;
+/* hesaplar arası transfer; banka ücreti Banka › Komisyon harcaması olarak gönderen hesaptan düşer */
+function formTransfer(from){const A=S.accounts.map(a=>[a.name,a.name+' · '+TL(accBalance(a))]);from=from||S.accounts[0]?.name||'';const to=S.accounts.find(a=>a.name!==from)?.name||'';
+  return head('Hesaplar arası transfer')+`<form data-form="transfer"><div class="f"><span class="lbl2">Nereden</span>${chipPick('from',A,from)}</div><div class="f"><span class="lbl2">Nereye</span>${chipPick('to',A,to)}</div>
+    <label class="f">Tutar (₺)<input name="amount" type="number" step="0.01" inputmode="decimal" required></label>
+    <label class="f">Banka transfer ücreti / komisyon (₺) <span class="small muted">· kesilmediyse boş bırak</span><input name="fee" type="number" step="0.01" inputmode="decimal" placeholder="0"></label>
+    <label class="f">Tarih<input type="date" name="date" value="${today()}"></label><label class="f">Not<input name="note"></label>
+    <button class="btn" type="submit" style="width:100%">Transferi kaydet</button></form>`}
+let PENDFEE=null;
+function feeAsk(t){PENDFEE=t;openSheet(head('Transfer ücreti')+`<section class="sec"><p style="margin:0 0 10px">${esc(t.account||'Nakit')} → ${esc(t.toAccount||'Nakit')} · <b>${TL(t.amount)}</b> kaydedildi.</p><p style="margin:0 0 10px"><b>Banka bu transfer için ücret / komisyon kesti mi?</b></p>
+  <form data-form="fee"><label class="f">Kesilen ücret (₺) <span class="small muted">· EFT/FAST ücreti ve BSMV toplamı</span><input name="fee" type="number" step="0.01" inputmode="decimal" autofocus></label><button class="btn" type="submit" style="width:100%">Ücreti kaydet</button></form>
+  <button class="btn ghost" style="width:100%;margin-top:8px" data-act="nofee">Ücret kesilmedi</button><p class="small muted" style="margin-top:8px">Ücret, Banka › Komisyon harcaması olarak ${esc(t.account||'Nakit')} hesabından düşer.</p></section>`)}
+async function saveFee(t,fee){if(!(fee>0))return;await saveTx([{id:newId(),type:'gider',amount:fee,date:t.date,account:t.account||'',personId:ME,category:'Banka',sub:'Komisyon',merchant:`Transfer ücreti · ${t.account||'Nakit'} → ${t.toAccount||'Nakit'}`,feeOf:t.id,inst:1,ts:Date.now()+1,via:'manuel'}])}
 function excessList(){return S.tx.filter(x=>x.type==='tahsilat'&&x.cardAlloc!=null&&x.amount-x.cardAlloc>0.5).map(x=>{const ex=x.amount-x.cardAlloc;const back=S.tx.filter(v=>v.excessOf===x.id).reduce((a,v)=>a+v.amount,0);return {id:x.id,pid:x.personId,date:x.date,ex,left:Math.max(0,ex-back)}})}
 function excessSheet(id){const e=excessList().find(x=>x.id===id);if(!e)return;const x=S.tx.find(t=>t.id===id);
   openSheet(head(esc(personName(e.pid))+' · fazla ödeme')+`<section class="sec"><div class="total">${TL(e.left)}</div><div class="small muted">${fmtDY(e.date)} tarihli ${TL(x.amount)} ödemenin kart payına sayılmayan ${TL(e.ex)}'si${e.ex-e.left>0.5?` · ${TL(e.ex-e.left)} verildi`:''}</div></section>
@@ -1080,7 +1092,7 @@ function viewHome(){
   </section>
   <section class="sec"><h2>Param<span class="sp"></span><span class="sum">${TL(cash)}</span></h2>
     ${accs.length?accRows(accs):'<div class="empty">Hesap yok.</div>'}
-    <button class="linkbtn" data-act="newacc">+ Hesap ekle</button>
+    <div class="btnrow" style="margin-top:8px">${accs.length>1?'<button class="btn sm" data-act="transfer">⇄ Hesaplar arası transfer</button>':''}<button class="btn sm ghost" data-act="newacc">+ Hesap ekle</button></div>
   </section>
   ${nwSec()}
   <section class="sec tap" data-act="assets"><h2>Birikimim<span class="sp"></span><span class="sum" style="color:var(--gold)">${TL(assetVal)}</span>${chev}</h2><div class="small muted">${S.assets.length?assetGroups(S.assets.map(a=>({...a,val:aVal(a,P)}))).map(g=>`${esc(g.name)} ${TL(g.val)}`).join(' · '):'Altın, dolar, euro birikimini ekle'}</div></section>
@@ -1112,6 +1124,7 @@ function accountSheet(id){
     <section class="sec" style="margin-top:12px"><h2>Son hareketler</h2>${moves.length?moves.map(txRow).join(''):'<div class="empty">Bakiye girildikten sonra hareket yok.</div>'}</section>
     <form data-form="accren" style="margin-top:12px"><input type="hidden" name="id" value="${a.id}"><div class="two"><label class="f">Hesabın adı<input class="inp" name="name" value="${esc(a.name)}" required></label><div style="display:flex;align-items:flex-end"><button class="btn ghost" type="submit" style="width:100%">Adı değiştir</button></div></div></form>
     <form data-form="accgrp" style="margin-top:12px"><input type="hidden" name="id" value="${a.id}"><div class="two"><label class="f">Grup (ör. Ticari hesap)<input class="inp" name="group" list="accGroups" value="${esc(a.group||'')}" placeholder="Grup yok"></label><div style="display:flex;align-items:flex-end"><button class="btn ghost" type="submit" style="width:100%">Grubu kaydet</button></div></div><datalist id="accGroups">${[...new Set(S.accounts.map(x=>x.group).filter(Boolean).concat(['Ticari hesap']))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist></form>
+    ${S.accounts.length>1?`<button class="btn" style="width:100%;margin-top:10px" data-act="transfer" data-from="${esc(a.name)}">⇄ Bu hesaptan transfer yap</button>`:''}
     <button class="btn danger" style="width:100%;margin-top:10px" data-act="delacc" data-id="${a.id}">Hesabı sil</button>`);
 }
 function formAccount(){return head('Yeni hesap')+`<form data-form="account"><label class="f">Hesap adı<input id="accName2" name="name" required placeholder="ör. Ziraat, Nakit, Altın hesabı"></label><label class="f">Şu anki bakiye (₺)<input id="accBal2" name="balance" type="number" step="0.01" inputmode="decimal"></label><button class="btn" type="submit">Ekle</button></form>`}
@@ -1934,6 +1947,8 @@ document.addEventListener('click',async e=>{
     case 'accgroup':accGroupSheet(id);break;
     case 'cashsheet':cashSheet();break;
     case 'nwsheet':nwSheet();break;
+    case 'transfer':openSheet(formTransfer(el.dataset.from));break;
+    case 'nofee':PENDFEE=null;closeSheet();toast('Kaydedildi');break;
     case 'excessapply':{const x=S.tx.find(t=>t.id===id);if(x){const o={...x};const back=S.tx.filter(v=>v.excessOf===x.id).reduce((a,v)=>a+v.amount,0);if(back>0.5)o.cardAlloc=x.amount-back;else delete o.cardAlloc;await saveTx([o]);closeSheet();toast('Fazlası sonraki kart payından düşülecek')}break}
     case 'payyes':if(PENDPAY){await saveTx([PENDPAY.t]);PENDPAY=null;closeSheet();toast('Kaydedildi · fazlası sonraki ödemesinden düşüldü')}break;
     case 'payno':if(PENDPAY){await saveTx([{...PENDPAY.t,cardAlloc:Math.round(PENDPAY.first*100)/100}]);PENDPAY=null;closeSheet();toast('Kaydedildi · fazlası ayrı tutuldu')}break;
@@ -2093,6 +2108,7 @@ document.addEventListener('submit',async e=>{
       const extra=[];
       if(type==='gider'&&g('splitP')&&num(g('splitAmt'))>0&&g('splitP')!==o.personId){const n=o.inst||1;const share=Math.min(Math.abs(num(g('splitAmt')))*n,Math.abs(o.amount));const sg=o.amount<0?-1:1;o.groupId=o.groupId||newId();o.amount=sg*r2(Math.abs(o.amount)-share);extra.push(clean({...o,id:newId(),amount:sg*r2(share),personId:g('splitP'),category:'',sub:''}))}
       if(o.type==='tahsilat'&&o.personId&&o.personId!==ME&&!extra.length&&!S.tx.some(x=>x.id===o.id)){owedByDue();const ow=_owAll.find(x=>x.pid===o.personId);const first=ow?.lines.find(l=>l.left>0.5);if(first&&o.amount>first.left+1){PENDPAY={t:o,first:first.left,next:ow.lines.filter(l=>l.left>0.5&&l!==first),line:first};payAsk();break}}
+      if(o.type==='transfer'&&!o.toCardId&&!S.tx.some(x=>x.id===o.id)){await saveTx([o,...extra]);feeAsk(o);break}
       await saveTx([o,...extra]);closeSheet();if(type==='gider'&&o.personId===ME)setTimeout(()=>budgetAlert([o.category],'Kaydedildi'),300);else toast('Kaydedildi');break}
     case 'card':{const cut=Math.round(num(g('cutDay'))),due=Math.round(num(g('dueDay')));if(cut<1||cut>31||due<1||due>31){toast('Günler 1-31 arası olmalı');return}const ex=cardById(g('id'));
       const cuts=fixCuts(ex?.cuts,cut,due,ex?.cutDay);
@@ -2138,6 +2154,10 @@ document.addEventListener('submit',async e=>{
     case 'prodedit':{const p=S.prod.map[g('pid')];p.name=g('name').trim()||p.name;p.group=g('group');await saveProd();_ps=null;closeSheet();render();break}
     case 'excessback':{const x=S.tx.find(t=>t.id===g('id'));const v=num(g('amount'));if(!(v>0)){toast('Tutar gir');return}
       await saveTx([{id:newId(),type:'verdim',personId:x.personId,amount:v,date:g('date')||today(),account:g('account')||'',merchant:'Fazla ödemesini geri verdim',excessOf:x.id,ts:Date.now(),via:'manuel'}]);closeSheet();toast('Kaydedildi');break}
+    case 'transfer':{const from=g('from'),to=g('to');const amt=num(g('amount'));if(!(amt>0)){toast('Tutar gir');return}if(from===to){toast('Nereden ve nereye aynı olamaz');return}
+      const t={id:newId(),type:'transfer',amount:amt,date:g('date')||today(),account:from,toAccount:to,note:g('note')||'',merchant:`${from} → ${to}`,ts:Date.now(),via:'manuel'};await saveTx([t]);
+      const fee=num(g('fee'));if(fee>0){await saveFee(t,fee);closeSheet();toast(`Transfer ve ${TL(fee)} ücret kaydedildi`)}else feeAsk(t);break}
+    case 'fee':{const fee=num(g('fee'));if(PENDFEE&&fee>0){await saveFee(PENDFEE,fee);toast(`${TL(fee)} komisyon kaydedildi`)}else toast('Kaydedildi');PENDFEE=null;closeSheet();break}
     case 'catplan':{const mk=g('mk');const months={...(S.catplan?.months||{})};const cur={...(months[mk]||{})};
       f.querySelectorAll('input[name^="c_"]').forEach(inp=>{const c=inp.name.slice(2);const v=num(inp.value);if(String(Math.round(v))!==inp.dataset.orig||cur[c]!=null)cur[c]=Math.max(0,v)});
       months[mk]=cur;await put({id:'catplan',k:'catplan',months});S.catplan={months};toast('Plan kaydedildi');planSheet(mk);break}
