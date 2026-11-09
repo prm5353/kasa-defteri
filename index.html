@@ -1018,7 +1018,7 @@ function owedByDue(){
   lines.sort((a,b)=>a.due.localeCompare(b.due));
   const out={};lines.forEach(l=>(out[l.pid]=out[l.pid]||{pid:l.pid,lines:[],got:0}).lines.push(l));
   const first=lines.length?lines.reduce((a,l)=>l.cut<a?l.cut:a,'9999'):null;
-  Object.values(out).forEach(o=>{let got=S.tx.filter(x=>x.type==='tahsilat'&&x.personId===o.pid&&x.date>=addDays(START(),-40)).reduce((a,x)=>a+x.amount,0);o.got=got;
+  Object.values(out).forEach(o=>{let got=S.tx.filter(x=>x.type==='tahsilat'&&x.personId===o.pid&&x.date>=addDays(START(),-40)).reduce((a,x)=>a+(x.cardAlloc!=null?x.cardAlloc:x.amount),0);o.got=got;
     o.lines.forEach(l=>{const d=Math.min(got,l.amt);l.left=l.amt-d;got-=d});o.left=o.lines.reduce((a,l)=>a+l.left,0)});
   _owAll=Object.values(out);return _owAll.filter(o=>o.left>0.5);
 }
@@ -1027,7 +1027,7 @@ let _owAll=[];
 function owedLeft(pid,cardId,cut){owedByDue();for(const o of _owAll)if(o.pid===pid)for(const l of o.lines)if(l.card.id===cardId&&l.cut===cut)return l;return null}
 /* kişilerden aldığım ama henüz karta yatırmadığım para: alınan − (karta yaptığım ödemelerden o kişinin payına düşen) */
 function heldMoney(){const since=addDays(START(),-40);const out={};
-  S.tx.filter(x=>x.type==='tahsilat'&&x.personId&&x.personId!==ME&&x.date>=since).forEach(x=>{const o=out[x.personId]=out[x.personId]||{pid:x.personId,got:0,paid:0,where:{}};o.got+=x.amount;const w=x.account||'Nakit';o.where[w]=(o.where[w]||0)+x.amount});
+  S.tx.filter(x=>x.type==='tahsilat'&&x.personId&&x.personId!==ME&&x.date>=since).forEach(x=>{const o=out[x.personId]=out[x.personId]||{pid:x.personId,got:0,paid:0,where:{}};const v=x.cardAlloc!=null?x.cardAlloc:x.amount;o.got+=v;const w=x.account||'Nakit';o.where[w]=(o.where[w]||0)+v});
   S.cards.forEach(c=>{const T=cardTotals(c);if(T.paid<=0.5||T.spent<=0.5)return;Object.entries(T.by).forEach(([pid,v])=>{if(out[pid])out[pid].paid+=T.paid*Math.max(0,v)/T.spent})});
   return Object.values(out).map(o=>({...o,held:Math.max(0,o.got-o.paid)})).filter(o=>o.held>0.5)}
 /* hesapta duran kişi parası: hesabın bakiyesini aşamaz; para başka yerde harcandıysa hesapta görünmez */
@@ -1036,6 +1036,13 @@ function heldByAcc(){const m={};heldMoney().forEach(o=>{const tot=Object.values(
 function heldNote(names){const m=heldByAcc();const by={};names.forEach(n=>(m[n]||[]).forEach(x=>by[x.pid]=(by[x.pid]||0)+x.amt));const e=Object.entries(by).filter(([,v])=>v>0.5);return e.length?`<div class="s" style="color:var(--other)">${e.map(([p,v])=>`içinde ${esc(personName(p))} parası ${TL(v)} · karta ödenecek`).join(' · ')}</div>`:''}
 /* başkalarından alıp henüz karta yatırmadığım ve hesabımda duran para: benim param değil */
 function heldTotal(){const M=heldByAcc();return Object.values(M).flat().reduce((a,x)=>a+x.amt,0)}
+let PENDPAY=null;
+function payAsk(){const P=PENDPAY;const ex=P.t.amount-P.first;const nx=P.next[0];
+  openSheet(head('Fazla ödeme')+`<section class="sec"><p style="margin:0 0 8px">${esc(personName(P.t.personId))} <b>${TL(P.t.amount)}</b> gönderdi. ${esc(P.line.card.name)} · ${fmtD(P.line.due)} payı <b>${TL(P.first)}</b>, yani <b>${TL(ex)} fazla</b>.</p>
+    <p class="small muted" style="margin:0 0 12px">${nx?`Fazlası bir sonraki payından (${esc(nx.card.name)} · ${fmtD(nx.due)} · ${TL(nx.left)}) düşülsün mü?`:'Şu an başka açık payı yok. Fazlası ileride doğacak payından düşülsün mü?'}</p>
+    <button class="btn" style="width:100%" data-act="payyes">Evet, sonraki ödemesinden düş</button>
+    <button class="btn ghost" style="width:100%;margin-top:8px" data-act="payno">Hayır, sadece bu ödemeye say (${TL(ex)} ayrı kalsın)</button>
+    <p class="small muted" style="margin-top:10px">"Hayır" dersen fazlası kart paylarına sayılmaz; kişinin hesabında ayrı görünür (ör. başka bir borç ya da emanet).</p></section>`)}
 function heldSection(){const H=heldMoney();if(!H.length)return '';const M=heldByAcc();H.forEach(o=>{o.inHand=0;o.at={};Object.entries(M).forEach(([k,l])=>l.forEach(x=>{if(x.pid===o.pid&&x.amt>0.5){o.inHand+=x.amt;o.at[k]=x.amt}}));o.used=Math.max(0,o.held-o.inHand)});const tot=H.reduce((a,o)=>a+o.inHand,0);
   return `<section class="sec"><h2>Elimde duran, karta ödenecek para<span class="sp"></span><span class="sum">${TL(tot)}</span></h2>
     ${H.map(o=>`<div class="owe tap" data-act="person" data-id="${o.pid}"><div class="sumline" style="font-weight:700"><span>${esc(personName(o.pid))} · elimde</span><b>${TL(o.inHand)}</b></div>
@@ -1916,6 +1923,8 @@ document.addEventListener('click',async e=>{
     case 'accgroup':accGroupSheet(id);break;
     case 'cashsheet':cashSheet();break;
     case 'nwsheet':nwSheet();break;
+    case 'payyes':if(PENDPAY){await saveTx([PENDPAY.t]);PENDPAY=null;closeSheet();toast('Kaydedildi · fazlası sonraki ödemesinden düşüldü')}break;
+    case 'payno':if(PENDPAY){await saveTx([{...PENDPAY.t,cardAlloc:Math.round(PENDPAY.first*100)/100}]);PENDPAY=null;closeSheet();toast('Kaydedildi · fazlası ayrı tutuldu')}break;
     case 'projsheet':projSheet();break;
     case 'plansheet':planSheet(today().slice(0,7));break;
     case 'planmon':planSheet(el.dataset.v);break;
@@ -2071,6 +2080,7 @@ document.addEventListener('submit',async e=>{
       else Object.assign(o,{personId:g('who'),merchant:type==='tahsilat'?'Ödeme aldım':(g('merchant')||'Verdim')});
       const extra=[];
       if(type==='gider'&&g('splitP')&&num(g('splitAmt'))>0&&g('splitP')!==o.personId){const n=o.inst||1;const share=Math.min(Math.abs(num(g('splitAmt')))*n,Math.abs(o.amount));const sg=o.amount<0?-1:1;o.groupId=o.groupId||newId();o.amount=sg*r2(Math.abs(o.amount)-share);extra.push(clean({...o,id:newId(),amount:sg*r2(share),personId:g('splitP'),category:'',sub:''}))}
+      if(o.type==='tahsilat'&&o.personId&&o.personId!==ME&&!extra.length&&!S.tx.some(x=>x.id===o.id)){owedByDue();const ow=_owAll.find(x=>x.pid===o.personId);const first=ow?.lines.find(l=>l.left>0.5);if(first&&o.amount>first.left+1){PENDPAY={t:o,first:first.left,next:ow.lines.filter(l=>l.left>0.5&&l!==first),line:first};payAsk();break}}
       await saveTx([o,...extra]);closeSheet();if(type==='gider'&&o.personId===ME)setTimeout(()=>budgetAlert([o.category],'Kaydedildi'),300);else toast('Kaydedildi');break}
     case 'card':{const cut=Math.round(num(g('cutDay'))),due=Math.round(num(g('dueDay')));if(cut<1||cut>31||due<1||due>31){toast('Günler 1-31 arası olmalı');return}const ex=cardById(g('id'));
       const cuts=fixCuts(ex?.cuts,cut,due,ex?.cutDay);
@@ -2093,7 +2103,11 @@ document.addEventListener('submit',async e=>{
     case 'recdone':{const r=S.recs.find(x=>x.id===g('id'));const mk=g('mk');await saveTx([{id:newId(),type:r.dir==='gelir'?'gelir':'odeme',amount:Math.abs(num(g('amount'))),date:g('date')||today(),account:g('account')||'',merchant:r.name,source:r.dir==='gelir'?(INCOME_SRC.includes(r.name)?r.name:'Diğer'):undefined,recId:r.id,recMonth:mk,ts:Date.now(),via:'manuel'}]);closeSheet();toast('İşaretlendi');break}
     case 'asset':{const lent=fd.has('lent');const ow=String(g('owner')||'').trim();await put({id:g('id')||undefined,k:'asset',type:g('type'),qty:num(g('qty')),note:g('note')||'',value:g('type')==='esya'?num(g('value'))||0:undefined,name:g('type')==='esya'?String(g('name')||'').trim():undefined,owner:ow&&ow!=='Kendim'?ow:'',buyDate:g('buyDate')||'',costTL:num(g('costTL'))||0,usdRate:num(g('usdRate'))||0,eurRate:num(g('eurRate'))||0,lent,who:lent?String(g('who')||'').trim():'',since:lent?g('since')||'':'',dueDate:lent?g('dueDate')||'':''});closeSheet();setTimeout(assetsSheet,250);break}
     case 'prices':{const P=S.prices||{};const cur={};PRICED.forEach(k=>{const v=num(g(k));cur[k]=v>0?v:(P[k]||undefined)});const hist={...(P.history||{})};hist[today()]=clean(cur);await db.doc('market/prices').set(clean({...cur,updatedAt:new Date().toISOString(),source:'Elle girildi',history:hist}));closeSheet();toast('Fiyatlar güncellendi');break}
-    case 'pay':await saveTx([{id:newId(),type:'tahsilat',personId:g('personId'),amount:Math.abs(num(g('amount'))),date:g('date')||today(),account:g('account')||'',merchant:'Ödeme aldım',ts:Date.now(),via:'manuel'}]);closeSheet();toast('Kaydedildi');break;
+    case 'pay':{const t={id:newId(),type:'tahsilat',personId:g('personId'),amount:Math.abs(num(g('amount'))),date:g('date')||today(),account:g('account')||'',merchant:'Ödeme aldım',ts:Date.now(),via:'manuel'};
+      /* sıradaki kart payından fazlaysa: fazlası bir sonraki ödemesinden düşülsün mü, sor */
+      const O=owedByDue();const o=_owAll.find(x=>x.pid===t.personId);const first=o?.lines.find(l=>l.left>0.5);
+      if(first&&t.amount>first.left+1){PENDPAY={t,first:first.left,next:o.lines.filter(l=>l.left>0.5&&l!==first),line:first};payAsk();break}
+      await saveTx([t]);closeSheet();toast('Kaydedildi');break}
     case 'opening':{const p=S.persons.find(x=>x.id===g('id'));await put({...p,opening:num(g('opening')),since:g('since')||START()});closeSheet();toast('Kaydedildi');break}
     case 'budget':{const cat=g('category');const ex=S.budgets.find(b=>b.category===cat);await put({id:ex?.id,k:'budget',category:cat,limit:num(g('limit'))});setTimeout(settingsSheet,250);break}
     case 'person':await put({k:'person',name:g('name').trim(),opening:0,ts:Date.now()});setTimeout(settingsSheet,250);break;
