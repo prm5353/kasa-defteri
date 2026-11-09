@@ -1176,7 +1176,7 @@ function viewCards(){
   const rows=states.map(({c,st},i)=>{const m=myCard(c,st);const np=st.noDays?null:nextPay(c,st);const LI=limitInfo(c);const pct=LI&&LI.limit?Math.min(100,LI.debt/LI.limit*100):0;
     return `<div class="crow ${cardReorder?'':'tap'}" ${cardReorder?'':`data-act="cardopen" data-id="${c.id}"`}>
       <div class="main"><div class="t">${esc(c.name)}${c.holderId?` <span class="chip oth">${esc(personName(c.holderId))}</span>`:''}</div>
-        <div class="s">${st.noDays?'Kesim günü girilmedi':np&&np.amt>0.5?`Sıradaki ödeme ${TL(np.amt)} · ${fmtD(np.due)}`:'Ödenecek ekstre yok'}</div>
+        <div class="s">${st.noDays?'Kesim günü girilmedi':(()=>{const D=debtSplit(c,st);return D&&D.old>0.5?`<span style="color:var(--warn)">Ekstreden kalan ${TL(D.old)} · ${fmtD(D.oldDue)}</span> · bu dönem ${TL(D.cur)}`:np&&np.amt>0.5?`Sıradaki ödeme ${TL(np.amt)} · ${fmtD(np.due)}`:'Ödenecek ekstre yok'})()}</div>
         ${LI&&LI.limit?`<div class="bar" style="height:5px;margin-top:6px"><i style="width:${pct}%"></i></div>`:''}</div>
       ${cardReorder?`<div class="ord"><button class="x" data-act="cardup" data-id="${c.id}" ${i===0?'disabled':''} aria-label="Yukarı">↑</button><button class="x" data-act="carddown" data-id="${c.id}" ${i===states.length-1?'disabled':''} aria-label="Aşağı">↓</button></div>`:`<div class="amt"><span class="mine">${TL(m.now)}</span><small>${Math.abs(m.now-st.T.debt)>1?`benim · toplam ${TL(st.T.debt)}`:'benim borcum'}</small></div>${chev}`}
     </div>`}).join('');
@@ -1197,6 +1197,7 @@ function cardBlock(c,st){
   const inst=cardInstallments(c);
   return `<section class="sec">
     <div style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1;min-width:0"><div class="eyebrow">Toplam borç</div><div class="total">${TL(T.debt)}</div>${(()=>{const m=myCard(c,st);return Math.abs(m.now-T.debt)>1?`<div style="font-weight:700;color:var(--accent);margin-top:2px">Benim payım ${TL(m.now)}</div>`:''})()}${c.holderId?`<span class="chip oth">${esc(personName(c.holderId))} kullanıyor</span>`:''}</div><button class="btn ghost sm" data-act="editcard" data-id="${c.id}">Düzenle</button></div>
+    ${(()=>{const D=debtSplit(c,st);return D&&D.old>0.5?`<div class="kv" style="margin-top:10px"><span class="k" style="font-weight:700;color:var(--ink)">Geçmiş ekstreden kalan</span><b style="color:var(--warn)">${TL(D.old)}</b><span class="k">${D.oldDue?`son ödeme ${fmtD(D.oldDue)}`:''}</span><b></b><span class="k" style="font-weight:700;color:var(--ink)">Bu dönem harcamaları</span><b>${TL(D.cur)}</b><span class="k">kesim ${fmtD(st.open.cut)}</span><b></b></div>`:''})()}
     <div class="kv" style="margin-top:10px"><span class="k">Girilen harcamalar</span><b>${TL(T.spent)}</b><span class="k">Karta yaptığın ödemeler</span><b>−${TL(T.paid)}</b>${T.futT>0.5?`<span class="k">Henüz düşmemiş taksitler</span><b>${TL(T.futT)}</b>`:''}
       ${lim?`<span class="k">${LI.shared?'Ortak limit ('+LI.group.map(x=>esc(x.name)).join(' + ')+')':'Limit'}</span><b>${TL(lim)}</b>${LI.shared?`<span class="k">Diğer kartın kullandığı</span><b style="color:var(--other)">${TL(others)}</b>`:''}<span class="k">Kullanılabilir</span><b style="color:var(--plus)">${TL(LI.avail)}</b>`:''}</div>
     ${lim?`<div class="bar" style="margin-top:6px"><i style="width:${Math.min(100,Math.max(0,st.debt)/lim*100)}%"></i>${LI.shared?`<i style="width:${Math.min(100,Math.max(0,others)/lim*100)}%;background:var(--other)"></i>`:''}</div>`:''}
@@ -1214,8 +1215,11 @@ function cardBlock(c,st){
     <div class="btnrow" style="margin-top:12px">${S.cards[0]?.id!==c.id?`<button class="btn ghost sm" data-act="cardtop" data-id="${c.id}">En üste al</button>`:''}<button class="btn ghost sm" data-act="stmtcmp" data-id="${c.id}">Ekstre yükle ve karşılaştır</button></div>
   </section>`;
 }
+/* toplam borcun ayrımı: ödemeler önce eski ekstrelere sayılır; kalan eski borç + bu dönem */
+function debtSplit(c,st){if(!st||st.noDays)return null;const debt=Math.max(0,st.T.debt);const cur=Math.max(0,Math.min(debt,st.open.total));const old=debt-cur;return {old,cur,oldDue:old>0.5?st.last.due:''}}
 function periodBox(c,s,kesik){const mine=s.by[ME]||0;const oth=Object.entries(s.by).filter(([p,v])=>p!==ME&&v>0.5);
-  return `<div class="box"><div class="sumline"><span>${kesik?`Kesilen ekstre (${fmtD(s.cut)})`:`Bu dönem (kesim ${fmtD(s.cut)})`}</span><b>${TL(s.total)}</b></div>
+  const D=kesik?debtSplit(c,cardState(c)):null;
+  return `<div class="box"><div class="sumline"><span>${kesik?`Kesilen ekstre (${fmtD(s.cut)})`:`Bu dönem (kesim ${fmtD(s.cut)})`}</span><b>${TL(s.total)}</b></div>${kesik&&D&&D.old<s.total-0.5?`<div class="sumline"><span style="font-weight:700">Ödenmeyen kalan</span><b style="color:var(--warn)">${TL(D.old)}</b></div>`:''}
     <div class="sumline"><span style="font-weight:700">Benim payım</span><b style="color:var(--accent)">${TL(mine)}</b></div>
     ${oth.map(([p,v])=>`<div class="sumline"><span>${esc(personName(p))}</span><b style="color:var(--other)">${TL(v)}</b></div>`).join('')}
     <div class="sumline"><span>Son ödeme</span><b>${fmtD(s.due)}</b></div>${kesik?(s.checked?'<span class="chip ok">Ekstre yüklendi, bu harcamalar yeni döneme karışmaz</span>':'<div class="small muted">Ekstreyi yüklersen içindeki harcamalar bu ekstreye sabitlenir.</div>'):bankCmpLine(c,s)}</div>`}
