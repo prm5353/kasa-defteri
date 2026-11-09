@@ -196,6 +196,9 @@ details summary{cursor:pointer;font-weight:600;font-size:14px}
 .anic{color:var(--muted);line-height:0;flex:none}
 .anic svg{width:24px;height:24px}
 .anic.big svg{width:36px;height:36px}
+.anf summary{display:flex;align-items:center;list-style:none;cursor:pointer}
+.anf summary::-webkit-details-marker{display:none}
+.anf[open] summary>.muted{transform:rotate(90deg)}
 .crumbs{margin:10px 2px;font-size:14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .alerts{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
 .banner.crit{background:color-mix(in srgb,var(--crit) 16%,transparent)}
@@ -1106,14 +1109,14 @@ function trendSvg(endK){
 /* ===== GEÇMİŞE DÖNÜK ANALİZ: tarih aralığı → gelir/gider → kategori → alt kategori → kayıtlar ===== */
 let AN=null;
 function anInit(){if(AN)return;let st={};try{st=JSON.parse(ls.get('kd_an','{}'))||{}}catch(e){}
-  const t=today();AN={from:st.from||addDays(addMonths(t,-3),1),to:st.to||t,path:[],exG:st.exG||[],exI:st.exI||[],filt:false}}
-function anSave(){ls.set('kd_an',JSON.stringify({from:AN.from,to:AN.to,exG:AN.exG,exI:AN.exI}))}
+  const t=today();AN={from:st.from||addDays(addMonths(t,-3),1),to:st.to||t,path:[],exG:st.exG||[],exS:st.exS||[],exI:st.exI||[],filt:false}}
+function anSave(){ls.set('kd_an',JSON.stringify({from:AN.from,to:AN.to,exG:AN.exG,exS:AN.exS,exI:AN.exI}))}
 function anData(){const ua={};const arch=mk=>ua[mk]??(ua[mk]=useArch(mk));const inR=d=>d>=AN.from&&d<=AN.to;
   const G=[],I=[];
   livePortions().forEach(p=>{if(p.personId!==ME||!inR(p.pdate)||arch(p.pdate.slice(0,7)))return;G.push({date:p.pdate,amt:p.pamount,m:p.category||'Diğer',sb:p.sub||'',merchant:p.merchant,src:srcLabel(p),id:p.id,portion:p.pn>1?`${p.pi}/${p.pn}`:''})});
   S.arch.forEach(t=>{if(!inR(t.date)||!arch(t.date.slice(0,7)))return;if(t.type==='gider'&&t.personId===ME)G.push({date:t.date,amt:t.amount,m:t.category||'Diğer',sb:t.sub||'',merchant:t.merchant,src:srcLabel(t),id:t.id,arch:true});else if(t.type==='gelir')I.push({date:t.date,amt:t.amount,m:t.source||'Diğer',sb:'',merchant:t.merchant,src:srcLabel(t),id:t.id,arch:true})});
   S.tx.forEach(t=>{if(t.type==='gelir'&&inR(t.date)&&!arch(t.date.slice(0,7)))I.push({date:t.date,amt:t.amount,m:t.source||'Diğer',sb:'',merchant:t.merchant,src:srcLabel(t),id:t.id})});
-  return {G:G.filter(x=>!AN.exG.includes(x.m)),I:I.filter(x=>!AN.exI.includes(x.m)),allG:[...new Set(G.map(x=>x.m))],allI:[...new Set(I.map(x=>x.m))]}}
+  return {G:G.filter(x=>!AN.exG.includes(x.m)&&!AN.exS.includes(x.m+'|'+x.sb)),I:I.filter(x=>!AN.exI.includes(x.m)),allG:[...new Set(G.map(x=>x.m))],allI:[...new Set(I.map(x=>x.m))]}}
 function anGroup(list,key){const g={};list.forEach(x=>{const k=key(x);(g[k]=g[k]||{k,v:0,n:0,items:[]}).v+=x.amt;g[k].n++;g[k].items.push(x)});return Object.values(g).sort((a,b)=>b.v-a.v)}
 function anBars(groups,total,act,iconOf){const mx=Math.max(1,...groups.map(g=>g.v));
   return groups.map((g,i)=>`<div class="anrow tap" data-act="${act}" data-k="${esc(g.k)}">${iconOf?`<span class="anic">${iconOf(g.k)}</span>`:''}<div class="main"><div class="sumline" style="padding:0"><span style="font-weight:600">${esc(g.k||'Genel')}</span><b>${TL(g.v)}</b></div>
@@ -1126,7 +1129,7 @@ function yearSheet(y){anInit();const D=yearData(y),P=yearData(y-1);const sum=l=>
   const cats=anGroup(D.G,x=>x.m).slice(0,10);const pc={};anGroup(P.G,x=>x.m).forEach(g=>pc[g.k]=g.v);
   const mer=anGroup(D.G.filter(x=>x.merchant),x=>normKey(x.merchant)||x.merchant).slice(0,10).map(g=>({...g,name:g.items[0].merchant}));
   const months=Array.from({length:12},(_,i)=>{const k=`${y}-${String(i+1).padStart(2,'0')}`;return {k,v:sum(D.G.filter(x=>x.date.slice(0,7)===k)),i:sum(D.I.filter(x=>x.date.slice(0,7)===k))}});const mx=Math.max(1,...months.map(m=>Math.max(m.v,m.i)));
-  const top=months.reduce((a,m)=>m.v>a.v?m:a,months[0]);const exN=AN.exG.length+AN.exI.length;
+  const top=months.reduce((a,m)=>m.v>a.v?m:a,months[0]);const exN=AN.exG.length+AN.exS.length+AN.exI.length;
   openSheet(head(`${y} yıllık özet`)+`<div class="chips" style="margin-bottom:10px">${[y-2,y-1,y,y+1].filter(v=>v<=parse(today()).getFullYear()).map(v=>`<button class="${v===y?'on':''}" data-act="yearsum" data-v="${v}">${v}</button>`).join('')}<button data-act="analiz">‹ Analiz</button></div>
     <section class="sec"><div class="kv"><span class="k">Gelir</span><b style="color:var(--plus)">${TL(iT)} ${pi>0?`<span class="small" style="color:${iT>=pi?'var(--plus)':'var(--crit)'}">${iT>=pi?'▲':'▼'} %${Math.abs((iT-pi)/pi*100).toFixed(0)}</span>`:''}</b><span class="k">Gider</span><b>${TL(gT)} ${ch(gT,pg)}</b><span class="k">Fark</span><b style="color:${iT-gT>=0?'var(--plus)':'var(--crit)'}">${TL(iT-gT)}</b><span class="k">Aylık ortalama gider</span><b>${TL(gT/Math.max(1,months.filter(m=>m.v>0).length))}</b><span class="k">En çok harcadığın ay</span><b>${top.v>0?monthLabel(top.k):'—'}</b></div>${exN?`<div class="small muted" style="margin-top:6px">Analiz filtresi geçerli · ${exN} kalem hariç</div>`:''}</section>
     <section class="sec" style="margin-top:12px"><h2>Aylar</h2><div style="display:flex;gap:3px;align-items:flex-end;height:110px">${months.map(m=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;justify-content:flex-end"><div style="display:flex;gap:1px;align-items:flex-end;width:100%;height:90px"><div style="flex:1;background:var(--plus);opacity:.7;border-radius:3px 3px 0 0;height:${m.i/mx*90}px"></div><div style="flex:1;background:var(--crit);border-radius:3px 3px 0 0;height:${m.v/mx*90}px"></div></div><span style="font-size:9.5px" class="muted">${monthLabel(m.k).slice(0,3)}</span></div>`).join('')}</div><div class="small muted">Yeşil gelir, kırmızı gider</div></section>
@@ -1135,11 +1138,13 @@ function yearSheet(y){anInit();const D=yearData(y),P=yearData(y-1);const sum=l=>
 function analizSheet(){anInit();const D=anData();const gT=D.G.reduce((a,x)=>a+x.amt,0),iT=D.I.reduce((a,x)=>a+x.amt,0);const P=AN.path;
   const crumbs=[['Özet',0],...P.map((p,i)=>[p==='G'?'Gider':p==='I'?'Gelir':p,i+1])];
   const presets=[['bu','Bu ay'],['gecen','Geçen ay'],['3','Son 3 ay'],['6','Son 6 ay'],['yil','Bu yıl'],['gyil','Geçen yıl']];
-  const exN=AN.exG.length+AN.exI.length;
+  const exN=AN.exG.length+AN.exS.length+AN.exI.length;
   let body='';
   if(AN.filt){
     body=`<section class="sec"><h2>Toplama dahil olanlar</h2><div class="btnrow" style="margin-bottom:8px"><button class="btn sm ghost" data-act="anall">Hepsini dahil et</button>${D.allG.includes('Ticari Gider')||AN.exG.includes('Ticari Gider')?'<button class="btn sm ghost" data-act="anticari">Ticari giderler hariç</button><button class="btn sm ghost" data-act="anticonly">Sadece ticari</button>':''}</div>
-      <div class="eyebrow">Gider kategorileri</div>${[...new Set([...Object.keys(catTree()),...D.allG,...AN.exG])].map(m=>`<label class="check"><input type="checkbox" data-anx="G" value="${esc(m)}" ${AN.exG.includes(m)?'':'checked'}> ${esc(m)}</label>`).join('')}
+      <div class="eyebrow">Gider kategorileri</div><div class="small muted" style="margin-bottom:4px">Alt başlıkları görmek için › işaretine dokun; örneğin sadece Araçlarım › Araç'ı çıkarabilirsin.</div>${[...new Set([...Object.keys(catTree()),...D.allG,...AN.exG])].map(m=>{const subs=catTree()[m]||[];const exs=subs.filter(sb=>AN.exS.includes(m+'|'+sb)).length;
+        return subs.length?`<details class="anf"><summary><label class="check" style="flex:1"><input type="checkbox" data-anx="G" value="${esc(m)}" ${AN.exG.includes(m)?'':'checked'}> ${esc(m)}${exs?` <span class="small" style="color:var(--warn)">· ${exs} alt başlık hariç</span>`:''}</label><span class="muted">›</span></summary><div style="padding-left:26px">${subs.map(sb=>`<label class="check"><input type="checkbox" data-anx="S" value="${esc(m+'|'+sb)}" ${AN.exS.includes(m+'|'+sb)||AN.exG.includes(m)?'':'checked'} ${AN.exG.includes(m)?'disabled':''}> ${esc(sb)}</label>`).join('')}</div></details>`
+        :`<label class="check"><input type="checkbox" data-anx="G" value="${esc(m)}" ${AN.exG.includes(m)?'':'checked'}> ${esc(m)}</label>`}).join('')}
       <div class="eyebrow" style="margin-top:10px">Gelir türleri</div>${[...new Set([...INCOME_SRC,...D.allI,...AN.exI])].map(m=>`<label class="check"><input type="checkbox" data-anx="I" value="${esc(m)}" ${AN.exI.includes(m)?'':'checked'}> ${esc(m)}</label>`).join('')}
       <button class="btn" style="width:100%;margin-top:10px" data-act="anfilt">Tamam</button></section>`}
   else if(!P.length){const mx=Math.max(1,gT,iT);
@@ -1845,7 +1850,7 @@ document.addEventListener('click',async e=>{
     case 'anjump':AN.path=['G',el.dataset.k];analizSheet();break;
     case 'anup':AN.path=AN.path.slice(0,+el.dataset.v);analizSheet();break;
     case 'anfilt':AN.filt=!AN.filt;analizSheet();break;
-    case 'anall':AN.exG=[];AN.exI=[];anSave();analizSheet();break;
+    case 'anall':AN.exG=[];AN.exS=[];AN.exI=[];anSave();analizSheet();break;
     case 'anticari':AN.exG=['Ticari Gider'];anSave();analizSheet();break;
     case 'anticonly':AN.exG=[...new Set([...Object.keys(catTree()),...anData().allG])].filter(m=>m!=='Ticari Gider');AN.exI=[];anSave();analizSheet();break;
     case 'anpre':{const t=today();const d=parse(t);const y=d.getFullYear(),m=d.getMonth();const v=el.dataset.v;const f=x=>ymd(x);
@@ -1911,7 +1916,8 @@ document.addEventListener('change',e=>{
   if(t.id==='restoreFile'&&t.files?.[0]){restoreFrom(t.files[0]);return}
   if(t.id==='gsArch'){gsArch=t.checked;fillSearch();return}
   if((t.id==='anFrom'||t.id==='anTo')&&AN){if(t.value){if(t.id==='anFrom')AN.from=t.value;else AN.to=t.value;if(AN.from>AN.to)[AN.from,AN.to]=[AN.to,AN.from];anSave();analizSheet()}return}
-  if(t.dataset&&t.dataset.anx&&AN){const key=t.dataset.anx==='G'?'exG':'exI';const set=new Set(AN[key]);if(t.checked)set.delete(t.value);else set.add(t.value);AN[key]=[...set];anSave();return}
+  if(t.dataset&&t.dataset.anx&&AN){const key={G:'exG',S:'exS',I:'exI'}[t.dataset.anx];const set=new Set(AN[key]);if(t.checked)set.delete(t.value);else set.add(t.value);AN[key]=[...set];anSave();
+    if(t.dataset.anx==='G'){const d=t.closest('details');if(d)d.querySelectorAll('input[data-anx="S"]').forEach(x=>{x.disabled=!t.checked;x.checked=t.checked&&!AN.exS.includes(x.value)})}return}
   if(t.name==='lent'&&t.closest('form[data-form="asset"]')){const b=document.getElementById('lentBox');if(b)b.hidden=!t.checked;return}
   if(t.id==='apiModel'){ls.set('kd_model',t.value);toast('Okuma kalitesi değişti');return}
   if(t.id==='targetDate'){if(t.value){ls.set('kd3_target',t.value);render()}return}
