@@ -865,7 +865,7 @@ function monthPlan(mk){
     const cert=s.total-tic-othT;
     if(cert>0.5)outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:Math.max(0,cert),done:s.paid,tag:[open?'dönem açık':'',tic>0.5?`ticari ${TL(tic)} hariç`:'',...oth.map(([pid,v])=>`${personName(pid)} ${TL(v)} kendisi öder`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic});
     /* kesime kadar yapılacağı tahmin edilen harcama ayrı satır */
-    if(est>0.5&&!s.paid)outs.push({k:'estcard',id:mk,est:true,title:c.name,date:s.due,amount:est,done:false,tag:`kesime (${fmtD(s.cut)}) kadar tahmini harcama`});
+    if(est>0.5&&!s.paid)outs.push({k:'estcard',id:mk,est:true,title:c.name,date:s.due,amount:est,done:false,stag:`kesime (${fmtD(s.cut)}) kadar`,tag:`kesime (${fmtD(s.cut)}) kadar tahmini harcama`});
     Object.entries(s.by).forEach(([pid,a])=>{if(pid===ME||a<=0.5)return;const L=owedLeft(pid,c.id,s.cut);
       if(L){const got=L.amt-L.left;if(L.left<=0.5){ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:L.amt,done:true,tag:c.name+' · alındı'});return}
         if(got>0.5)ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:got,done:true,tag:c.name+' · alındı'});
@@ -962,7 +962,9 @@ function planTableFlow(mk,F){
   const kesin=[...cards,...goals,...send,...fixed];const inT=F.start+pin.reduce((a,x)=>a+x.amount,0),outT=kesin.reduce((a,x)=>a+x.amount,0),estT=est.reduce((a,x)=>a+x.amount,0);
   const done=[...P.ins.filter(x=>x.done&&!x.info),...P.outs.filter(x=>x.done)];
   const held=cur?heldTotal():0;
-  const warn=F.short.length?`<div class="banner crit" style="margin-top:10px;flex-direction:column;align-items:stretch;gap:4px"><b>⚠ Para bulman gereken ödemeler</b>${F.short.map(s=>`<div class="sumline small"><span>${fmtD(s.d)} · ${esc(s.x.title)}</span><b style="color:var(--crit)">${TL(s.miss)} eksik</b></div>`).join('')}</div>`:'';
+  /* aynı gün aynı kartın kesin ve tahmini kısmı tek uyarı */
+  const SH={};F.short.forEach(s=>{const k=s.d+'|'+s.x.title;const o=SH[k]=SH[k]||{d:s.d,title:s.x.title,miss:0,est:0,cert:0};o.miss+=s.miss;if(s.x.est)o.est+=s.miss;else o.cert+=s.miss});
+  const warn=F.short.length?`<div class="banner crit" style="margin-top:10px;flex-direction:column;align-items:stretch;gap:4px"><b>⚠ Para bulman gereken ödemeler</b>${Object.values(SH).map(o=>`<div class="sumline small"><span>${fmtD(o.d)} · ${esc(o.title)}${o.est>0.5&&o.cert>0.5?` <span class="muted">(kesin ${TL(o.cert)} + tahmini ${TL(o.est)})</span>`:o.est>0.5?' <span class="muted">(tahmini)</span>':''}</span><b style="color:var(--crit)">${TL(o.miss)} eksik</b></div>`).join('')}<div class="small muted">O güne kadar hesaplarındaki para ve gelecek gelirler bu ödemeleri karşılamıyor.</div></div>`:'';
   return `<section class="sec plan">${monthBar(mk,'pprev','pnext')}${warn}
     <div class="cols" style="margin-top:10px">
       <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>
