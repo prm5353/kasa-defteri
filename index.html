@@ -273,9 +273,10 @@ const CAT_TREE={
   'Diğer':[]
 };
 const INCOME_SRC=['Maaş','Ticari Gelir','Araba taksiti','Temettü Geliri','Banka','Hediyeler','Diğer'];
-const ASSET_TYPES={gram:'Gram altın',ceyrek:'Çeyrek altın',yarim:'Yarım altın',tam:'Tam altın',ata:'Ata / Cumhuriyet',gumus:'Gram gümüş',usd:'Dolar',eur:'Euro',tl:'Türk lirası'};
-const PRICED=Object.keys(ASSET_TYPES).filter(k=>k!=='tl');
-const aPrice=(P,t)=>t==='tl'?1:num((P||{})[t]);
+const ASSET_TYPES={gram:'Gram altın',ceyrek:'Çeyrek altın',yarim:'Yarım altın',tam:'Tam altın',gumus:'Gram gümüş',usd:'Dolar',eur:'Euro',tl:'Türk lirası'};
+/* yarım = 2 çeyrek, tam = 4 çeyrek fiyatından hesaplanır */
+const PRICED=Object.keys(ASSET_TYPES).filter(k=>!['tl','yarim','tam'].includes(k));
+const aPrice=(P,t)=>t==='tl'?1:t==='yarim'?2*num((P||{}).ceyrek):t==='tam'?4*num((P||{}).ceyrek):num((P||{})[t]);
 const PGROUPS=['Meyve & sebze','Et & tavuk','Süt & kahvaltılık','Temel gıda','Atıştırmalık','İçecek','Temizlik','Kişisel bakım','Kağıt ürünleri','Bebek','Evcil hayvan','Diğer'];
 const AY=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const AYK=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
@@ -1138,7 +1139,7 @@ function assetsSheet(){
           ${ct>0?`<div class="small muted">Toplam maliyet ${TL(ct)}${t!=='tl'&&cq>0?` · ortalama ${TL2(ct/cq)} / ${t==='gram'||t==='gumus'?'gr':t==='usd'?'$':t==='eur'?'€':'adet'}`:''}${cq<q-0.0001?` · ${nfq.format(q-cq)} için maliyet girilmedi`:''}</div>${pnlLine(pnl(L,P),false)}`:'<div class="small muted">Maliyet girilmedi</div>'}
           <details style="margin-top:4px"><summary class="small">Alışları göster</summary>${L.map(lot).join('')}</details></div>`}).join('')}</section>`}).join('')||'<section class="sec" style="margin-top:12px"><div class="empty">Varlık yok.</div></section>'}
     <button class="btn" style="width:100%;margin-top:12px" data-act="newasset">+ Varlık ekle</button>
-    <section class="sec" style="margin-top:12px"><h2>Fiyatlar<span class="sp"></span><button class="linkbtn" data-act="prices">Güncelle</button></h2><div class="kv">${PRICED.map(k=>[k,ASSET_TYPES[k]]).map(([k,l])=>`<span class="k">${l}</span><b>${P[k]?TL2(num(P[k])):'—'}</b>`).join('')}</div></section>`);
+    <section class="sec" style="margin-top:12px"><h2>Fiyatlar<span class="sp"></span><button class="linkbtn" data-act="prices">Güncelle</button></h2><div class="kv">${PRICED.map(k=>[k,ASSET_TYPES[k]]).map(([k,l])=>`<span class="k">${l}</span><b>${P[k]?TL2(num(P[k])):'—'}</b>`).join('')}${num(P.ceyrek)?`<span class="k">Yarım altın (2 çeyrek)</span><b>${TL2(aPrice(P,'yarim'))}</b><span class="k">Tam altın (4 çeyrek)</span><b>${TL2(aPrice(P,'tam'))}</b>`:''}</div></section>`);
 }
 function ledgerSheet(){
   const open=S.debts.filter(d=>!d.paid),closed=S.debts.filter(d=>d.paid);
