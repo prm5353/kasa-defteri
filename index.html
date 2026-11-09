@@ -185,7 +185,9 @@ details summary{cursor:pointer;font-weight:600;font-size:14px}
 .sec.plan{padding-inline:10px}
 .plan .cols{gap:6px}
 .plan .pr{font-size:15px}
+.plan .pr{flex-direction:column;gap:1px}
 .plan .pr .pn{white-space:normal;overflow:visible;line-height:1.25}
+.plan .pr b{flex:none}
 .plan .pd{font-size:12.5px}
 .plan .eyebrow{font-size:12.5px}
 .plan .cols.tot div{font-size:15px}
@@ -206,6 +208,8 @@ details summary{cursor:pointer;font-weight:600;font-size:14px}
 .fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom));width:58px;height:58px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);font-size:30px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;z-index:20;line-height:1}
 .qa-amt{font-family:var(--f-display);font-size:34px;font-weight:700;width:100%;border:0;border-bottom:2px solid var(--line);background:none;color:var(--ink);padding:6px 0;text-align:center}
 .qa-amt:focus{outline:none;border-color:var(--accent)}
+.estbox{margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)}
+.estbox .pl .pr b{color:var(--warn)}
 .planrow{display:flex;align-items:center;gap:10px;padding-block:8px;border-top:1px solid var(--line)}
 .planrow:first-child{border-top:0}
 .planrow .main{flex:1;min-width:0}
@@ -821,8 +825,9 @@ function monthPlan(mk){
     const oth=Object.entries(s.by).filter(([pid,v])=>pid!==ME&&v>0.5);const othT=oth.reduce((a,[,v])=>a+v,0);
     /* başkalarının payı kendi günlerinde ödendiği için plana girmez; sadece benim payım */
     const cert=s.total-tic-othT;
-    if(cert+est<=0.5)return;
-    outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:cert+est,cert,est,done:s.paid,tag:[open?'dönem açık':'',est>0.5?`${TL(cert)} kesin + ~${TL(est)} tahmini`:'',tic>0.5?`ticari ${TL(tic)} hariç`:'',...oth.map(([pid,v])=>`${personName(pid)} ${TL(v)} kendisi öder`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic+est});
+    if(cert>0.5||s.paid)outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:Math.max(0,cert),done:s.paid,tag:[open?'dönem açık':'',tic>0.5?`ticari ${TL(tic)} hariç`:'',...oth.map(([pid,v])=>`${personName(pid)} ${TL(v)} kendisi öder`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic});
+    /* kesime kadar yapılacağı tahmin edilen harcama ayrı satır */
+    if(est>0.5&&!s.paid)outs.push({k:'estcard',id:mk,est:true,title:c.name,date:s.due,amount:est,done:false,tag:`kesime (${fmtD(s.cut)}) kadar tahmini harcama`});
     Object.entries(s.by).forEach(([pid,a])=>{if(pid===ME||a<=0.5)return;const L=owedLeft(pid,c.id,s.cut);
       if(L){const got=L.amt-L.left;if(L.left<=0.5){ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:L.amt,done:true,tag:c.name+' · alındı'});return}
         if(got>0.5)ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:got,done:true,tag:c.name+' · alındı'});
@@ -830,7 +835,7 @@ function monthPlan(mk){
       const got=S.tx.filter(x=>x.type==='tahsilat'&&x.personId===pid&&x.date.slice(0,7)===mk).reduce((q,x)=>q+x.amount,0);
       ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:a,done:got>=a-1,tag:c.name})});
   }));
-  if(mk>=t.slice(0,7)){const a=mk===t.slice(0,7)?t:mk+'-01';const v=estSpend(src=>src.startsWith('a:'),mk===t.slice(0,7)?addDays(t,1):a,monthEnd(mk));if(v>0.5)outs.push({k:'estcash',id:mk,title:'Nakit/hesaptan harcamalar',date:a,amount:v,done:false,tag:'tahmini'})}
+  if(mk>=t.slice(0,7)){const a=mk===t.slice(0,7)?t:mk+'-01';const v=estSpend(src=>src.startsWith('a:'),mk===t.slice(0,7)?addDays(t,1):a,monthEnd(mk));if(v>0.5)outs.push({k:'estcash',id:mk,est:true,title:'Nakit/hesaptan harcamalar',date:a,amount:v,done:false,tag:'tahmini'})}
   S.plans.forEach(pl=>{const s=planStatus(pl);const[y,m]=mk.split('-').map(Number);const date=dayIn(y,m-1,pl.day||1);
     const got=S.tx.filter(x=>x.type==='gelir'&&x.planId===pl.id&&x.date.slice(0,7)===mk).reduce((a,x)=>a+x.amount,0);
     const ahead=Math.max(0,monthsBetween(t.slice(0,7),mk));const left=s.remaining+(got?got:0)-ahead*(pl.installment||0);
@@ -908,7 +913,8 @@ function planTable(mk){
   </section>`;
 }
 function planTableFlow(mk,F){
-  const P=F.P;const pin=P.ins.filter(x=>!x.done&&!x.info),pinfo=P.ins.filter(x=>!x.done&&x.info),pout=P.outs.filter(x=>!x.done);const inT=F.start+pin.reduce((a,x)=>a+x.amount,0),outT=pout.reduce((a,x)=>a+x.amount,0);
+  const P=F.P;const pin=P.ins.filter(x=>!x.done&&!x.info),pinfo=P.ins.filter(x=>!x.done&&x.info),pall=P.outs.filter(x=>!x.done);const pout=pall.filter(x=>!x.est),pest=pall.filter(x=>x.est);
+  const inT=F.start+pin.reduce((a,x)=>a+x.amount,0),outT=pout.reduce((a,x)=>a+x.amount,0),estT=pest.reduce((a,x)=>a+x.amount,0);
   const doneIn=P.ins.filter(x=>x.done),doneOut=P.outs.filter(x=>x.done);const goals=P.outs.filter(x=>x.goal);const cur=mk===today().slice(0,7);
   const startLine=`<div class="pl ${cur?"tap":""}" ${cur?"data-act=\"cashsheet\"":""}><div class="pr"><span class="pn">${cur?'Hesaplarımdaki para':'Önceki aydan devreden'}</span><b style="color:${F.start<0?'var(--crit)':'inherit'}">${TL(F.start)}</b></div><div class="pd">${cur?(F.withBal?'bugün'+(heldTotal()>0.5?` · kişilerin karta ödenecek ${TL(heldTotal())}'si hariç`:''):'<b style="color:var(--warn)">bakiyeleri gir</b>'):'tahmini'}</div></div>`;
   const warn=F.short.length?`<div class="banner" style="background:color-mix(in srgb,var(--crit) 16%,transparent);margin-top:10px;flex-direction:column;align-items:stretch;gap:4px"><b>⚠ Para bulman gereken ödemeler</b>${F.short.map(s=>`<div class="sumline small"><span>${fmtD(s.d)} · ${esc(s.x.title)}</span><b style="color:var(--crit)">${TL(s.miss)} eksik</b></div>`).join('')}<div class="small muted">Hesaplarındaki para ve o tarihe kadar gelecek alacaklar bu ödemeleri karşılamıyor.</div></div>`:'';
@@ -916,11 +922,13 @@ function planTableFlow(mk,F){
     <div class="cols" style="margin-top:10px">
       <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>${startLine}${pin.map(planLine).join('')}${pinfo.length?`<div class="pd" style="margin-top:4px">Kendi günlerinde ödeyecekler (hesaba katılmaz)</div>${pinfo.map(x=>planLine({...x,muted:true})).join('')}`:''}${doneIn.length?`<div class="pd" style="margin-top:4px">Gelenler (hesaba girdi)</div>${doneIn.map(planLine).join('')}`:''}
         <button class="addl" data-act="addticari">+ Ticari gelir</button><button class="addl" data-act="newrec" data-dir="gelir">+ Sabit gelir</button></div>
-      <div class="col"><div class="eyebrow">Giderler</div>${pout.map(planLine).join('')||'<div class="small muted">Bekleyen gider yok</div>'}${doneOut.length?`<div class="pd" style="margin-top:4px">Ödenenler</div>${doneOut.map(planLine).join('')}`:''}
+      <div class="col"><div class="eyebrow">Giderler · kesin</div>${pout.map(planLine).join('')||'<div class="small muted">Bekleyen kesin gider yok</div>'}
+        ${pest.length?`<div class="estbox"><div class="eyebrow" style="color:var(--warn)">Tahmini · henüz harcanmadı</div>${pest.map(planLine).join('')}</div>`:''}${doneOut.length?`<div class="pd" style="margin-top:4px">Ödenenler</div>${doneOut.map(planLine).join('')}`:''}
         <button class="addl" data-act="newrec" data-dir="gider">+ Sabit gider</button>${goals.length?'':'<button class="addl" data-act="newrec" data-dir="hedef">+ Birikim hedefi</button>'}</div>
     </div>
-    <div class="cols tot"><div><span>Toplam</span><b style="color:var(--plus)">${TL(inT)}</b></div><div><span>Toplam</span><b>${TL(outT)}</b></div></div>
-    <div class="kalan"><span>AY SONU KALAN</span><b style="color:${F.end>=0?'var(--plus)':'var(--crit)'}">${TL(F.end)}</b></div>
+    <div class="cols tot"><div><span>Toplam</span><b style="color:var(--plus)">${TL(inT)}</b></div><div style="display:block;padding:0"><div><span>Kesin</span><b>${TL(outT)}</b></div>${estT>0.5?`<div style="margin-top:3px"><span>Tahmini</span><b style="color:var(--warn)">~${TL(estT)}</b></div>`:''}</div></div>
+    <div class="kalan"><span>KESİNLERE GÖRE KALAN</span><b style="color:${inT-outT>=0?'var(--plus)':'var(--crit)'}">${TL(inT-outT)}</b></div>
+    ${estT>0.5?`<div class="kalan" style="padding-top:0"><span>TAHMİNLERLE AY SONU</span><b style="font-size:22px;color:${F.end>=0?'var(--plus)':'var(--crit)'}">~${TL(F.end)}</b></div>`:''}
     ${goals.length?`<div class="small muted" style="text-align:center">Birikim hedefin (${TL(P.goalT)}) giderlere dahil.</div>`:''}
     <div class="small muted" style="text-align:center;margin-top:4px">Toplamlara sadece bekleyenler girer; gelen ve ödenenler zaten hesaplarındaki paraya yansıdı.</div>
   </section>`;
@@ -965,7 +973,7 @@ function planItemSheet(k,id){
   const mk=planMonth;
   if(k==='card'){goTab('kart');return}
   if(k==='personout'){excessSheet(id);return}
-  if(k==='estcash'){planSheet(id);return}
+  if(k==='estcash'||k==='estcard'){planSheet(id);return}
   if(k==='person'){personSheet(id);return}
   if(k==='plan'){ledgerSheet();return}
   if(k==='debt'){openSheet(formDebt(S.debts.find(d=>d.id===id)));return}
