@@ -430,17 +430,19 @@ function flows(T){
   ins.sort((a,b)=>a.date.localeCompare(b.date));outs.sort((a,b)=>a.date.localeCompare(b.date));
   return {ins,outs,inSum:ins.reduce((a,x)=>a+x.amount,0),outSum:outs.reduce((a,x)=>a+x.amount,0)};
 }
+/* Money Pro arşivi sadece yeni defter başlamadan önceki aylar için kullanılır; Kasım 2026 ve sonrası tamamen yeni kayıtlardan hesaplanır */
+const useArch=mk=>mk<START().slice(0,7);
 function mineCats(mk){
-  const st=S.cutG||START();const by={};
+  const by={};
   const add=(cat,sub,v,item)=>{const c=by[cat||'Diğer']=by[cat||'Diğer']||{v:0,subs:{},items:[]};c.v+=v;if(sub)c.subs[sub]=(c.subs[sub]||0)+v;c.items.push(item)};
-  livePortions().filter(p=>p.personId===ME&&p.pdate.slice(0,7)===mk&&p.pdate>=st).forEach(p=>add(p.category,p.sub,p.pamount,p));
-  S.arch.filter(t=>t.type==='gider'&&t.personId===ME&&t.date.slice(0,7)===mk&&t.date<st).forEach(t=>add(t.category,t.sub,t.amount,{...t,pdate:t.date,pamount:t.amount,arch:true}));
+  if(!useArch(mk))livePortions().filter(p=>p.personId===ME&&p.pdate.slice(0,7)===mk).forEach(p=>add(p.category,p.sub,p.pamount,p));
+  else S.arch.filter(t=>t.type==='gider'&&t.personId===ME&&t.date.slice(0,7)===mk).forEach(t=>add(t.category,t.sub,t.amount,{...t,pdate:t.date,pamount:t.amount,arch:true}));
   return by;
 }
 const mineTotal=mk=>Object.values(mineCats(mk)).reduce((a,c)=>a+c.v,0);
-function incomeBy(mk){const st=S.cutI||START();const by={};const add=(x)=>{const k=x.source||'Diğer';(by[k]=by[k]||{v:0,items:[]}).v+=x.amount;by[k].items.push(x)};S.tx.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk&&x.date>=st).forEach(add);S.arch.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk&&x.date<st).forEach(x=>add({...x,arch:true}));return by}
+function incomeBy(mk){const by={};const add=(x)=>{const k=x.source||'Diğer';(by[k]=by[k]||{v:0,items:[]}).v+=x.amount;by[k].items.push(x)};if(!useArch(mk))S.tx.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk).forEach(add);else S.arch.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk).forEach(x=>add({...x,arch:true}));return by}
 function monthEnd(mk){const[y,m]=mk.split('-').map(Number);return dayIn(y,m-1,31)}
-function incomeTotal(mk){const st=S.cutI||START();return S.tx.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk&&x.date>=st).reduce((a,x)=>a+x.amount,0)+S.arch.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk&&x.date<st).reduce((a,x)=>a+x.amount,0)}
+function incomeTotal(mk){return (useArch(mk)?S.arch:S.tx).filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk).reduce((a,x)=>a+x.amount,0)}
 function othersMonth(mk){const by={};livePortions().filter(p=>p.personId!==ME&&p.pdate.slice(0,7)===mk).forEach(p=>by[p.personId]=(by[p.personId]||0)+p.pamount);return by}
 function budgetUse(mk){const by=mineCats(mk);return S.budgets.map(b=>{const spent=by[b.category]?.v||0;return {...b,spent,pct:b.limit>0?spent/b.limit*100:0}}).sort((a,b)=>b.pct-a.pct)}
 let _ps=null;
@@ -744,7 +746,7 @@ function spendSheet(scope,which){
 function spendCatSheet(cat){
   const ids=spendScope==='all'?S.cards.map(c=>c.id):[spendScope];
   const items=spendItems(ids,spendWhich).filter(p=>p.personId===ME&&(cat==='Diğerleri'||(p.category||'Diğer')===cat)).sort((a,b)=>b.pdate.localeCompare(a.pdate));
-  openSheet(head(esc(cat))+`<section class="sec"><div class="total">${TL(items.reduce((a,p)=>a+p.pamount,0))}</div></section><section class="sec" style="margin-top:12px">${items.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:''})).join('')}</section><button class="btn ghost" style="width:100%;margin-top:12px" data-act="spendback">‹ Grafiğe dön</button>`);
+  openSheet(head(esc(cat))+`<section class="sec"><div class="total">${TL(items.reduce((a,p)=>a+p.pamount,0))}</div></section><section class="sec" style="margin-top:12px">${items.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')}</section><button class="btn ghost" style="width:100%;margin-top:12px" data-act="spendback">‹ Grafiğe dön</button>`);
 }
 function viewHome(){
   const accs=S.accounts.map(a=>({a,b:accBalance(a)}));const cash=accs.reduce((s,x)=>s+(x.a.balanceAt?x.b:0),0);
@@ -827,10 +829,10 @@ function cardBlock(c,st){
     <div class="btnrow" style="margin-top:10px"><button class="btn sm" data-act="paycard" data-id="${c.id}">Karta ödeme yaptım</button>${c.holderId?'':`<button class="btn ghost sm" data-act="spends" data-v="${c.id}">Nereye harcadım</button>`}</div>
     <details style="margin-top:12px" ${(rFrom||rTo)?'open':''}><summary>Tarih aralığı seç</summary>
       <form data-form="crange" style="margin-top:8px"><input type="hidden" name="id" value="${c.id}"><div class="two"><label class="f">Başlangıç<input type="date" name="from" value="${rFrom}"></label><label class="f">Bitiş<input type="date" name="to" value="${rTo}"></label></div><div class="btnrow"><button class="btn sm" type="submit">Göster</button>${(rFrom||rTo)?`<button class="btn sm ghost" type="button" data-act="crclear" data-id="${c.id}">Temizle</button>`:''}</div></form>
-      ${inRange?`<div class="box"><div class="sumline"><span>${rFrom?fmtD(rFrom):'Başından'} – ${rTo?fmtD(rTo):'bugün'}</span><b>${TL(inRange.reduce((a,p)=>a+p.pamount,0))}</b></div>${Object.entries(rBy).map(([p,v])=>`<div class="sumline"><span>${p===ME?'Benim':esc(personName(p))}</span><b>${TL(v)}</b></div>`).join('')}<div class="small muted">Bu aralık sadece görüntüleme içindir, toplam borcu etkilemez.</div></div>${[...inRange].sort((a,b)=>b.pdate.localeCompare(a.pdate)).map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:''})).join('')}`:''}
+      ${inRange?`<div class="box"><div class="sumline"><span>${rFrom?fmtD(rFrom):'Başından'} – ${rTo?fmtD(rTo):'bugün'}</span><b>${TL(inRange.reduce((a,p)=>a+p.pamount,0))}</b></div>${Object.entries(rBy).map(([p,v])=>`<div class="sumline"><span>${p===ME?'Benim':esc(personName(p))}</span><b>${TL(v)}</b></div>`).join('')}<div class="small muted">Bu aralık sadece görüntüleme içindir, toplam borcu etkilemez.</div></div>${[...inRange].sort((a,b)=>b.pdate.localeCompare(a.pdate)).map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')}`:''}
     </details>
     ${inst.length?`<details style="margin-top:8px"><summary>Taksitlerim · kalan ${TL(inst.reduce((a,i)=>a+i.leftTotal,0))}</summary>${inst.map(i=>`<div class="row tap" data-act="edittx" data-id="${i.t.id}"><div class="main"><div class="t">${esc(i.t.merchant||'Taksitli alışveriş')}${i.personId!==ME?` <span class="chip oth">${esc(personName(i.personId))}</span>`:''}</div><div class="s">${i.left} taksit kaldı · aylık ${TL(i.per)}</div></div><div class="amt">${TL(i.leftTotal)}</div></div>`).join('')}</details>`:''}
-    <details style="margin-top:8px"><summary>Tüm harcamalar (${T.billed.length})</summary>${[...T.billed].sort((a,b)=>b.pdate.localeCompare(a.pdate)).map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:''})).join('')||'<div class="empty">Yok</div>'}${T.pays.length?`<div class="daygrp">Ödemeler</div>${T.pays.map(txRow).join('')}`:''}</details>
+    <details style="margin-top:8px"><summary>Tüm harcamalar (${T.billed.length})</summary>${[...T.billed].sort((a,b)=>b.pdate.localeCompare(a.pdate)).map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')||'<div class="empty">Yok</div>'}${T.pays.length?`<div class="daygrp">Ödemeler</div>${T.pays.map(t=>txRow({...t,_date:true})).join('')}`:''}</details>
     <div class="btnrow" style="margin-top:12px">${S.cards[0]?.id!==c.id?`<button class="btn ghost sm" data-act="cardtop" data-id="${c.id}">En üste al</button>`:''}<button class="btn ghost sm" data-act="stmtcmp" data-id="${c.id}">Ekstre yükle ve karşılaştır</button></div>
   </section>`;
 }
@@ -840,7 +842,7 @@ function stmtPersonSheet(cardId,cut,pid){
   if(pid===ME){const g={};items.forEach(p=>g[p.category||'Diğer']=(g[p.category||'Diğer']||0)+p.pamount);byCat=`<section class="sec" style="margin-top:12px"><h2>Kategoriler</h2><div class="kv">${Object.entries(g).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="k">${esc(k)}</span><b>${TL(v)}</b>`).join('')}</div></section>`}
   openSheet(head(`${esc(c.name)} · ${pid===ME?'benim harcamam':esc(personName(pid))}`)+`<section class="sec"><div class="eyebrow">${cut==='all'?'Tüm harcamalar':`${fmtD(addDays(prevCut(c,cut),1))} – ${fmtD(cut)} · son ödeme ${fmtD(s.due)}`}</div><div class="total">${TL(tot)}</div>
     ${pid!==ME?`<div class="btnrow" style="margin-top:8px"><button class="btn sm" data-act="payp" data-id="${pid}">Ödeme aldım</button><button class="btn sm ghost" data-act="copyp" data-id="${pid}" data-card="${cardId}" data-cut="${cut}">Dökümü kopyala</button></div>`:''}</section>
-    ${byCat}<section class="sec" style="margin-top:12px"><h2>Harcamalar (${items.length})</h2>${items.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:''})).join('')||'<div class="empty">Yok</div>'}</section>`);
+    ${byCat}<section class="sec" style="margin-top:12px"><h2>Harcamalar (${items.length})</h2>${items.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')||'<div class="empty">Yok</div>'}</section>`);
 }
 
 /* ---------- harcamam ---------- */
@@ -861,11 +863,11 @@ function viewSpend(){
   const cats=Object.entries(by).sort((a,b)=>b[1].v-a[1].v);const maxC=Math.max(1,...cats.map(c=>c[1].v));
   const dch=(a,b)=>b>0?Math.round((a-b)/b*100):null;
   const cell=(lbl,v)=>{const c=dch(tot,v);return `<div><div class="k">${lbl}</div><div class="v">${TL(v)}</div><div class="small" style="color:${c>10?'var(--crit)':c<-10?'var(--ok)':'var(--muted)'}">${c===null?'—':(c>0?'+':'')+c+'%'}</div></div>`};
-  const inc=incomeTotal(mk);const oth=othersMonth(mk);const st=(S.cutG||START()).slice(0,7);
+  const inc=incomeTotal(mk);const oth=othersMonth(mk);const st=START().slice(0,7);
   let daily='';
   if(mk===today().slice(0,7)&&S.budgets.length){const bu=budgetUse(mk);const left=bu.reduce((a,b)=>a+Math.max(0,b.limit-b.spent),0);const d=new Date();const days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate()-d.getDate()+1;daily=`<div class="small" style="margin-top:8px"><b>Günlük harcama hakkın ${TL(left/days)}</b> <span class="muted">· bütçelerinde ${TL(left)} kaldı</span></div>`}
   return `<section class="sec">${monthBar(mk)}
-    <div style="margin-top:10px"><div class="eyebrow">Benim harcamam</div><div class="total">${TL(tot)}</div><div class="small muted">Gelir ${TL(inc)} · kalan ${TL(inc-tot)}${mk<st?' · Money Pro arşivinden':mk===st?' · ayın ilk günleri arşivden':''}</div></div>
+    <div style="margin-top:10px"><div class="eyebrow">Benim harcamam</div><div class="total">${TL(tot)}</div><div class="small muted">Gelir ${TL(inc)} · kalan ${TL(inc-tot)}${mk<st?' · Money Pro arşivinden':''}</div></div>
     <div class="cmp">${cell('Geçen ay',prev)}${cell('6 ay ortalaması',avg)}${cell('Geçen yıl bu ay',ly)}</div>${daily}</section>
   <section class="sec"><h2>Son 6 ay</h2>${trendSvg(mk)}</section>
   <section class="sec"><h2>Kategoriler<span class="sp"></span><button class="linkbtn" data-act="settings">Bütçe koy</button></h2>
@@ -888,6 +890,7 @@ function txRow(x){
   else if(x.personId&&x.personId!==ME)s=`<span class="chip oth">${esc(personName(x.personId))}</span> ${esc(srcLabel(x))}${x._portion?` · taksit ${x._portion}`:''}`;
   else s=`${esc(catLabel(x.category,x.sub))} · ${esc(srcLabel(x))}${x._portion?` · taksit ${x._portion}`:(x.inst||1)>1?` <span class="chip">${x.inst} taksit</span>`:''}${x.amount<0?' <span class="chip ok">İade</span>':''}`;
   const title=x.merchant||(x.type==='gider'?catLabel(x.category,x.sub):x.source)||'Kayıt';
+  if(x._date)s=`<b style="color:var(--ink);font-weight:600">${fmtD(x.pdate||x.date)}</b> · `+s;
   const neutral=x.type==='transfer'||x.type==='duzeltme'||x.type==='odeme';
   return `<div class="row tap" data-act="${ro?'archtx':'edittx'}" data-id="${x.id}"><div class="main"><div class="t">${esc(title)}</div><div class="s">${s}</div></div><div class="amt ${neutral?'muted':plus?'plus':''}">${plus&&!neutral?'+':''}${TL(Math.abs(x.amount))}</div></div>`;
 }
@@ -906,7 +909,7 @@ function catSheet(c){
   const hist=[5,4,3,2,1,0].map(i=>{const k=shiftMonth(viewMonth,-i);return {k,v:mineCats(k)[c]?.v||0}});const mx=Math.max(1,...hist.map(h=>h.v));
   openSheet(head(esc(c)+' · '+monthLabel(viewMonth))+`<section class="sec"><div class="total">${TL(by.v)}</div>
     <div style="display:flex;gap:6px;align-items:flex-end;height:78px;margin-top:10px">${hist.map(h=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><span style="font-size:10px" class="muted">${nf0.format(Math.round(h.v/1000))}b</span><div style="width:100%;background:${h.k===viewMonth?'var(--accent)':'var(--muted)'};opacity:${h.k===viewMonth?1:.45};border-radius:4px;height:${Math.max(2,Math.max(0,h.v)/mx*44)}px"></div><span class="small muted">${AYK[+h.k.slice(5)-1]}</span></div>`).join('')}</div></section>
-    <section class="sec" style="margin-top:12px">${items.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:''})).join('')}</section>`);
+    <section class="sec" style="margin-top:12px">${items.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')}</section>`);
 }
 
 /* ---------- arşiv ---------- */
