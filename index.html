@@ -317,9 +317,11 @@ const CAT_TREE={
   'Diğer':[]
 };
 const INCOME_SRC=['Maaş','Ticari Gelir','Araba taksiti','Temettü Geliri','Banka','Hediyeler','Diğer'];
-const ASSET_TYPES={gram:'Gram altın',ceyrek:'Çeyrek altın',yarim:'Yarım altın',tam:'Tam altın',gumus:'Gram gümüş',usd:'Dolar',eur:'Euro',tl:'Türk lirası'};
+const ASSET_TYPES={gram:'Gram altın',ceyrek:'Çeyrek altın',yarim:'Yarım altın',tam:'Tam altın',gumus:'Gram gümüş',usd:'Dolar',eur:'Euro',tl:'Türk lirası',esya:'Araç / diğer eşya'};
 /* yarım = 2 çeyrek, tam = 4 çeyrek fiyatından hesaplanır */
-const PRICED=Object.keys(ASSET_TYPES).filter(k=>!['tl','yarim','tam'].includes(k));
+const PRICED=Object.keys(ASSET_TYPES).filter(k=>!['tl','yarim','tam','esya'].includes(k));
+/* varlığın bugünkü değeri; araç/eşya için elle girilen tahmini değer */
+const aVal=(a,P)=>a.type==='esya'?num(a.value):a.qty*aPrice(P,a.type);
 const aPrice=(P,t)=>t==='tl'?1:t==='yarim'?2*num((P||{}).ceyrek):t==='tam'?4*num((P||{}).ceyrek):num((P||{})[t]);
 const PGROUPS=['Meyve & sebze','Et & tavuk','Süt & kahvaltılık','Temel gıda','Atıştırmalık','İçecek','Temizlik','Kişisel bakım','Kağıt ürünleri','Bebek','Evcil hayvan','Diğer'];
 const AY=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
@@ -718,7 +720,7 @@ function formQuick(){const src=ls.get('kd_qa_src','')||defaultSrc();const t=catT
 /* birikim hedefi: Aylık tablodaki "Birikim hedefi" kalemine karşı o ay alınan birikimlerin (alış maliyeti) toplamı */
 function goalRows(n){const goals=S.recs.filter(r=>r.dir==='hedef');if(!goals.length)return null;const cur=today().slice(0,7);
   return Array.from({length:n},(_,i)=>shiftMonth(cur,i-n+1)).map(mk=>{const target=goals.reduce((a,r)=>{const o=recOcc(r,mk);return a+(o?o.amount:0)},0);
-    let got=S.assets.filter(a=>a.buyDate&&a.buyDate.slice(0,7)===mk&&a.costTL>0).reduce((a,x)=>a+x.costTL,0);
+    let got=S.assets.filter(a=>a.type!=='esya'&&a.buyDate&&a.buyDate.slice(0,7)===mk&&a.costTL>0).reduce((a,x)=>a+x.costTL,0);
     if(!got)got=goals.reduce((a,r)=>{const o=recOcc(r,mk);return a+(o&&o.done?o.amount:0)},0);return {mk,target,got}})}
 function goalSec(){const R=goalRows(6);if(!R)return '';const c=R[5];const mx=Math.max(1,...R.map(r=>Math.max(r.target,r.got)));const pct=c.target>0?c.got/c.target*100:0;
   return `<section class="sec" style="margin-top:12px"><h2>Aylık birikim hedefi<span class="sp"></span><span class="sum">${TL(c.got)} / ${TL(c.target)}</span></h2>
@@ -726,7 +728,7 @@ function goalSec(){const R=goalRows(6);if(!R)return '';const c=R[5];const mx=Mat
     <div style="display:flex;gap:6px;align-items:flex-end;height:80px">${R.map(r=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><div style="position:relative;width:100%;height:60px;display:flex;align-items:flex-end"><div style="position:absolute;left:0;right:0;bottom:${r.target/mx*60}px;border-top:2px dashed var(--muted)"></div><div style="width:100%;border-radius:4px;background:${r.got>=r.target&&r.target>0?'var(--plus)':'var(--gold)'};height:${Math.max(2,r.got/mx*60)}px"></div></div><span style="font-size:10px" class="muted">${monthLabel(r.mk).slice(0,3)}</span></div>`).join('')}</div>
     <div class="small muted">Çubuk: o ay aldığın birikimlerin alış tutarı · kesikli çizgi: hedef. Alış tarihi ve tutarı girilen varlıklar sayılır.</div></section>`}
 /* net varlık: hesaplar + birikim + alacaklar − kart borçları − borçlar */
-function netWorth(){const P=S.prices||{};const cash=cashNow();const assets=S.assets.reduce((a,x)=>a+x.qty*aPrice(P,x.type),0);
+function netWorth(){const P=S.prices||{};const cash=cashNow();const assets=S.assets.reduce((a,x)=>a+aVal(x,P),0);
   const owed=owedByDue().reduce((a,o)=>a+o.left,0)+S.debts.filter(d=>!d.paid&&d.dir==='alacak').reduce((a,d)=>a+debtLeft(d),0);
   const cards=S.cards.reduce((a,c)=>a+Math.max(0,cardState(c)?.debt||0),0);const debts=S.debts.filter(d=>!d.paid&&d.dir!=='alacak').reduce((a,d)=>a+debtLeft(d),0);
   return {cash,assets,owed,cards,debts,total:cash+assets+owed-cards-debts}}
@@ -969,7 +971,7 @@ function owedSection(){const O=owedByDue();if(!O.length)return '';const tot=O.re
       ${o.got>0.5?`<div class="small muted">${TL(o.got)} ödedi, düşüldü</div>`:''}</div>`).join('')}</section>`}
 function viewHome(){
   const accs=S.accounts.map(a=>({a,b:accBalance(a)}));const cash=accs.reduce((s,x)=>s+x.b,0);
-  const P=S.prices||{};const assetVal=S.assets.reduce((s,a)=>s+a.qty*aPrice(P,a.type),0);
+  const P=S.prices||{};const assetVal=S.assets.reduce((s,a)=>s+aVal(a,P),0);
   const items=spendItems(S.cards.map(c=>c.id),'open');const mine=items.filter(p=>p.personId===ME);const tot=mine.reduce((a,p)=>a+p.pamount,0);
   const by={};mine.forEach(p=>{const k=p.category||'Diğer';by[k]=(by[k]||0)+p.pamount});let rows=Object.entries(by).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,8);
   const perCard=S.cards.map(c=>{const st=cardState(c);if(!st)return null;const m=st.open.by[ME]||0;const o=st.open.total-m;return {c,m,o,cut:st.open.cut}}).filter(Boolean);
@@ -985,7 +987,7 @@ function viewHome(){
     <button class="linkbtn" data-act="newacc">+ Hesap ekle</button>
   </section>
   ${nwSec()}
-  <section class="sec tap" data-act="assets"><h2>Birikimim<span class="sp"></span><span class="sum" style="color:var(--gold)">${TL(assetVal)}</span>${chev}</h2><div class="small muted">${S.assets.length?assetGroups(S.assets.map(a=>({...a,val:a.qty*aPrice(P,a.type)}))).map(g=>`${esc(g.name)} ${TL(g.val)}`).join(' · '):'Altın, dolar, euro birikimini ekle'}</div></section>
+  <section class="sec tap" data-act="assets"><h2>Birikimim<span class="sp"></span><span class="sum" style="color:var(--gold)">${TL(assetVal)}</span>${chev}</h2><div class="small muted">${S.assets.length?assetGroups(S.assets.map(a=>({...a,val:aVal(a,P)}))).map(g=>`${esc(g.name)} ${TL(g.val)}`).join(' · '):'Altın, dolar, euro birikimini ekle'}</div></section>
   <section class="sec tap" data-act="ledger"><h2>Alacak ve borç defteri<span class="sp"></span>${chev}</h2><div class="small muted">Fatih, Caner ve diğer alacak-borçlar</div></section>`;
 }
 
@@ -1326,22 +1328,22 @@ function receiptSheet(id){
 /* ---------- birikim, defter, kişi ---------- */
 /* birikimler kimin için tutulduğuna göre; borç verilen altınlar ayrı grupta ama toplam varlığa dahil */
 const ownerOf=a=>(a.owner||'').trim()||'Kendim';
-function assetGroups(rows){const g={};rows.forEach(r=>{const k=r.lent?'Borç verdiğim':ownerOf(r);(g[k]=g[k]||{name:k,rows:[],val:0}).rows.push(r);g[k].val+=r.val});
-  const order=k=>k==='Kendim'?0:k==='Borç verdiğim'?9:1;
+function assetGroups(rows){const g={};rows.forEach(r=>{const k=r.lent?'Borç verdiğim':r.type==='esya'?'Araç ve eşyalar':ownerOf(r);(g[k]=g[k]||{name:k,rows:[],val:0}).rows.push(r);g[k].val+=r.val});
+  const order=k=>k==='Kendim'?0:k==='Borç verdiğim'?9:k==='Araç ve eşyalar'?8:1;
   return Object.values(g).map(x=>{const q={};x.rows.forEach(r=>q[r.type]=(q[r.type]||0)+r.qty);return {...x,qty:Object.entries(q).map(([t,v])=>nfq.format(v)+' '+(ASSET_TYPES[t]||t)).join(' · ')}}).sort((a,b)=>order(a.name)-order(b.name)||a.name.localeCompare(b.name,'tr'))}
 /* maliyet: alışta ödenen TL ve o günkü kurlarla dolar/euro maliyeti; bugünkü değer bugünkü kurlarla */
 function pnl(list,P){const c={tl:0,usd:0,eur:0,vtl:0,vusd:0,veur:0,nU:0,nE:0,n:0};const U=num(P.usd),E=num(P.eur);
-  list.forEach(r=>{if(!(r.costTL>0))return;const v=r.qty*aPrice(P,r.type);c.n++;c.tl+=r.costTL;c.vtl+=v;if(r.usdRate>0&&U>0){c.usd+=r.costTL/r.usdRate;c.vusd+=v/U;c.nU++}if(r.eurRate>0&&E>0){c.eur+=r.costTL/r.eurRate;c.veur+=v/E;c.nE++}});return c}
+  list.forEach(r=>{if(!(r.costTL>0))return;const v=aVal(r,P);c.n++;c.tl+=r.costTL;c.vtl+=v;if(r.usdRate>0&&U>0){c.usd+=r.costTL/r.usdRate;c.vusd+=v/U;c.nU++}if(r.eurRate>0&&E>0){c.eur+=r.costTL/r.eurRate;c.veur+=v/E;c.nE++}});return c}
 function pnlLine(c,big){if(!c.n)return '';const f=(gain,base,sym,fmt)=>{const pc=base>0?gain/base*100:0;return `<span style="color:${gain>=0?'var(--plus)':'var(--crit)'};font-weight:700">${gain>=0?'+':'−'}${fmt(Math.abs(gain))}${sym} (${pc>=0?'+':'−'}%${Math.abs(pc).toFixed(1).replace(".",",")})</span>`};const nf0=v=>nfq.format(Math.round(v));
   const parts=[`TL ${f(c.vtl-c.tl,c.tl,' ₺',nf0)}`];if(c.nU)parts.push(`Dolar ${f(c.vusd-c.usd,c.usd,' $',nf0)}`);if(c.nE)parts.push(`Euro ${f(c.veur-c.eur,c.eur,' €',nf0)}`);
   return `<div class="${big?'':'small'}" style="margin-top:3px">${big?`Maliyet ${TL(c.tl)}${c.nU?` · ${nf0(c.usd)} $`:''}${c.nE?` · ${nf0(c.eur)} €`:''}<br>`:''}${parts.join(' · ')}</div>`}
 function assetsSheet(){
-  const P=S.prices||{};const rows=S.assets.map(a=>({...a,pr:aPrice(P,a.type),val:a.qty*aPrice(P,a.type)}));const total=rows.reduce((s,r)=>s+r.val,0);
+  const P=S.prices||{};const rows=S.assets.map(a=>({...a,pr:aPrice(P,a.type),val:aVal(a,P)}));const total=rows.reduce((s,r)=>s+r.val,0);
   const hist=Object.entries(P.history||{}).sort((a,b)=>a[0].localeCompare(b[0])).slice(-30);let spark='';
-  if(hist.length>=2&&S.assets.length){const vals=hist.map(([,h])=>S.assets.reduce((s,a)=>s+a.qty*aPrice(h,a.type),0));const mn=Math.min(...vals),mx=Math.max(...vals),W=320,H=60;const pts=vals.map((v,i)=>`${(i/(vals.length-1))*W},${H-6-(mx===mn?.5:(v-mn)/(mx-mn))*(H-12)}`);spark=`<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="Birikim değişimi"><polyline points="${pts.join(' ')}" fill="none" stroke="var(--gold)" stroke-width="2"/></svg>`}
+  if(hist.length>=2&&S.assets.length){const vals=hist.map(([,h])=>S.assets.reduce((s,a)=>s+aVal(a,h),0));const mn=Math.min(...vals),mx=Math.max(...vals),W=320,H=60;const pts=vals.map((v,i)=>`${(i/(vals.length-1))*W},${H-6-(mx===mn?.5:(v-mn)/(mx-mn))*(H-12)}`);spark=`<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="Birikim değişimi"><polyline points="${pts.join(' ')}" fill="none" stroke="var(--gold)" stroke-width="2"/></svg>`}
   openSheet(head('Birikimim')+`<section class="sec"><div class="total" style="color:var(--gold)">${TL(total)}</div><div class="small muted">${P.updatedAt?`Fiyatlar: ${esc(P.source||'elle')} · ${fmtDY(ymd(new Date(P.updatedAt)))} ${new Date(P.updatedAt).toTimeString().slice(0,5)}`:'Fiyat girilmedi'}${P.autoErr&&navigator.onLine!==false?' · otomatik güncelleme alınamadı, son kur kullanılıyor':''}</div>${(()=>{const c=pnl(rows,P);return c.n?`<div class="box" style="margin-top:8px"><div class="eyebrow">Maliyeti girilen ${c.n} varlık</div>${pnlLine(c,true)}${(!num(P.usd)||!num(P.eur))?'<div class="small muted">Dolar ve euro kârı için Fiyatlar\'a bugünkü kurları gir.</div>':''}</div>`:''})()}${spark}</section>
     ${goalSec()}
-    ${assetGroups(rows).map(g=>{const lot=r=>`<div class="row tap" data-act="editasset" data-id="${r.id}"><div class="main"><div class="t">${nfq.format(r.qty)} ${esc(ASSET_TYPES[r.type]||r.type)}${r.lent?` · ${esc(r.who||'?')}`:''}</div><div class="s">${r.type==='tl'?'TL birikim':r.pr?'Birim '+TL2(r.pr):'Fiyat yok'}${r.lent&&r.owner?' · '+esc(r.owner)+' birikimi':''}${r.lent&&r.since?' · '+fmtDY(r.since)+' verdim':''}${r.lent&&r.dueDate?` · geri ${fmtDY(r.dueDate)}`:''}${r.note?' · '+esc(r.note):''}</div>${r.costTL>0?`<div class="small muted">${r.buyDate?fmtDY(r.buyDate)+' · ':''}alış ${TL(r.costTL)}</div>${pnlLine(pnl([r],P))}`:''}</div><div class="amt">${TL(r.val)}</div></div>`;
+    ${assetGroups(rows).map(g=>{const lot=r=>`<div class="row tap" data-act="editasset" data-id="${r.id}"><div class="main"><div class="t">${r.type==='esya'?esc(r.name||'Araç / eşya'):nfq.format(r.qty)+' '+esc(ASSET_TYPES[r.type]||r.type)}${r.lent?` · ${esc(r.who||'?')}`:''}</div><div class="s">${r.type==='esya'?'Elle girilen tahmini değer':r.type==='tl'?'TL birikim':r.pr?'Birim '+TL2(r.pr):'Fiyat yok'}${r.lent&&r.owner?' · '+esc(r.owner)+' birikimi':''}${r.lent&&r.since?' · '+fmtDY(r.since)+' verdim':''}${r.lent&&r.dueDate?` · geri ${fmtDY(r.dueDate)}`:''}${r.note?' · '+esc(r.note):''}</div>${r.costTL>0?`<div class="small muted">${r.buyDate?fmtDY(r.buyDate)+' · ':''}alış ${TL(r.costTL)}</div>${pnlLine(pnl([r],P))}`:''}</div><div class="amt">${TL(r.val)}</div></div>`;
       const types=[...new Set(g.rows.map(r=>r.type))];
       return `<section class="sec" style="margin-top:12px"><h2>${esc(g.name)}<span class="sp"></span><span class="sum" style="color:var(--gold)">${TL(g.val)}</span></h2>${types.length>1?pnlLine(pnl(g.rows,P)):''}
       ${types.map(t=>{const L=g.rows.filter(r=>r.type===t);const q=L.reduce((a,r)=>a+r.qty,0),v=L.reduce((a,r)=>a+r.val,0);const C=L.filter(r=>r.costTL>0);const cq=C.reduce((a,r)=>a+r.qty,0),ct=C.reduce((a,r)=>a+r.costTL,0);
@@ -1546,7 +1548,9 @@ function formRec(r,dir){
     <p class="small muted" style="margin:0">Her ay Ana Sayfa'daki tabloda görünür; geldiğinde ya da ödediğinde üstüne dokunup işaretlersin. Değişen tutarı o ay işaretlerken düzeltebilirsin.</p>
     <button class="btn" type="submit">Kaydet</button>${r.id?`<button class="btn danger" type="button" data-act="deldoc" data-id="${r.id}">Sil</button>`:''}</form>`;
 }
-function formAsset(a){a=a||{type:'gram'};return head('Varlık')+`<form data-form="asset"><input type="hidden" name="id" value="${esc(a.id||'')}"><div class="two"><label class="f">Tür<select id="aType" name="type">${Object.entries(ASSET_TYPES).map(([k,l])=>opt(k,l,a.type)).join('')}</select></label><label class="f">Miktar<input id="aQty" name="qty" type="number" step="0.01" required value="${a.qty??''}"></label></div><details ${a.costTL?'open':''} style="margin:4px 0 8px"><summary>Alış maliyeti (kâr/zarar için)</summary>
+function formAsset(a){a=a||{type:'gram'};return head('Varlık')+`<form data-form="asset"><input type="hidden" name="id" value="${esc(a.id||'')}"><div class="two"><label class="f">Tür<select id="aType" name="type">${Object.entries(ASSET_TYPES).map(([k,l])=>opt(k,l,a.type)).join('')}</select></label><label class="f">Miktar<input id="aQty" name="qty" type="number" step="0.01" required value="${a.qty??1}"></label></div>
+    <label class="f" id="aValBox" ${a.type==='esya'?'':'hidden'}>Bugünkü tahmini değeri (₺) · ör. aracın 2. el değeri<input name="value" type="number" step="1" inputmode="decimal" value="${a.value||''}"></label>
+    <label class="f" id="aNameBox" ${a.type==='esya'?'':'hidden'}>Adı<input name="name" value="${esc(a.name||'')}" placeholder="ör. 2021 Passat"></label><details ${a.costTL?'open':''} style="margin:4px 0 8px"><summary>Alış maliyeti (kâr/zarar için)</summary>
       <div class="two" style="margin-top:8px"><label class="f">Alış tarihi<input type="date" name="buyDate" value="${a.buyDate||''}"></label><label class="f">Ödediğim toplam TL<input name="costTL" type="number" step="0.01" inputmode="decimal" value="${a.costTL||''}"></label></div>
       <div class="two"><label class="f">O gün dolar kuru (₺)<input name="usdRate" type="number" step="0.0001" inputmode="decimal" value="${a.usdRate||''}"></label><label class="f">O gün euro kuru (₺)<input name="eurRate" type="number" step="0.0001" inputmode="decimal" value="${a.eurRate||''}"></label></div>
       <p class="small muted" style="margin:0">Aynı türü farklı tarihlerde aldıysan her alışı ayrı varlık olarak ekle; maliyetleri ayrı hesaplarım.</p></details>
@@ -1918,6 +1922,7 @@ document.addEventListener('change',e=>{
   if((t.id==='anFrom'||t.id==='anTo')&&AN){if(t.value){if(t.id==='anFrom')AN.from=t.value;else AN.to=t.value;if(AN.from>AN.to)[AN.from,AN.to]=[AN.to,AN.from];anSave();analizSheet()}return}
   if(t.dataset&&t.dataset.anx&&AN){const key={G:'exG',S:'exS',I:'exI'}[t.dataset.anx];const set=new Set(AN[key]);if(t.checked)set.delete(t.value);else set.add(t.value);AN[key]=[...set];anSave();
     if(t.dataset.anx==='G'){const d=t.closest('details');if(d)d.querySelectorAll('input[data-anx="S"]').forEach(x=>{x.disabled=!t.checked;x.checked=t.checked&&!AN.exS.includes(x.value)})}return}
+  if(t.name==='type'&&t.closest('form[data-form="asset"]')){const e=t.value==='esya';['aValBox','aNameBox'].forEach(id=>{const b=document.getElementById(id);if(b)b.hidden=!e});return}
   if(t.name==='lent'&&t.closest('form[data-form="asset"]')){const b=document.getElementById('lentBox');if(b)b.hidden=!t.checked;return}
   if(t.id==='apiModel'){ls.set('kd_model',t.value);toast('Okuma kalitesi değişti');return}
   if(t.id==='targetDate'){if(t.value){ls.set('kd3_target',t.value);render()}return}
@@ -2003,7 +2008,7 @@ document.addEventListener('submit',async e=>{
     case 'plan':await put({id:g('id')||undefined,k:'plan',name:g('name'),who:g('who'),total:num(g('total')),installment:num(g('installment')),day:Math.round(num(g('day')))||1,already:num(g('already')),account:g('account')||''});closeSheet();toast('Kaydedildi');break;
     case 'rec':{const ex=S.recs.find(r=>r.id===g('id'));const no=Math.round(num(g('no')));await put({...(ex||{}),id:g('id')||undefined,k:'rec',dir:g('dir'),name:g('name').trim(),amount:num(g('amount')),day:Math.round(num(g('day')))||1,startMonth:no?planMonth:(ex?.startMonth||planMonth),startNo:no||undefined,count:Math.round(num(g('count')))||undefined,account:g('account')||''});closeSheet();toast('Kaydedildi');break}
     case 'recdone':{const r=S.recs.find(x=>x.id===g('id'));const mk=g('mk');await saveTx([{id:newId(),type:r.dir==='gelir'?'gelir':'odeme',amount:Math.abs(num(g('amount'))),date:g('date')||today(),account:g('account')||'',merchant:r.name,source:r.dir==='gelir'?(INCOME_SRC.includes(r.name)?r.name:'Diğer'):undefined,recId:r.id,recMonth:mk,ts:Date.now(),via:'manuel'}]);closeSheet();toast('İşaretlendi');break}
-    case 'asset':{const lent=fd.has('lent');const ow=String(g('owner')||'').trim();await put({id:g('id')||undefined,k:'asset',type:g('type'),qty:num(g('qty')),note:g('note')||'',owner:ow&&ow!=='Kendim'?ow:'',buyDate:g('buyDate')||'',costTL:num(g('costTL'))||0,usdRate:num(g('usdRate'))||0,eurRate:num(g('eurRate'))||0,lent,who:lent?String(g('who')||'').trim():'',since:lent?g('since')||'':'',dueDate:lent?g('dueDate')||'':''});closeSheet();setTimeout(assetsSheet,250);break}
+    case 'asset':{const lent=fd.has('lent');const ow=String(g('owner')||'').trim();await put({id:g('id')||undefined,k:'asset',type:g('type'),qty:num(g('qty')),note:g('note')||'',value:g('type')==='esya'?num(g('value'))||0:undefined,name:g('type')==='esya'?String(g('name')||'').trim():undefined,owner:ow&&ow!=='Kendim'?ow:'',buyDate:g('buyDate')||'',costTL:num(g('costTL'))||0,usdRate:num(g('usdRate'))||0,eurRate:num(g('eurRate'))||0,lent,who:lent?String(g('who')||'').trim():'',since:lent?g('since')||'':'',dueDate:lent?g('dueDate')||'':''});closeSheet();setTimeout(assetsSheet,250);break}
     case 'prices':{const P=S.prices||{};const cur={};PRICED.forEach(k=>{const v=num(g(k));cur[k]=v>0?v:(P[k]||undefined)});const hist={...(P.history||{})};hist[today()]=clean(cur);await db.doc('market/prices').set(clean({...cur,updatedAt:new Date().toISOString(),source:'Elle girildi',history:hist}));closeSheet();toast('Fiyatlar güncellendi');break}
     case 'pay':await saveTx([{id:newId(),type:'tahsilat',personId:g('personId'),amount:Math.abs(num(g('amount'))),date:g('date')||today(),account:g('account')||'',merchant:'Ödeme aldım',ts:Date.now(),via:'manuel'}]);closeSheet();toast('Kaydedildi');break;
     case 'opening':{const p=S.persons.find(x=>x.id===g('id'));await put({...p,opening:num(g('opening')),since:g('since')||START()});closeSheet();toast('Kaydedildi');break}
