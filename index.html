@@ -823,12 +823,15 @@ function heldMoney(){const since=addDays(START(),-40);const out={};
   S.tx.filter(x=>x.type==='tahsilat'&&x.personId&&x.personId!==ME&&x.date>=since).forEach(x=>{const o=out[x.personId]=out[x.personId]||{pid:x.personId,got:0,paid:0,where:{}};o.got+=x.amount;const w=x.account||'Nakit';o.where[w]=(o.where[w]||0)+x.amount});
   S.cards.forEach(c=>{const T=cardTotals(c);if(T.paid<=0.5||T.spent<=0.5)return;Object.entries(T.by).forEach(([pid,v])=>{if(out[pid])out[pid].paid+=T.paid*Math.max(0,v)/T.spent})});
   return Object.values(out).map(o=>({...o,held:Math.max(0,o.got-o.paid)})).filter(o=>o.held>0.5)}
-function heldByAcc(){const m={};heldMoney().forEach(o=>{const tot=Object.values(o.where).reduce((a,v)=>a+v,0);Object.entries(o.where).forEach(([w,v])=>{const k=w||'Nakit';(m[k]=m[k]||[]).push({pid:o.pid,amt:o.held*v/tot})})});return m}
+/* hesapta duran kişi parası: hesabın bakiyesini aşamaz; para başka yerde harcandıysa hesapta görünmez */
+function heldByAcc(){const m={};heldMoney().forEach(o=>{const tot=Object.values(o.where).reduce((a,v)=>a+v,0);Object.entries(o.where).forEach(([w,v])=>{const k=w||'Nakit';(m[k]=m[k]||[]).push({pid:o.pid,amt:o.held*v/tot})})});
+  Object.entries(m).forEach(([k,l])=>{const a=S.accounts.find(x=>x.name===k)||(k==='Nakit'?S.accounts.find(isCashAcc):null);const bal=a?Math.max(0,accBalance(a)):0;const sum=l.reduce((q,x)=>q+x.amt,0);if(sum>bal){const f=sum>0?bal/sum:0;l.forEach(x=>x.amt*=f)}});return m}
 function heldNote(names){const m=heldByAcc();const by={};names.forEach(n=>(m[n]||[]).forEach(x=>by[x.pid]=(by[x.pid]||0)+x.amt));const e=Object.entries(by).filter(([,v])=>v>0.5);return e.length?`<div class="s" style="color:var(--other)">${e.map(([p,v])=>`içinde ${esc(personName(p))} parası ${TL(v)} · karta ödenecek`).join(' · ')}</div>`:''}
-function heldSection(){const H=heldMoney();if(!H.length)return '';const tot=H.reduce((a,o)=>a+o.held,0);
+function heldSection(){const H=heldMoney();if(!H.length)return '';const M=heldByAcc();H.forEach(o=>{o.inHand=0;o.at={};Object.entries(M).forEach(([k,l])=>l.forEach(x=>{if(x.pid===o.pid&&x.amt>0.5){o.inHand+=x.amt;o.at[k]=x.amt}}));o.used=Math.max(0,o.held-o.inHand)});const tot=H.reduce((a,o)=>a+o.inHand,0);
   return `<section class="sec"><h2>Elimde duran, karta ödenecek para<span class="sp"></span><span class="sum">${TL(tot)}</span></h2>
-    ${H.map(o=>`<div class="owe tap" data-act="person" data-id="${o.pid}"><div class="sumline" style="font-weight:700"><span>${esc(personName(o.pid))} · aldığım</span><b>${TL(o.held)}</b></div>
-      <div class="small muted">${Object.entries(o.where).map(([w,v])=>`${esc(w)} ${TL(v)}`).join(' · ')}${o.paid>0.5?` · karta ${TL(o.paid)} yatırdım`:''}</div></div>`).join('')}
+    ${H.map(o=>`<div class="owe tap" data-act="person" data-id="${o.pid}"><div class="sumline" style="font-weight:700"><span>${esc(personName(o.pid))} · elimde</span><b>${TL(o.inHand)}</b></div>
+      ${o.inHand>0.5?`<div class="small muted">${Object.entries(o.at).map(([w,v])=>`${esc(w)} ${TL(v)}`).join(' · ')}</div>`:''}
+      ${o.used>0.5?`<div class="small" style="color:var(--warn)">${TL(o.used)} başka yerde kullanıldı; karta bu kadarını kendi paranla ödeyeceksin.</div>`:''}</div>`).join('')}
     <div class="small muted" style="margin-top:6px">Kartın ödemesini yapınca "Karta ödeme yaptım" de; buradan düşer.</div></section>`}
 function owedSection(){const O=owedByDue();if(!O.length)return '';const tot=O.reduce((a,o)=>a+o.left,0);
   return `<section class="sec"><h2>Bana ödenecek kart payları<span class="sp"></span><span class="sum" style="color:var(--other)">${TL(tot)}</span></h2>
