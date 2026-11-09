@@ -520,7 +520,7 @@ async function boot(){
   db=localDb;base=localDb.collection();
   base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render()});
   db.doc('market/prices').onSnapshot(s=>{S.prices=s.exists?(s.data()||{}):{};if(S.loaded)render()});
-  sampleFn=apiSample;sampleCaps={images:{maxCount:6,mediaTypes:['image/*','application/pdf']}};
+  sampleFn=apiSample;sampleCaps={images:{maxCount:3,mediaTypes:['image/*','application/pdf']}};
   if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 }
 
@@ -926,6 +926,7 @@ function formTx(x,type){
     <div class="two"><label class="f">Tutar (₺)<input id="txAmount" name="amount" type="number" step="0.01" inputmode="decimal" required value="${x.amount!=null?Math.abs(x.amount):''}"></label><label class="f">Tarih<input id="txDate" name="date" type="date" required value="${x.date||today()}"></label></div>
     <label class="f" data-for="gider gelir verdim transfer">Açıklama / işyeri<input id="txMerchant" name="merchant" value="${esc(x.merchant||'')}"></label>
     <label class="f" data-for="gider">Kim harcadı<select id="txPerson" name="personId">${personOpts(x.personId||ME)}</select></label>
+    <div class="two" data-for="gider"><label class="f">Bir kısmı başkasının mı?<select id="txSplitP" name="splitP">${opt('','Hayır','')}${S.persons.map(p=>opt(p.id,p.name,'')).join('')}</select></label><label class="f">Onun payı (${(x.inst||1)>1?'aylık ':''}₺)<input id="txSplitA" name="splitAmt" type="number" step="0.01" inputmode="decimal" placeholder="ör. 69240"></label></div>
     <label class="f" data-for="gider" id="catWrap">Kategori<select id="txCat" name="cat">${catOpts(catVal(x.category||'Market',x.sub))}</select></label>
     <div class="two" data-for="gider"><label class="f">Taksit sayısı<input id="txInst" name="inst" type="number" min="1" max="36" value="${x.inst||1}"></label><label class="check" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="refund" ${x.amount<0?'checked':''}> İade</label></div>
     <label class="f" data-for="gelir">Gelir türü<select id="txSrc" name="source">${INCOME_SRC.map(s=>opt(s,s,x.source||'Maaş')).join('')}</select></label>
@@ -1022,9 +1023,11 @@ function menuAdd(){
 
 /* ===================== EKRAN GÖRÜNTÜSÜ / EKSTRE ===================== */
 function matchMerchant(raw){const k=normKey(raw);if(!k)return null;let best=null,bk='';Object.entries(S.merch).forEach(([mk,m])=>{if(k===mk||k.startsWith(mk+' ')||k.split(' ')[0]===mk){if(mk.length>bk.length){best=m;bk=mk}}});return best}
+/* bölüştürülmüş harcamalar (aynı groupId) tek harcama gibi karşılaştırılır */
+function groupedTx(){const g={};const out=[];S.tx.forEach(x=>{if(x.groupId){if(!g[x.groupId]){g[x.groupId]={...x,amount:0};out.push(g[x.groupId])}g[x.groupId].amount+=x.amount}else out.push(x)});return out}
 function dupState(r){
   const type=r.kind==='gelir'?'gelir':'gider';const amt=r.kind==='iade'?-r.amount:r.amount;let st=null;
-  for(const x of S.tx){if(x.type!==type||Math.abs(x.amount-amt)>0.01)continue;const dd=Math.abs(daysBetween(x.date,r.date));if(dd>2)continue;const a=firstWord(x.merchant),b=firstWord(r.merchant);if(dd<=1&&(a===b||!a||!b))return 'dup';st='similar'}
+  for(const x of groupedTx()){if(x.type!==type||Math.abs(x.amount-amt)>0.01)continue;const dd=Math.abs(daysBetween(x.date,r.date));if(dd>2)continue;const a=firstWord(x.merchant),b=firstWord(r.merchant);if(dd<=1&&(a===b||!a||!b))return 'dup';st='similar'}
   return st;
 }
 const imgAccept=()=>sampleCaps?.images?.mediaTypes?.join(',')||'image/*';
@@ -1069,7 +1072,7 @@ async function runStmt(fd){
     const rows=dedupeChunks(res.map(o=>Array.isArray(o?.rows)?o.rows:[])).filter(r=>r&&trAmount(r.amount)!==0);
     const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')?s:null;
     const end=iso(meta.period_end)||(hasDays(card)?lastCut(card):today());const start=iso(meta.period_start)||addDays(addMonths(end,-1),1);
-    const cands=livePortions().filter(p=>p.cardId===card.id&&p.pdate>=addDays(start,-5)&&p.pdate<=addDays(end,3)).map(p=>({...p,used:false}));
+    const cands=(()=>{const g={},out=[];livePortions().filter(p=>p.cardId===card.id&&p.pdate>=addDays(start,-5)&&p.pdate<=addDays(end,3)).forEach(p=>{if(p.groupId){const k=p.groupId+'#'+p.pi;if(!g[k]){g[k]={...p,pamount:0,used:false};out.push(g[k])}g[k].pamount+=p.pamount}else out.push({...p,used:false})});return out})();
     const matched=[],missing=[];const src='c:'+card.id;
     rows.forEach(r=>{const shown=Math.abs(trAmount(r.amount)),sign=r.income?-1:1,n=Math.max(1,Math.round(num(r.installments)||1));const dt=iso(r.date)||end;let best=null,bs=1e9;
       cands.forEach(c=>{if(c.used||Math.abs(c.pamount-sign*shown)>0.02)return;const dd=Math.abs(daysBetween(c.pdate,dt));if(dd>(n>1?400:4))return;const sc=dd+(firstWord(c.merchant)===firstWord(r.merchant)?0:3);if(sc<bs){bs=sc;best=c}});
@@ -1087,6 +1090,7 @@ function rvRow(r,i){
     ${r.inst>1?`<div class="small" style="color:var(--accent);font-weight:600">Taksit ${(r.instDone||0)+1}/${r.inst} · aylık ${TL2(r.amount/r.inst)} · toplam ${TL2(r.amount)}${r.instDone?` · ${r.inst-r.instDone} taksit kaldı`:''}</div>`:''}
     <div class="two"><label class="mini">${r.inst>1?'Aylık taksit (₺)':'Tutar (₺)'}<input type="number" step="0.01" inputmode="decimal" id="rv_amt_${i}" data-rv="${i}" data-f="amount" value="${r2(r.inst>1?r.amount/r.inst:r.amount)}"></label><label class="mini">Tarih<input type="date" id="rv_date_${i}" data-rv="${i}" data-f="date" value="${r.date}"></label></div>
     <div class="two"><label class="mini">Kim harcadı<select id="rv_per_${i}" data-rv="${i}" data-f="personId">${personOpts(r.personId)}</select></label><label class="mini">Tür<select id="rv_kind_${i}" data-rv="${i}" data-f="kind">${opt('gider','Harcama',r.kind)}${opt('iade','İade',r.kind)}${opt('gelir','Gelir',r.kind)}</select></label></div>
+    ${r.kind!=='gelir'?`<div class="two"><label class="mini">Bir kısmı başkasının mı?<select id="rv_sp_${i}" data-rv="${i}" data-f="splitP">${opt('','Hayır',r.splitP||'')}${S.persons.map(p=>opt(p.id,p.name,r.splitP||'')).join('')}</select></label>${r.splitP?`<label class="mini">${esc(personName(r.splitP))} payı (${r.inst>1?'aylık ':''}₺)<input type="number" step="0.01" inputmode="decimal" id="rv_sa_${i}" data-rv="${i}" data-f="splitAmt" value="${r.splitAmt||''}"></label>`:'<span></span>'}</div>${r.splitP&&r.splitAmt>0?`<div class="small" style="color:var(--other);font-weight:600">${esc(personName(r.splitP))} ${TL2(r.splitAmt)} · senin payın ${TL2((r.inst>1?r.amount/r.inst:r.amount)-r.splitAmt)}</div>`:''}`:''}
     ${r.kind==='gelir'?`<select id="rv_src2_${i}" data-rv="${i}" data-f="source" aria-label="Gelir türü">${INCOME_SRC.map(s=>opt(s,s,r.source)).join('')}</select>`:mine?`${!r.known?'<div class="ask">Bu işyerini tanımadım. Ne harcaması?</div>':''}<select id="rv_cat_${i}" data-rv="${i}" data-f="cat" aria-label="Kategori">${catOpts(r.cat)}</select>${!r.known?`<label class="check"><input type="checkbox" id="rv_rem_${i}" data-rv="${i}" data-f="remember" ${r.remember?'checked':''}> Bir dahakine kendim tanıyayım</label>`:''}`:`<div class="small" style="color:var(--other);font-weight:600">${esc(personName(r.personId))} harcaması · senin harcamana karışmaz</div>`}
   </div>`;
 }
@@ -1106,11 +1110,14 @@ function renderReview(){
 }
 async function saveReview(){
   const rows=RV.rows.filter(r=>r.on);const ts=Date.now();let learned=false;
-  const list=rows.map((r,i)=>{const ps=srcParse(r.src);const c=parseCat(r.cat)||{category:'Diğer',sub:''};
+  const list=rows.flatMap((r,i)=>{const ps=srcParse(r.src);const c=parseCat(r.cat)||{category:'Diğer',sub:''};
     if(r.kind==='gelir')return {id:newId(),type:'gelir',amount:r.amount,date:r.date,merchant:r.merchant,source:r.source,...ps,via:RV.mode,ts:ts+i};
     const mine=r.personId===ME;
     if(mine&&r.remember&&!r.known){const key=normKey(r.merchant);if(key){S.merch[key]={category:c.category,sub:c.sub};learned=true}}
-    return clean({id:newId(),type:'gider',amount:r.kind==='iade'?-r.amount:r.amount,date:r.date,merchant:r.merchant,category:mine?c.category:'',sub:mine?c.sub:'',personId:r.personId,...ps,inst:r.inst||1,nextDate:r.nextDate,instDone:r.instDone,via:RV.mode,ts:ts+i});
+    const base={type:'gider',date:r.date,merchant:r.merchant,...ps,inst:r.inst||1,nextDate:r.nextDate,instDone:r.instDone,via:RV.mode,ts:ts+i};
+    const sign=r.kind==='iade'?-1:1;const n=r.inst||1;const share=r.splitP&&r.splitAmt>0?Math.min(r.splitAmt*n,r.amount):0;
+    if(share>0&&r.splitP!==r.personId){const gid=newId();return [clean({...base,id:newId(),groupId:gid,amount:sign*r2(r.amount-share),personId:r.personId,category:mine?c.category:'',sub:mine?c.sub:''}),clean({...base,id:newId(),groupId:gid,amount:sign*r2(share),personId:r.splitP,category:'',sub:''})].filter(t=>Math.abs(t.amount)>0.004)}
+    return [clean({...base,id:newId(),amount:sign*r.amount,category:mine?c.category:'',sub:mine?c.sub:'',personId:r.personId})];
   });
   const info=RV;
   try{
@@ -1265,7 +1272,7 @@ document.addEventListener('change',e=>{
   if(t.id==='apiModel'){ls.set('kd_model',t.value);toast('Okuma kalitesi değişti');return}
   if(t.id==='targetDate'){if(t.value){ls.set('kd3_target',t.value);render()}return}
   if((t.name==='type'||t.id==='txPerson')&&t.closest('form[data-form="tx"]'))syncTxForm();
-  if(t.dataset?.rv!==undefined&&RV){const r=RV.rows[+t.dataset.rv],f=t.dataset.f;r[f]=t.type==='checkbox'?t.checked:(f==='amount'?r2(Math.abs(num(t.value))*(r.inst>1?r.inst:1)):t.value);if(['on','kind','personId','amount'].includes(f))keepScroll(renderReview)}
+  if(t.dataset?.rv!==undefined&&RV){const r=RV.rows[+t.dataset.rv],f=t.dataset.f;r[f]=t.type==='checkbox'?t.checked:(f==='amount'?r2(Math.abs(num(t.value))*(r.inst>1?r.inst:1)):t.value);if(f==='splitAmt')r.splitAmt=Math.abs(num(t.value));if(['on','kind','personId','amount','splitP','splitAmt'].includes(f))keepScroll(renderReview)}
   if(t.dataset?.fi!==undefined&&RC){const it=RC.items[+t.dataset.fi],f=t.dataset.f;if(f==='on')it.on=t.checked;else if(['qty','unitPrice','lineTotal','discount'].includes(f)){it[f]=Math.abs(num(t.value));if(f==='qty'||f==='unitPrice')it.lineTotal=r2(it.qty*it.unitPrice);if(f==='lineTotal'&&it.qty)it.unitPrice=r2(it.lineTotal/it.qty);it.warn=''}else it[f]=t.value;keepScroll(renderFis)}
   if(t.dataset?.fc&&RC){const f=t.dataset.fc;RC[f]=f==='total'?r2(num(t.value)):t.value;if(f==='total')keepScroll(renderFis)}
 });
@@ -1320,7 +1327,9 @@ document.addEventListener('submit',async e=>{
       else if(type==='gelir')Object.assign(o,{merchant:g('merchant'),source:g('source')});
       else if(type==='transfer'){const to=srcParse(g('to'));Object.assign(o,{merchant:g('merchant')||'Transfer',toCardId:to.cardId,toAccount:to.account})}
       else Object.assign(o,{personId:g('who'),merchant:type==='tahsilat'?'Ödeme aldım':(g('merchant')||'Verdim')});
-      await saveTx([o]);closeSheet();if(type==='gider'&&o.personId===ME)setTimeout(()=>budgetAlert([o.category],'Kaydedildi'),300);else toast('Kaydedildi');break}
+      const extra=[];
+      if(type==='gider'&&g('splitP')&&num(g('splitAmt'))>0&&g('splitP')!==o.personId){const n=o.inst||1;const share=Math.min(Math.abs(num(g('splitAmt')))*n,Math.abs(o.amount));const sg=o.amount<0?-1:1;o.groupId=o.groupId||newId();o.amount=sg*r2(Math.abs(o.amount)-share);extra.push(clean({...o,id:newId(),amount:sg*r2(share),personId:g('splitP'),category:'',sub:''}))}
+      await saveTx([o,...extra]);closeSheet();if(type==='gider'&&o.personId===ME)setTimeout(()=>budgetAlert([o.category],'Kaydedildi'),300);else toast('Kaydedildi');break}
     case 'card':{const cut=Math.round(num(g('cutDay'))),due=Math.round(num(g('dueDay')));if(cut<1||cut>31||due<1||due>31){toast('Günler 1-31 arası olmalı');return}const ex=cardById(g('id'));
       await put({...(ex||{}),id:g('id')||undefined,k:'card',name:g('name').trim(),limit:g('limitOf')?0:(num(g('limit'))||0),limitOf:g('limitOf')||'',cutDay:cut,dueDay:due,holderId:g('holderId')||'',ts:ex?.ts||Date.now()});closeSheet();toast('Kart kaydedildi');break}
     case 'paystmt':{const c=cardById(g('cardId'));const cut=g('cut');const amt=num(g('amount'));
