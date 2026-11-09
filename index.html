@@ -783,6 +783,16 @@ function owedByDue(){
 let _owAll=[];
 /* aylık tabloda kişi payı: aldığım ödemeler düşülmüş kalan */
 function owedLeft(pid,cardId,cut){owedByDue();for(const o of _owAll)if(o.pid===pid)for(const l of o.lines)if(l.card.id===cardId&&l.cut===cut)return l;return null}
+/* kişilerden aldığım ama henüz karta yatırmadığım para: alınan − (karta yaptığım ödemelerden o kişinin payına düşen) */
+function heldMoney(){const since=addDays(START(),-40);const out={};
+  S.tx.filter(x=>x.type==='tahsilat'&&x.personId&&x.personId!==ME&&x.date>=since).forEach(x=>{const o=out[x.personId]=out[x.personId]||{pid:x.personId,got:0,paid:0,where:{}};o.got+=x.amount;const w=x.account||'Nakit';o.where[w]=(o.where[w]||0)+x.amount});
+  S.cards.forEach(c=>{const T=cardTotals(c);if(T.paid<=0.5||T.spent<=0.5)return;Object.entries(T.by).forEach(([pid,v])=>{if(out[pid])out[pid].paid+=T.paid*Math.max(0,v)/T.spent})});
+  return Object.values(out).map(o=>({...o,held:Math.max(0,o.got-o.paid)})).filter(o=>o.held>0.5)}
+function heldSection(){const H=heldMoney();if(!H.length)return '';const tot=H.reduce((a,o)=>a+o.held,0);
+  return `<section class="sec"><h2>Elimde duran, karta ödenecek para<span class="sp"></span><span class="sum">${TL(tot)}</span></h2>
+    ${H.map(o=>`<div class="owe tap" data-act="person" data-id="${o.pid}"><div class="sumline" style="font-weight:700"><span>${esc(personName(o.pid))} · aldığım</span><b>${TL(o.held)}</b></div>
+      <div class="small muted">${Object.entries(o.where).map(([w,v])=>`${esc(w)} ${TL(v)}`).join(' · ')}${o.paid>0.5?` · karta ${TL(o.paid)} yatırdım`:''}</div></div>`).join('')}
+    <div class="small muted" style="margin-top:6px">Kartın ödemesini yapınca "Karta ödeme yaptım" de; buradan düşer.</div></section>`}
 function owedSection(){const O=owedByDue();if(!O.length)return '';const tot=O.reduce((a,o)=>a+o.left,0);
   return `<section class="sec"><h2>Bana ödenecek kart payları<span class="sp"></span><span class="sum" style="color:var(--other)">${TL(tot)}</span></h2>
     ${O.map(o=>`<div class="owe tap" data-act="person" data-id="${o.pid}"><div class="sumline" style="font-weight:700"><span>${esc(personName(o.pid))}</span><b>${TL(o.left)}</b></div>
@@ -797,6 +807,7 @@ function viewHome(){
   return `${welcome()}${backupNag()}${setupSteps()}
   ${planTable(planMonth)}
   ${owedSection()}
+  ${heldSection()}
   <section class="sec tap" data-act="spendsheet"><h2>Kart harcamalarım<span class="sp"></span><span class="small muted">bu dönem</span>${chev}</h2>
     <div style="display:flex;gap:12px;align-items:center">${donut(rows,tot,120)}<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${perCard.map(x=>`<div class="cl"><span>${esc(x.c.name)}</span><b>${TL(x.m)}${x.o>0.5?` <span style="color:var(--other);font-weight:500">+${TL(x.o)}</span>`:''}</b></div>`).join('')}<div class="small muted" style="margin-top:4px">Dokun: nereye harcadığını kart kart gör</div></div></div>
   </section>
