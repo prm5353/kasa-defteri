@@ -1,0 +1,7 @@
+name: chk
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -sSI -H "Origin: https://prm5353.github.io" "https://raw.githubusercontent.com/prm5353/kasa-defteri/data/gumus.json?t=1" | grep -i -E "^(HTTP|access-control|cache-control)"
