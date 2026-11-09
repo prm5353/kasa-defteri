@@ -1,26 +1,33 @@
-# Harem sitesinin fiyatları nereden yüklediğini bulmak için tek seferlik inceleme.
-import re, urllib.request
-H={"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1","Accept":"text/html,*/*"}
+# Harem canlı fiyat soketini ve farklı Origin'lerle bağlanılıp bağlanılamadığını dener.
+import re, json, time, urllib.request, ssl
+import websocket  # websocket-client
+H={"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1"}
 def get(u):
     try:
-        r=urllib.request.urlopen(urllib.request.Request(u,headers=H),timeout=30);return r.status,r.read().decode('utf-8','replace')
-    except Exception as e: return getattr(e,'code',0),str(e)
-st,html=get("https://www.haremaltin.com/")
-print("HOME",st,len(html))
-for m in sorted(set(re.findall(r'["\'](/[^"\']*(?:ajax|api|doviz|fiyat|socket)[^"\']*)["\']',html,re.I)))[:40]: print("PATH",m)
-for m in sorted(set(re.findall(r'(wss?://[^"\'\s]+|https?://[^"\'\s]*(?:api|socket|canli|doviz)[^"\'\s]*)',html,re.I)))[:40]: print("URL",m)
-js=sorted(set(re.findall(r'src=["\']([^"\']+\.js[^"\']*)',html)))
-print("JS",js[:30])
-for u in js[:25]:
-    if u.startswith('//'): u='https:'+u
-    elif u.startswith('/'): u='https://www.haremaltin.com'+u
-    if 'haremaltin' not in u: continue
-    s,t=get(u)
-    hits=set(re.findall(r'.{0,60}(?:ajax/|/api/|socket|wss://|doviz).{0,80}',t))
-    for h in list(hits)[:12]: print("JSHIT",u.split('/')[-1][:40],"|",h.replace('\n',' ')[:160])
-for p in ["/dashboard/ajax/doviz","/ajax/all_prices","/api/prices","/ajax/doviz"]:
-    for meth in ("GET","POST"):
+        r=urllib.request.urlopen(urllib.request.Request(u,headers=H),timeout=30);return r.status,r.read().decode('utf-8','replace'),dict(r.headers)
+    except Exception as e: return getattr(e,'code',0),str(e),{}
+s,t,h=get("https://www.haremaltin.com/assets/js/socket.io/dist/socket.io.js")
+print("SIOVER",re.findall(r'Socket\.IO v[0-9.]+|"version":"[0-9.]+"|protocol\s*=\s*\d',t)[:5])
+s,t,h=get("https://www.haremaltin.com/assets/js/functions.js")
+for m in re.findall(r'.{0,120}(?:io\(|io\.connect|hrmsocket|canlipiyasalar|price_changed).{0,160}',t): print("FN",m.replace('\n',' ')[:280])
+s,t,h=get("https://canlipiyasalar.haremaltin.com/")
+print("CANLI",s,t[:300].replace('\n',' '))
+for path in ["/socket.io/?EIO=4&transport=polling","/socket.io/?EIO=3&transport=polling"]:
+    for org in ["https://www.haremaltin.com","https://prm5353.github.io"]:
         try:
-            req=urllib.request.Request("https://www.haremaltin.com"+p,data=(b"dil_kodu=tr" if meth=="POST" else None),headers={**H,"X-Requested-With":"XMLHttpRequest","Referer":"https://www.haremaltin.com/","Content-Type":"application/x-www-form-urlencoded"},method=meth)
-            r=urllib.request.urlopen(req,timeout=20);b=r.read()[:300];print("TRY",meth,p,r.status,b)
-        except Exception as e: print("TRY",meth,p,getattr(e,'code',e))
+            r=urllib.request.urlopen(urllib.request.Request("https://hrmsocketonly.haremaltin.com"+path,headers={**H,"Origin":org}),timeout=20)
+            print("POLL",path,org,r.status,r.headers.get('Access-Control-Allow-Origin'),r.read()[:200])
+        except Exception as e: print("POLL",path,org,getattr(e,'code',e))
+for eio in (4,3):
+    for org in ["https://prm5353.github.io","https://www.haremaltin.com"]:
+        try:
+            ws=websocket.create_connection(f"wss://hrmsocketonly.haremaltin.com/socket.io/?EIO={eio}&transport=websocket",origin=org,header=["User-Agent: "+H["User-Agent"]],timeout=15)
+            print("WS",eio,org,"open",ws.recv()[:150])
+            ws.send("40")
+            t0=time.time();n=0
+            while time.time()-t0<12 and n<6:
+                m=ws.recv();n+=1
+                if m=="2": ws.send("3");continue
+                print("MSG",eio,org,m[:1500])
+            ws.close()
+        except Exception as e: print("WS",eio,org,"ERR",e)

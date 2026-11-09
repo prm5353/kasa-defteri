@@ -6,4 +6,4 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - run: python3 tools/kesif.py
+      - run: pip install -q websocket-client && python3 tools/kesif.py
