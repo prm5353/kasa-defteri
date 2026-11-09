@@ -609,6 +609,17 @@ function partition(docs){
   ['cards','accounts','persons'].forEach(k=>S[k].sort((a,b)=>(a.order??1e9)-(b.order??1e9)||(a.ts||0)-(b.ts||0)));
   document.getElementById('prodNames').innerHTML=Object.values(S.prod.map).map(p=>`<option value="${esc(p.name)}">`).join('');
 }
+/* otomatik kur: GitHub'daki iş Harem Altın alış fiyatlarını 15 dakikada bir prices.json'a yazar; uygulama internet varken okur, yoksa son kur kalır. Gümüş elle girilir. */
+const KUR_URL='https://raw.githubusercontent.com/prm5353/kasa-defteri/data/prices.json';
+let kurBusy=false;
+async function autoPrices(force){if(kurBusy||!db||(typeof navigator!=='undefined'&&navigator.onLine===false))return;const P=S.prices||{};
+  if(!force&&P.autoCheck&&Date.now()-P.autoCheck<10*60*1000)return;kurBusy=true;
+  try{const r=await fetch(KUR_URL+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error(r.status);const j=await r.json();
+    const cur={};['gram','ceyrek','usd','eur'].forEach(k=>{const v=num(j[k]);if(v>0)cur[k]=v});if(!Object.keys(cur).length)throw new Error('boş');
+    const hist={...(P.history||{})};hist[today()]=clean({...(hist[today()]||{}),...PRICED.reduce((o,k)=>(P[k]?{...o,[k]:P[k]}:o),{}),...cur});
+    await db.doc('market/prices').set(clean({...P,...cur,history:hist,updatedAt:j.at||new Date().toISOString(),source:j.source||'Harem Altın · alış',autoCheck:Date.now(),autoErr:''}));
+  }catch(e){try{await db.doc('market/prices').set(clean({...P,autoCheck:Date.now(),autoErr:String(e.message||e)}))}catch(_){}}
+  finally{kurBusy=false}}
 async function boot(){
   render();
   try{idb=await idbOpen();(await idbAll()).forEach(([k,v])=>MEM.set(k,v))}catch(e){S.error='idb';render();return}
@@ -623,6 +634,8 @@ async function boot(){
   db.doc('market/prices').onSnapshot(s=>{S.prices=s.exists?(s.data()||{}):{};if(S.loaded)render()});
   sampleFn=apiSample;sampleCaps={images:{maxCount:3,mediaTypes:['image/*','application/pdf']}};
   if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+  setTimeout(()=>autoPrices(),1500);setInterval(()=>autoPrices(),15*60*1000);
+  window.addEventListener('online',()=>autoPrices(true));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')autoPrices()});
 }
 
 /* ===================== GÖRÜNÜMLER ===================== */
@@ -1202,7 +1215,7 @@ function assetsSheet(){
   const P=S.prices||{};const rows=S.assets.map(a=>({...a,pr:aPrice(P,a.type),val:a.qty*aPrice(P,a.type)}));const total=rows.reduce((s,r)=>s+r.val,0);
   const hist=Object.entries(P.history||{}).sort((a,b)=>a[0].localeCompare(b[0])).slice(-30);let spark='';
   if(hist.length>=2&&S.assets.length){const vals=hist.map(([,h])=>S.assets.reduce((s,a)=>s+a.qty*aPrice(h,a.type),0));const mn=Math.min(...vals),mx=Math.max(...vals),W=320,H=60;const pts=vals.map((v,i)=>`${(i/(vals.length-1))*W},${H-6-(mx===mn?.5:(v-mn)/(mx-mn))*(H-12)}`);spark=`<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="Birikim değişimi"><polyline points="${pts.join(' ')}" fill="none" stroke="var(--gold)" stroke-width="2"/></svg>`}
-  openSheet(head('Birikimim')+`<section class="sec"><div class="total" style="color:var(--gold)">${TL(total)}</div><div class="small muted">${P.updatedAt?'Fiyatlar '+fmtDY(ymd(new Date(P.updatedAt))):'Fiyat girilmedi'}</div>${(()=>{const c=pnl(rows,P);return c.n?`<div class="box" style="margin-top:8px"><div class="eyebrow">Maliyeti girilen ${c.n} varlık</div>${pnlLine(c,true)}${(!num(P.usd)||!num(P.eur))?'<div class="small muted">Dolar ve euro kârı için Fiyatlar\'a bugünkü kurları gir.</div>':''}</div>`:''})()}${spark}</section>
+  openSheet(head('Birikimim')+`<section class="sec"><div class="total" style="color:var(--gold)">${TL(total)}</div><div class="small muted">${P.updatedAt?`Fiyatlar: ${esc(P.source||'elle')} · ${fmtDY(ymd(new Date(P.updatedAt)))} ${new Date(P.updatedAt).toTimeString().slice(0,5)}`:'Fiyat girilmedi'}${P.autoErr&&navigator.onLine!==false?' · otomatik güncelleme alınamadı, son kur kullanılıyor':''}</div>${(()=>{const c=pnl(rows,P);return c.n?`<div class="box" style="margin-top:8px"><div class="eyebrow">Maliyeti girilen ${c.n} varlık</div>${pnlLine(c,true)}${(!num(P.usd)||!num(P.eur))?'<div class="small muted">Dolar ve euro kârı için Fiyatlar\'a bugünkü kurları gir.</div>':''}</div>`:''})()}${spark}</section>
     ${assetGroups(rows).map(g=>{const lot=r=>`<div class="row tap" data-act="editasset" data-id="${r.id}"><div class="main"><div class="t">${nfq.format(r.qty)} ${esc(ASSET_TYPES[r.type]||r.type)}${r.lent?` · ${esc(r.who||'?')}`:''}</div><div class="s">${r.type==='tl'?'TL birikim':r.pr?'Birim '+TL2(r.pr):'Fiyat yok'}${r.lent&&r.owner?' · '+esc(r.owner)+' birikimi':''}${r.lent&&r.since?' · '+fmtDY(r.since)+' verdim':''}${r.lent&&r.dueDate?` · geri ${fmtDY(r.dueDate)}`:''}${r.note?' · '+esc(r.note):''}</div>${r.costTL>0?`<div class="small muted">${r.buyDate?fmtDY(r.buyDate)+' · ':''}alış ${TL(r.costTL)}</div>${pnlLine(pnl([r],P))}`:''}</div><div class="amt">${TL(r.val)}</div></div>`;
       const types=[...new Set(g.rows.map(r=>r.type))];
       return `<section class="sec" style="margin-top:12px"><h2>${esc(g.name)}<span class="sp"></span><span class="sum" style="color:var(--gold)">${TL(g.val)}</span></h2>${types.length>1?pnlLine(pnl(g.rows,P)):''}
@@ -1212,7 +1225,7 @@ function assetsSheet(){
           ${ct>0?`<div class="small muted">Toplam maliyet ${TL(ct)}${t!=='tl'&&cq>0?` · ortalama ${TL2(ct/cq)} / ${t==='gram'||t==='gumus'?'gr':t==='usd'?'$':t==='eur'?'€':'adet'}`:''}${cq<q-0.0001?` · ${nfq.format(q-cq)} için maliyet girilmedi`:''}</div>${pnlLine(pnl(L,P),false)}`:'<div class="small muted">Maliyet girilmedi</div>'}
           <details style="margin-top:4px"><summary class="small">Alışları göster</summary>${L.map(lot).join('')}</details></div>`}).join('')}</section>`}).join('')||'<section class="sec" style="margin-top:12px"><div class="empty">Varlık yok.</div></section>'}
     <button class="btn" style="width:100%;margin-top:12px" data-act="newasset">+ Varlık ekle</button>
-    <section class="sec" style="margin-top:12px"><h2>Fiyatlar<span class="sp"></span><button class="linkbtn" data-act="prices">Güncelle</button></h2><div class="kv">${PRICED.map(k=>[k,ASSET_TYPES[k]]).map(([k,l])=>`<span class="k">${l}</span><b>${P[k]?TL2(num(P[k])):'—'}</b>`).join('')}${num(P.ceyrek)?`<span class="k">Yarım altın (2 çeyrek)</span><b>${TL2(aPrice(P,'yarim'))}</b><span class="k">Tam altın (4 çeyrek)</span><b>${TL2(aPrice(P,'tam'))}</b>`:''}</div></section>`);
+    <section class="sec" style="margin-top:12px"><h2>Fiyatlar<span class="sp"></span><button class="linkbtn" data-act="kurnow">Şimdi çek</button><button class="linkbtn" data-act="prices" style="margin-left:10px">Elle</button></h2><div class="small muted" style="margin-bottom:6px">Gram, çeyrek, dolar, euro: Harem Altın alış fiyatı, internet varken 15 dakikada bir. Gümüşü elle gir.</div><div class="kv">${PRICED.map(k=>[k,ASSET_TYPES[k]]).map(([k,l])=>`<span class="k">${l}</span><b>${P[k]?TL2(num(P[k])):'—'}</b>`).join('')}${num(P.ceyrek)?`<span class="k">Yarım altın (2 çeyrek)</span><b>${TL2(aPrice(P,'yarim'))}</b><span class="k">Tam altın (4 çeyrek)</span><b>${TL2(aPrice(P,'tam'))}</b>`:''}</div></section>`);
 }
 function ledgerSheet(){
   const open=S.debts.filter(d=>!d.paid),closed=S.debts.filter(d=>d.paid);
@@ -1694,6 +1707,7 @@ document.addEventListener('click',async e=>{
     case 'account':accountSheet(id);break;
     case 'accgroup':accGroupSheet(id);break;
     case 'cashsheet':cashSheet();break;
+    case 'kurnow':toast('Kurlar çekiliyor…');await autoPrices(true);setTimeout(()=>{assetsSheet();toast(S.prices?.autoErr?'Alınamadı, son kur kullanılıyor':'Kurlar güncellendi')},300);break;
     case 'analiz':anInit();AN.path=[];AN.filt=false;analizSheet();break;
     case 'ango':AN.path.push(el.dataset.k||'Genel');analizSheet();document.getElementById('sheet')?.scrollTo?.(0,0);break;
     case 'anjump':AN.path=['G',el.dataset.k];analizSheet();break;
