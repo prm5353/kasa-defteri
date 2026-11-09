@@ -837,6 +837,9 @@ function monthPlan(mk){
     if(got>0)ins.push({k:'plan',id:pl.id,title:pl.who||pl.name,date,amount:got,done:true,tag:pl.name});
     else if(left>0.5&&mk>=t.slice(0,7))ins.push({k:'plan',id:pl.id,title:pl.who||pl.name,date,amount:Math.min(pl.installment||left,left),done:false,tag:pl.name});
   });
+  /* kart payına sayılmayan fazla ödemeler: o kişiye geri verilecek / onun için kullanılacak para, giderlerde */
+  excessList().forEach(e=>{const cur=t.slice(0,7);const disp=e.left>0.5&&e.date.slice(0,7)<cur?cur:e.date.slice(0,7);if(disp!==mk)return;
+    outs.push({k:'personout',id:e.id,title:personName(e.pid),date:e.left>0.5&&e.date<t?t:e.date,amount:e.left>0.5?e.left:e.ex,done:e.left<=0.5,tag:e.left<=0.5?'fazla ödeme · verildi':`fazla ödeme (${fmtD(e.date)})${e.ex-e.left>0.5?` · ${TL(e.ex-e.left)} verildi`:''}`})});
   S.debts.filter(d=>d.dueDate&&d.dueDate.slice(0,7)===mk&&(!d.paid||d.closedAt?.slice(0,7)===mk)).forEach(d=>(d.dir==='alacak'?ins:outs).push({k:'debt',id:d.id,title:d.who,date:d.dueDate,amount:d.paid?d.amount:debtLeft(d),done:!!d.paid,tag:d.note||''}));
   const free={};S.tx.filter(x=>x.type==='gelir'&&!x.recId&&!x.planId&&x.date.slice(0,7)===mk).forEach(x=>{const k=x.source||'Diğer';const o=free[k]=free[k]||{amount:0,n:0,date:x.date};o.amount+=x.amount;o.n++;if(x.date>o.date)o.date=x.date});
   Object.entries(free).forEach(([k,o])=>ins.push({k:'income',id:k,title:k,date:o.date,amount:o.amount,done:true,tag:o.n>1?`${o.n} kayıt`:''}));
@@ -961,6 +964,7 @@ function bankCmpLine(c,open){const bc=c.bankCheck&&c.bankCheck.cut===open.cut?c.
 function planItemSheet(k,id){
   const mk=planMonth;
   if(k==='card'){goTab('kart');return}
+  if(k==='personout'){excessSheet(id);return}
   if(k==='estcash'){planSheet(id);return}
   if(k==='person'){personSheet(id);return}
   if(k==='plan'){ledgerSheet();return}
@@ -1037,12 +1041,19 @@ function heldNote(names){const m=heldByAcc();const by={};names.forEach(n=>(m[n]|
 /* başkalarından alıp henüz karta yatırmadığım ve hesabımda duran para: benim param değil */
 function heldTotal(){const M=heldByAcc();return Object.values(M).flat().reduce((a,x)=>a+x.amt,0)}
 let PENDPAY=null;
+function excessList(){return S.tx.filter(x=>x.type==='tahsilat'&&x.cardAlloc!=null&&x.amount-x.cardAlloc>0.5).map(x=>{const ex=x.amount-x.cardAlloc;const back=S.tx.filter(v=>v.excessOf===x.id).reduce((a,v)=>a+v.amount,0);return {id:x.id,pid:x.personId,date:x.date,ex,left:Math.max(0,ex-back)}})}
+function excessSheet(id){const e=excessList().find(x=>x.id===id);if(!e)return;const x=S.tx.find(t=>t.id===id);
+  openSheet(head(esc(personName(e.pid))+' · fazla ödeme')+`<section class="sec"><div class="total">${TL(e.left)}</div><div class="small muted">${fmtDY(e.date)} tarihli ${TL(x.amount)} ödemenin kart payına sayılmayan ${TL(e.ex)}'si${e.ex-e.left>0.5?` · ${TL(e.ex-e.left)} verildi`:''}</div></section>
+    ${e.left>0.5?`<form data-form="excessback" style="margin-top:12px"><input type="hidden" name="id" value="${id}"><label class="f">Tutar<input name="amount" type="number" step="0.01" value="${Math.round(e.left*100)/100}"></label>
+      <label class="f">Hangi hesaptan<select name="account">${accOpts(x.account||'')}</select></label><label class="f">Tarih<input type="date" name="date" value="${today()}"></label>
+      <button class="btn" type="submit" style="width:100%">Verdim / onun için kullandım</button></form>
+      <button class="btn ghost" style="width:100%;margin-top:8px" data-act="excessapply" data-id="${id}">Vazgeçtim, sonraki kart payından düş</button>`:''}`)}
 function payAsk(){const P=PENDPAY;const ex=P.t.amount-P.first;const nx=P.next[0];
   openSheet(head('Fazla ödeme')+`<section class="sec"><p style="margin:0 0 8px">${esc(personName(P.t.personId))} <b>${TL(P.t.amount)}</b> gönderdi. ${esc(P.line.card.name)} · ${fmtD(P.line.due)} payı <b>${TL(P.first)}</b>, yani <b>${TL(ex)} fazla</b>.</p>
     <p class="small muted" style="margin:0 0 12px">${nx?`Fazlası bir sonraki payından (${esc(nx.card.name)} · ${fmtD(nx.due)} · ${TL(nx.left)}) düşülsün mü?`:'Şu an başka açık payı yok. Fazlası ileride doğacak payından düşülsün mü?'}</p>
     <button class="btn" style="width:100%" data-act="payyes">Evet, sonraki ödemesinden düş</button>
     <button class="btn ghost" style="width:100%;margin-top:8px" data-act="payno">Hayır, sadece bu ödemeye say (${TL(ex)} ayrı kalsın)</button>
-    <p class="small muted" style="margin-top:10px">"Hayır" dersen fazlası kart paylarına sayılmaz; kişinin hesabında ayrı görünür (ör. başka bir borç ya da emanet).</p></section>`)}
+    <p class="small muted" style="margin-top:10px">"Hayır" dersen fazlası kart paylarına sayılmaz; aylık tabloda <b>Giderler</b>'e ${esc(personName(P.t.personId))} adına eklenir (geri vereceğin ya da onun için kullanacağın para). Verince oradan "Verdim" diye işaretlersin.</p></section>`)}
 function heldSection(){const H=heldMoney();if(!H.length)return '';const M=heldByAcc();H.forEach(o=>{o.inHand=0;o.at={};Object.entries(M).forEach(([k,l])=>l.forEach(x=>{if(x.pid===o.pid&&x.amt>0.5){o.inHand+=x.amt;o.at[k]=x.amt}}));o.used=Math.max(0,o.held-o.inHand)});const tot=H.reduce((a,o)=>a+o.inHand,0);
   return `<section class="sec"><h2>Elimde duran, karta ödenecek para<span class="sp"></span><span class="sum">${TL(tot)}</span></h2>
     ${H.map(o=>`<div class="owe tap" data-act="person" data-id="${o.pid}"><div class="sumline" style="font-weight:700"><span>${esc(personName(o.pid))} · elimde</span><b>${TL(o.inHand)}</b></div>
@@ -1923,6 +1934,7 @@ document.addEventListener('click',async e=>{
     case 'accgroup':accGroupSheet(id);break;
     case 'cashsheet':cashSheet();break;
     case 'nwsheet':nwSheet();break;
+    case 'excessapply':{const x=S.tx.find(t=>t.id===id);if(x){const o={...x};const back=S.tx.filter(v=>v.excessOf===x.id).reduce((a,v)=>a+v.amount,0);if(back>0.5)o.cardAlloc=x.amount-back;else delete o.cardAlloc;await saveTx([o]);closeSheet();toast('Fazlası sonraki kart payından düşülecek')}break}
     case 'payyes':if(PENDPAY){await saveTx([PENDPAY.t]);PENDPAY=null;closeSheet();toast('Kaydedildi · fazlası sonraki ödemesinden düşüldü')}break;
     case 'payno':if(PENDPAY){await saveTx([{...PENDPAY.t,cardAlloc:Math.round(PENDPAY.first*100)/100}]);PENDPAY=null;closeSheet();toast('Kaydedildi · fazlası ayrı tutuldu')}break;
     case 'projsheet':projSheet();break;
@@ -2124,6 +2136,8 @@ document.addEventListener('submit',async e=>{
     case 'bankcmp':{const c=cardById(g('id'));const st=cardState(c);await put({...c,bankCheck:{cut:st.open.cut,amount:num(g('amount')),at:today()}});closeSheet();break}
     case 'apikey':{ls.set('kd_apikey',String(g('key')||'').trim());toast('Anahtar kaydedildi');break}
     case 'prodedit':{const p=S.prod.map[g('pid')];p.name=g('name').trim()||p.name;p.group=g('group');await saveProd();_ps=null;closeSheet();render();break}
+    case 'excessback':{const x=S.tx.find(t=>t.id===g('id'));const v=num(g('amount'));if(!(v>0)){toast('Tutar gir');return}
+      await saveTx([{id:newId(),type:'verdim',personId:x.personId,amount:v,date:g('date')||today(),account:g('account')||'',merchant:'Fazla ödemesini geri verdim',excessOf:x.id,ts:Date.now(),via:'manuel'}]);closeSheet();toast('Kaydedildi');break}
     case 'catplan':{const mk=g('mk');const months={...(S.catplan?.months||{})};const cur={...(months[mk]||{})};
       f.querySelectorAll('input[name^="c_"]').forEach(inp=>{const c=inp.name.slice(2);const v=num(inp.value);if(String(Math.round(v))!==inp.dataset.orig||cur[c]!=null)cur[c]=Math.max(0,v)});
       months[mk]=cur;await put({id:'catplan',k:'catplan',months});S.catplan={months};toast('Plan kaydedildi');planSheet(mk);break}
