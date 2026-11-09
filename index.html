@@ -1130,12 +1130,18 @@ function fillTxList(){
   const groups={};list.slice(0,400).forEach(x=>(groups[x.date]=groups[x.date]||[]).push(x));
   el.innerHTML=list.length?Object.entries(groups).map(([d,l])=>`<div class="daygrp">${fmtDY(d)}</div>${l.map(txRow).join('')}`).join(''):`<div class="empty">${!q&&useArch(viewMonth)&&S.arch.some(x=>x.date.slice(0,7)===viewMonth)?'Bu ayın Money Pro kayıtları Arşiv sekmesinde.':'Bu filtrede kayıt yok.'}</div>`;
 }
-function catSheet(c){
-  const by=mineCats(viewMonth)[c];if(!by)return;const items=[...by.items].sort((a,b)=>b.pdate.localeCompare(a.pdate));
+function catSheet(c,sub){
+  const by=mineCats(viewMonth)[c];if(!by)return;let items=[...by.items].sort((a,b)=>b.pdate.localeCompare(a.pdate));
+  const hasSubs=items.some(p=>p.sub);
+  if(sub!=null){items=items.filter(p=>(p.sub||'')===sub);const t=items.reduce((a,p)=>a+p.pamount,0);
+    openSheet(head(esc(c)+' › '+esc(sub||'Genel'))+`<div class="crumbs"><button class="linkbtn" data-act="cat" data-c="${esc(c)}">‹ ${esc(c)}</button></div><section class="sec"><div style="display:flex;gap:10px;align-items:center"><span class="anic big">${catIcon(c,sub)}</span><div><div class="total">${TL(t)}</div><div class="small muted">${monthLabel(viewMonth)} · ${items.length} kayıt · ${esc(c)} içinde %${by.v>0?(t/by.v*100).toFixed(1).replace('.',','):0}</div></div></div></section>
+      <section class="sec" style="margin-top:12px">${items.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')}</section>`);return}
   const hist=[5,4,3,2,1,0].map(i=>{const k=shiftMonth(viewMonth,-i);return {k,v:mineCats(k)[c]?.v||0}});const mx=Math.max(1,...hist.map(h=>h.v));
   openSheet(head(esc(c)+' · '+monthLabel(viewMonth))+`<section class="sec"><div class="total">${TL(by.v)}</div>
     <div style="display:flex;gap:6px;align-items:flex-end;height:78px;margin-top:10px">${hist.map(h=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><span style="font-size:10px" class="muted">${nf0.format(Math.round(h.v/1000))}b</span><div style="width:100%;background:${h.k===viewMonth?'var(--accent)':'var(--muted)'};opacity:${h.k===viewMonth?1:.45};border-radius:4px;height:${Math.max(2,Math.max(0,h.v)/mx*44)}px"></div><span class="small muted">${AYK[+h.k.slice(5)-1]}</span></div>`).join('')}</div></section>
-    <section class="sec" style="margin-top:12px">${items.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')}</section>`);
+    ${hasSubs?(()=>{const g={};items.forEach(p=>{const k=p.sub||'';(g[k]=g[k]||{k,v:0,n:0}).v+=p.pamount;g[k].n++});const L=Object.values(g).sort((a,b)=>b.v-a.v);const mx=Math.max(1,...L.map(x=>x.v));
+      return `<section class="sec" style="margin-top:12px"><h2>Alt başlıklar</h2>${L.map((x,i)=>`<div class="anrow tap" data-act="catsub" data-c="${esc(c)}" data-s="${esc(x.k)}"><span class="anic">${catIcon(c,x.k)}</span><div class="main"><div class="sumline" style="padding:0"><span style="font-weight:600">${esc(x.k||'Genel')}</span><b>${TL(x.v)}</b></div><div class="bar" style="height:6px;margin-top:5px"><i style="width:${Math.max(0,x.v)/mx*100}%;background:${PAL[i%PAL.length]}"></i></div><div class="small muted" style="margin-top:3px">%${by.v>0?(x.v/by.v*100).toFixed(1).replace('.',','):0} · ${x.n} kayıt</div></div>${chev}</div>`).join('')}</section>`})()
+    :`<section class="sec" style="margin-top:12px">${items.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')}</section>`}`);
 }
 
 /* ---------- arşiv ---------- */
@@ -1738,6 +1744,7 @@ document.addEventListener('click',async e=>{
     case 'aprev':case 'anext':{const ks=archKeys();const i=ks.indexOf(archMonth)+(a==='aprev'?-1:1);if(i>=0&&i<ks.length){archMonth=ks[i];render()}break}
     case 'who':txWho=el.dataset.v;fillTxList();document.querySelectorAll('[data-act="who"]').forEach(b=>b.classList.toggle('on',b.dataset.v===txWho));break;
     case 'cat':catSheet(el.dataset.c);break;
+    case 'catsub':catSheet(el.dataset.c,el.dataset.s);break;
     case 'fisview':fisView=el.dataset.v;ls.set('kd_fis',fisView);render();break;
     case 'newtx':openSheet(formTx(null,el.dataset.type));break;
     case 'edittx':{const t=S.tx.find(x=>x.id===id);if(t)openSheet(formTx(t));break}
