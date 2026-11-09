@@ -208,6 +208,25 @@ details summary{cursor:pointer;font-weight:600;font-size:14px}
 .fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom));width:58px;height:58px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);font-size:30px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;z-index:20;line-height:1}
 .qa-amt{font-family:var(--f-display);font-size:34px;font-weight:700;width:100%;border:0;border-bottom:2px solid var(--line);background:none;color:var(--ink);padding:6px 0;text-align:center}
 .qa-amt:focus{outline:none;border-color:var(--accent)}
+.pgrp{margin-top:8px}
+.pgrp .ph{display:flex;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:2px 2px 3px;border-bottom:1px solid var(--line)}
+.pgrp .ph span{letter-spacing:0}
+.pgrp.muted{opacity:.6}
+.pgrp.estg .ph{color:var(--warn)}
+.pgrp.estg .pl2 b{color:var(--warn)}
+.pl2{padding:6px 2px;border-bottom:1px solid color-mix(in srgb,var(--line) 50%,transparent)}
+.pl2:last-child{border-bottom:0}
+.pl2 .r1{display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.pl2 .n{font-weight:600;font-size:13.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl2 b{white-space:nowrap;font-size:13.5px}
+.pl2 .r2{font-size:11.5px;color:var(--muted);margin-top:1px}
+.pl2.done{opacity:.5}
+.ptot{display:flex;justify-content:space-around;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:13px}
+.ptot div{display:flex;flex-direction:column;align-items:center;gap:2px}
+.ptot span{color:var(--muted);font-size:11.5px}
+.pdone{margin-top:10px;font-size:13px}
+.pdone summary{color:var(--muted);cursor:pointer;padding:4px 0}
+.padd{margin-top:12px;flex-wrap:wrap}
 .estbox{margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)}
 .estbox .pl .pr b{color:var(--warn)}
 .planrow{display:flex;align-items:center;gap:10px;padding-block:8px;border-top:1px solid var(--line)}
@@ -451,7 +470,7 @@ function cardTotals(c){
   const billed=ps.filter(p=>(p.pcut||p.pdate)<=open),fut=ps.filter(p=>(p.pcut||p.pdate)>open);
   const by={};billed.forEach(p=>by[p.personId]=(by[p.personId]||0)+p.pamount);
   const spent=billed.reduce((a,p)=>a+p.pamount,0);
-  const pays=S.tx.filter(t=>t.type==='transfer'&&t.toCardId===c.id);const paid=pays.reduce((a,t)=>a+t.amount,0);
+  const pays=S.tx.filter(t=>t.type==='transfer'&&t.toCardId===c.id&&t.date<=today());const paid=pays.reduce((a,t)=>a+t.amount,0);
   return {spent,paid,debt:spent-paid,futT:fut.reduce((a,p)=>a+p.pamount,0),by,billed,fut,pays,open};
 }
 /* kartta benim borcum: ödemeler kişilerin paylarına oranla dağıtılır; henüz düşmemiş taksitler ayrı */
@@ -469,8 +488,9 @@ function cardInstallments(c){
 const isCashAcc=a=>asciiUp(a.name)==='NAKIT';
 function accBalance(a){
   const at=a.balanceAt||0;let b=a.balanceAt?num(a.balance):0;const cashA=isCashAcc(a);const mine=n=>n===a.name||(cashA&&!n);
+  const td=today();
   S.tx.forEach(t=>{
-    if((t.ts||0)<=at)return;const amt=t.amount||0;
+    if((t.ts||0)<=at)return;if(t.date>td)return;/* ileri tarihli: o gün gelene kadar bakiyeye dokunmaz */const amt=t.amount||0;
     if(mine(t.account)&&!t.cardId){if(t.type==='gelir'||t.type==='tahsilat')b+=amt;else if(t.type==='gider'||t.type==='verdim'||t.type==='transfer'||t.type==='odeme')b-=amt}
     if(t.type==='transfer'&&!t.toCardId&&(t.toAccount===a.name||(cashA&&!t.toAccount)))b+=amt;
   });
@@ -831,6 +851,11 @@ const ticariAmt=items=>items.filter(p=>p.category==='Ticari Gider').reduce((a,p)
 function cardDuesInMonth(c,mk){if(!hasDays(c))return [];return [...new Set(cutCands(c,mk+'-15'))].filter(cut=>dueFor(c,cut).slice(0,7)===mk).map(cut=>stmt(c,cut))}
 function monthPlan(mk){
   const ins=[],outs=[];const t=today();
+  /* ileri tarihli hesap hareketleri: o güne kadar bekleyen gider/gelir olarak plana girer */
+  S.tx.forEach(x=>{if(x.date<=t||x.date.slice(0,7)!==mk||x.cardId||x.recId)return;const acc=x.account||'Nakit';
+    if(x.type==='gider'||x.type==='verdim'||x.type==='odeme')outs.push({k:'sched',id:x.id,title:x.merchant||x.note||(x.type==='verdim'?personName(x.personId):catLabel(x.category,x.sub))||'Ödeme',date:x.date,amount:x.amount,done:false,stag:acc});
+    else if(x.type==='transfer'&&x.toCardId)outs.push({k:'sched',id:x.id,title:(cardById(x.toCardId)?.name||'Kart')+' ödemesi',date:x.date,amount:x.amount,done:false,stag:acc});
+    else if(x.type==='gelir'||x.type==='tahsilat')ins.push({k:'sched',id:x.id,title:x.merchant||x.source||(x.personId?personName(x.personId):'Gelir'),date:x.date,amount:x.amount,done:false,stag:acc,info:x.type==='tahsilat'&&x.personId&&x.personId!==ME})});
   S.recs.forEach(r=>{const o=recOcc(r,mk);if(!o)return;(r.dir==='gelir'?ins:outs).push({k:'rec',id:r.id,title:r.name,date:o.date,amount:o.amount,done:o.done,tag:o.no?(o.count?`${o.no}/${o.count}`:`${o.no}`):'',goal:r.dir==='hedef'})});
   S.cards.filter(c=>!c.ticari).forEach(c=>cardDuesInMonth(c,mk).forEach(s=>{
     const tic=ticariAmt(s.items);const prev=prevCut(c,s.cut);const open=s.cut>=t;
@@ -905,6 +930,10 @@ function cashFlow(mk){
   const short=[];ev.forEach(e=>{bal+=e.s*e.x.amount;if(e.s<0&&bal<-0.5){const miss=Math.min(e.x.amount,-bal);e.x.short=miss;short.push({x:e.x,d:e.d,miss})}});
   return {P,start,end:bal,short,withBal:S.accounts.some(a=>a.balanceAt)};
 }
+/* aylık tablo satırı: ad ve tutar, altında sadece tarih ve kısa not; ayrıntı dokununca */
+function planRow(x){const note=x.stag||(x.k==='card'&&x.tag&&x.tag.includes('dönem açık')?'dönem açık':'')||(x.k==='rec'&&x.tag?x.tag:'');
+  return `<div class="pl2 tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="r1"><span class="n">${esc(x.title)}</span><b>${x.est?'~':''}${TL(x.amount)}</b></div><div class="r2">${fmtD(x.date)}${note?' · '+esc(note):''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' ✓':''}</div></div>`}
+const grp=(title,items,cls)=>items.length?`<div class="pgrp ${cls||''}"><div class="ph">${title}<span>${TL(items.reduce((a,x)=>a+x.amount,0))}</span></div>${items.sort((a,b)=>a.date.localeCompare(b.date)).map(planRow).join('')}</div>`:'';
 function planLine(x){
   return `<div class="pl tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pr"><span class="pn">${esc(x.title)}</span><b>${TL(x.amount)}</b></div><div class="pd">${fmtD(x.date)}${x.tag?` · ${esc(x.tag)}`:''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' · ✓':''}${x.mine!=null&&Math.abs(x.mine-x.amount)>1?` · benim ${TL(x.mine)}`:''}${x.goal?' · hedef':''}</div></div>`;
 }
@@ -926,24 +955,30 @@ function planTable(mk){
   </section>`;
 }
 function planTableFlow(mk,F){
-  const P=F.P;const pin=P.ins.filter(x=>!x.done&&!x.info),pinfo=P.ins.filter(x=>!x.done&&x.info),pall=P.outs.filter(x=>!x.done);const pout=pall.filter(x=>!x.est),pest=pall.filter(x=>x.est);
-  const inT=F.start+pin.reduce((a,x)=>a+x.amount,0),outT=pout.reduce((a,x)=>a+x.amount,0),estT=pest.reduce((a,x)=>a+x.amount,0);
-  const doneIn=P.ins.filter(x=>x.done),doneOut=P.outs.filter(x=>x.done);const goals=P.outs.filter(x=>x.goal);const cur=mk===today().slice(0,7);
-  const startLine=`<div class="pl ${cur?"tap":""}" ${cur?"data-act=\"cashsheet\"":""}><div class="pr"><span class="pn">${cur?'Hesaplarımdaki para':'Önceki aydan devreden'}</span><b style="color:${F.start<0?'var(--crit)':'inherit'}">${TL(F.start)}</b></div><div class="pd">${cur?(F.withBal?'bugün'+(heldTotal()>0.5?` · kişilerin karta ödenecek ${TL(heldTotal())}'si hariç`:''):'<b style="color:var(--warn)">bakiyeleri gir</b>'):'tahmini'}</div></div>`;
-  const warn=F.short.length?`<div class="banner" style="background:color-mix(in srgb,var(--crit) 16%,transparent);margin-top:10px;flex-direction:column;align-items:stretch;gap:4px"><b>⚠ Para bulman gereken ödemeler</b>${F.short.map(s=>`<div class="sumline small"><span>${fmtD(s.d)} · ${esc(s.x.title)}</span><b style="color:var(--crit)">${TL(s.miss)} eksik</b></div>`).join('')}<div class="small muted">Hesaplarındaki para ve o tarihe kadar gelecek alacaklar bu ödemeleri karşılamıyor.</div></div>`:'';
-  return `<section class="sec plan">${monthBar(mk,'pprev','pnext')}<div class="btnrow" style="justify-content:center;margin-top:6px"><button class="btn ghost sm" data-act="plansheet">Harcama planı</button><button class="btn ghost sm" data-act="projsheet">Nakit akışı</button></div>${warn}
+  const P=F.P;const cur=mk===today().slice(0,7);
+  const pin=P.ins.filter(x=>!x.done&&!x.info),pinfo=P.ins.filter(x=>!x.done&&x.info),pall=P.outs.filter(x=>!x.done);
+  const cards=pall.filter(x=>x.k==='card'),goals=pall.filter(x=>x.goal),send=pall.filter(x=>['sched','debt','personout'].includes(x.k)),est=pall.filter(x=>x.est);
+  const fixed=pall.filter(x=>!cards.includes(x)&&!goals.includes(x)&&!send.includes(x)&&!est.includes(x));
+  const kesin=[...cards,...goals,...send,...fixed];const inT=F.start+pin.reduce((a,x)=>a+x.amount,0),outT=kesin.reduce((a,x)=>a+x.amount,0),estT=est.reduce((a,x)=>a+x.amount,0);
+  const done=[...P.ins.filter(x=>x.done&&!x.info),...P.outs.filter(x=>x.done)];
+  const held=cur?heldTotal():0;
+  const warn=F.short.length?`<div class="banner crit" style="margin-top:10px;flex-direction:column;align-items:stretch;gap:4px"><b>⚠ Para bulman gereken ödemeler</b>${F.short.map(s=>`<div class="sumline small"><span>${fmtD(s.d)} · ${esc(s.x.title)}</span><b style="color:var(--crit)">${TL(s.miss)} eksik</b></div>`).join('')}</div>`:'';
+  return `<section class="sec plan">${monthBar(mk,'pprev','pnext')}${warn}
     <div class="cols" style="margin-top:10px">
-      <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>${startLine}${pin.map(planLine).join('')}${pinfo.length?`<div class="pd" style="margin-top:4px">Kendi günlerinde ödeyecekler (hesaba katılmaz)</div>${pinfo.map(x=>planLine({...x,muted:true})).join('')}`:''}${doneIn.length?`<div class="pd" style="margin-top:4px">Gelenler (hesaba girdi)</div>${doneIn.map(planLine).join('')}`:''}
-        <button class="addl" data-act="addticari">+ Ticari gelir</button><button class="addl" data-act="newrec" data-dir="gelir">+ Sabit gelir</button></div>
-      <div class="col"><div class="eyebrow">Giderler · kesin</div>${pout.map(planLine).join('')||'<div class="small muted">Bekleyen kesin gider yok</div>'}
-        ${pest.length?`<div class="estbox"><div class="eyebrow" style="color:var(--warn)">Tahmini · henüz harcanmadı</div>${pest.map(planLine).join('')}</div>`:''}${doneOut.length?`<div class="pd" style="margin-top:4px">Ödenenler</div>${doneOut.map(planLine).join('')}`:''}
-        <button class="addl" data-act="newrec" data-dir="gider">+ Sabit gider</button>${goals.length?'':'<button class="addl" data-act="newrec" data-dir="hedef">+ Birikim hedefi</button>'}</div>
+      <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>
+        <div class="pgrp"><div class="pl2 ${cur?'tap':''}" ${cur?'data-act="cashsheet"':''}><div class="r1"><span class="n">${cur?'Hesaplarımda':'Devreden'}</span><b style="color:${F.start<0?'var(--crit)':'var(--plus)'}">${TL(F.start)}</b></div><div class="r2">${cur?(F.withBal?'bugün':'<span style="color:var(--warn)">bakiyeleri gir</span>'):'tahmini'}${held>0.5?` · ${TL(held)} kişilerin`:''}</div></div></div>
+        ${grp('Gelecek',pin)}
+        ${pinfo.length?grp('Kişiler öder',pinfo.map(x=>({...x,muted:true})),'muted'):''}</div>
+      <div class="col"><div class="eyebrow">Giderler</div>
+        ${grp('Kredi kartları',cards)}${grp('Yatırım hedefi',goals)}${grp('Gönderilecek',send)}${grp('Sabit giderler',fixed)}
+        ${!kesin.length?'<div class="small muted" style="padding:6px 2px">Bekleyen gider yok</div>':''}
+        ${est.length?grp('Tahmini harcama',est,'estg'):''}</div>
     </div>
-    <div class="cols tot"><div><span>Toplam</span><b style="color:var(--plus)">${TL(inT)}</b></div><div style="display:block;padding:0"><div><span>Kesin</span><b>${TL(outT)}</b></div>${estT>0.5?`<div style="margin-top:3px"><span>Tahmini</span><b style="color:var(--warn)">~${TL(estT)}</b></div>`:''}</div></div>
-    <div class="kalan"><span>KESİNLERE GÖRE KALAN</span><b style="color:${inT-outT>=0?'var(--plus)':'var(--crit)'}">${TL(inT-outT)}</b></div>
-    ${estT>0.5?`<div class="kalan" style="padding-top:0"><span>TAHMİNLERLE AY SONU</span><b style="font-size:22px;color:${F.end>=0?'var(--plus)':'var(--crit)'}">~${TL(F.end)}</b></div>`:''}
-    ${goals.length?`<div class="small muted" style="text-align:center">Birikim hedefin (${TL(P.goalT)}) giderlere dahil.</div>`:''}
-    <div class="small muted" style="text-align:center;margin-top:4px">Toplamlara sadece bekleyenler girer; gelen ve ödenenler zaten hesaplarındaki paraya yansıdı.</div>
+    <div class="ptot"><div><span>Gelir</span><b style="color:var(--plus)">${TL(inT)}</b></div><div><span>Gider</span><b>${TL(outT)}</b></div>${estT>0.5?`<div><span>Tahmini</span><b style="color:var(--warn)">~${TL(estT)}</b></div>`:''}</div>
+    <div class="kalan"><span>KALAN</span><b style="color:${inT-outT>=0?'var(--plus)':'var(--crit)'}">${TL(inT-outT)}</b></div>
+    ${estT>0.5?`<div class="small muted" style="text-align:center;margin-top:-4px">Tahmini harcamalarla ay sonu <b style="color:${F.end>=0?'var(--plus)':'var(--crit)'}">~${TL(F.end)}</b></div>`:''}
+    ${done.length?`<details class="pdone"><summary>Bu ay gerçekleşenler (${done.length})</summary>${done.sort((a,b)=>a.date.localeCompare(b.date)).map(planRow).join('')}</details>`:''}
+    <div class="chips padd"><button data-act="newrec" data-dir="gelir">+ Sabit gelir</button><button data-act="addticari">+ Ticari gelir</button><button data-act="newrec" data-dir="gider">+ Sabit gider</button><button data-act="newtx" data-type="gider">+ İleri tarihli ödeme</button>${P.outs.some(x=>x.goal)?'':'<button data-act="newrec" data-dir="hedef">+ Yatırım hedefi</button>'}<button data-act="plansheet">Harcama planı</button><button data-act="projsheet">Nakit akışı</button></div>
   </section>`;
 }
 function cashSheet(){const accs=S.accounts.map(a=>({a,b:accBalance(a)}));
@@ -986,6 +1021,7 @@ function planItemSheet(k,id){
   const mk=planMonth;
   if(k==='card'){goTab('kart');return}
   if(k==='personout'){excessSheet(id);return}
+  if(k==='sched'){const x=S.tx.find(t=>t.id===id);if(x){openSheet(formTx(x));return}}
   if(k==='estcash'||k==='estcard'){planSheet(id);return}
   if(k==='person'){personSheet(id);return}
   if(k==='plan'){ledgerSheet();return}
