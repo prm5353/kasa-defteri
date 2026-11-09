@@ -257,6 +257,13 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const newId=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-5);
 const num=v=>{if(typeof v==='number')return isFinite(v)?v:0;let s=String(v??'').trim();if(/,\d{1,3}$/.test(s)&&s.includes('.'))s=s.replace(/\./g,'');s=s.replace(',','.');const n=parseFloat(s);return isFinite(n)?n:0};
 const r2=n=>Math.round(n*100)/100;
+/* ekrandaki tutarı Türkçe biçime göre çözer: "2.487,50" → 2487.5, "2.487" → 2487, "45,9" → 45.9, "1,250.00" → 1250 */
+function trAmount(v){if(typeof v==='number')return isFinite(v)?v:0;let s=String(v??'').replace(/[^\d.,-]/g,'');if(!s)return 0;
+  const lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');
+  if(lc>=0&&ld>=0){if(lc>ld)s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'')}
+  else if(lc>=0){s=/^-?\d{1,3}(,\d{3})+$/.test(s)?s.replace(/,/g,''):s.replace(',','.')}
+  else if(ld>=0){if(/^-?\d{1,3}(\.\d{3})+$/.test(s))s=s.replace(/\./g,'')}
+  const n=parseFloat(s);return isFinite(n)?n:0}
 const ls={get(k,d){try{return localStorage.getItem(k)??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 function asciiUp(s){const map={'Ç':'C','Ğ':'G','İ':'I','Ö':'O','Ş':'S','Ü':'U'};return String(s||'').toLocaleUpperCase('tr-TR').replace(/[ÇĞİÖŞÜ]/g,c=>map[c])}
 function normKey(s){const words=asciiUp(s).replace(/[^A-Z ]+/g,' ').split(/\s+/).filter(w=>w.length>=2&&!['TR','TUR','ISTANBUL','ANKARA','IZMIR','POS','AS','LTD','STI','TIC','SAN','VE','MAGAZACILIK','GIDA'].includes(w));return words.slice(0,2).join(' ')}
@@ -441,11 +448,11 @@ async function apiCall(prompt,files,maxTokens){
   const j=await r.json().catch(()=>({}));
   if(!r.ok){const msg=j?.error?.message||('HTTP '+r.status);throw {code:r.status===401?'bad_key':r.status===429?'rate_limited':/credit|balance|billing/i.test(msg)?'no_credit':'api',message:msg}}
   const txt=(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('');
-  try{const u=j.usage||{};const cost=(u.input_tokens||0)*0.10/1e6+(u.output_tokens||0)*0.50/1e6;ls.set('kd_cost',String(num(ls.get('kd_cost','0'))+cost));ls.set('kd_calls',String(num(ls.get('kd_calls','0'))+1))}catch(e){}
+  try{const u=j.usage||{};const pr=/sonnet/.test(MODEL())?[2,10]:[0.10,0.50];const cost=(u.input_tokens||0)*pr[0]/1e6+(u.output_tokens||0)*pr[1]/1e6;ls.set('kd_cost',String(num(ls.get('kd_cost','0'))+cost));ls.set('kd_calls',String(num(ls.get('kd_calls','0'))+1))}catch(e){}
   ls.set('kd_lastraw',txt.slice(0,20000));
   return txt;
 }
-const JSON_RULE='\nYalnızca istenen JSON\'u döndür; başına ya da sonuna açıklama yazma, kod bloğu kullanma. Sayıları JSON sayısı olarak, nokta ondalıkla ve binlik ayırıcı olmadan yaz (ör. 1250.5).';
+const JSON_RULE='\nYalnızca istenen JSON\'u döndür; başına ya da sonuna açıklama yazma, kod bloğu kullanma. Tutar alanlarını ekranda ya da fişte göründüğü gibi metin olarak yaz (ör. "2.487,50"); kendin dönüştürme. Adet ve taksit gibi diğer sayıları düz sayı yaz.';
 const apiSample={json:async(prompt,opts)=>{
   const txt=await apiCall(prompt+JSON_RULE,opts?.images,opts?.maxTokens);
   try{return parseJSON(txt)}catch(e){
@@ -986,6 +993,7 @@ function settingsSheet(){
       <form data-form="cat"><div class="two"><label class="f">Ana kategori<input id="catMain" name="main" required list="mainCats"></label><label class="f">Alt kategori<input id="catSub" name="sub"></label></div><datalist id="mainCats">${Object.keys(catTree()).map(c=>`<option value="${esc(c)}">`).join('')}</datalist><button class="btn sm" type="submit">Ekle</button></form></section>
     <section class="sec"><h2>Görüntü okuma (API anahtarı)</h2><p class="small muted" style="margin:0 0 8px">Ekstre, ekran görüntüsü ve fiş okumak için Anthropic API anahtarın. Sadece bu telefonda saklanır.</p>
       <form data-form="apikey"><label class="f">API anahtarı<input id="apiKey" name="key" type="password" autocomplete="off" placeholder="sk-ant-..." value="${esc(getKey())}"></label><div class="btnrow"><button class="btn sm" type="submit">Kaydet</button><button class="btn sm ghost" type="button" data-act="apitest">Bağlantıyı dene</button></div></form>
+      <label class="f" style="margin-top:10px">Okuma kalitesi<select id="apiModel">${opt('claude-haiku-5-5','Ekonomik · Haiku (görüntü başı ~0,05 ₺)',MODEL())}${opt('claude-sonnet-5-5','Hassas · Sonnet (görüntü başı ~1 ₺)',MODEL())}</select></label>
       <div class="btnrow" style="margin-top:8px"><button class="btn sm ghost" type="button" data-act="copyraw">Son okuma cevabını kopyala</button></div>
       <div class="small muted" style="margin-top:6px">Bu telefonda ${nf0.format(num(ls.get('kd_calls','0')))} okuma · tahmini harcama ${nf2.format(num(ls.get('kd_cost','0')))} $</div></section>
     <section class="sec"><h2>Yedek</h2><p class="small muted" style="margin:0 0 8px">Tüm kayıtlarını telefonuna indir. Ayda bir almanı öneririm; Excel dosyasını her yerde açabilirsin.</p><div class="btnrow"><button class="btn sm" data-act="backupcsv">Excel için indir (CSV)</button><button class="btn sm ghost" data-act="backupjson">Tam yedek (JSON)</button></div>${S.meta.lastBackup?`<div class="small muted" style="margin-top:6px">Son yedek: ${fmtDY(S.meta.lastBackup)}</div>`:''}
@@ -1016,28 +1024,28 @@ const noImgMsg='<p class="small" style="color:var(--warn);margin:0">Görüntü o
 function pdfGuard(){return false}
 async function askImages(prompt,files,onP){const max=sampleCaps?.images?.maxCount||4;const ch=[];for(let i=0;i<files.length;i+=max)ch.push(files.slice(i,i+max));const out=[];for(let i=0;i<ch.length;i++){onP&&onP(i+1,ch.length);out.push(await sampleFn.json(prompt,{images:ch[i]}))}return out}
 const sampleErr=e=>({no_key:'Önce Ayarlar\'dan API anahtarını gir.',bad_key:'API anahtarı geçersiz. Ayarlar\'dan kontrol et.',no_credit:'API kredin bitmiş. Anthropic Console\'dan kredi yükle.',rate_limited:'Çok sık istek gönderildi, bir dakika sonra dene.',invalid_json:'Cevabı çözemedim. Bir kez daha dene; olmazsa Ayarlar → "Son okuma cevabını kopyala" ile bana gönder.',network:'İnternet bağlantısı yok gibi görünüyor.',image_rejected:'Bu görüntü açılamadı. Ekran görüntüsü ya da JPEG fotoğraf yükle.'})[e?.code]||'Okuma başarısız: '+(e?.message||'hata');
-const TX_SCHEMA=`{"merchant":"işyeri/açıklama aynen","amount":123.45,"date":"YYYY-MM-DD","income":false,"installments":1,"installment_no":1,"amount_is_total":true,"holder":"satır bir kart sahibi bölümünün altındaysa o kişinin adı, yoksa boş","category":"listeden kategori ya da null"}`;
+const TX_SCHEMA=`{"merchant":"işyeri/açıklama aynen","amount":"tutar ekranda yazdığı gibi, metin olarak, ör. \\"2.487,50\\"","date":"YYYY-MM-DD","income":false,"installments":1,"installment_no":1,"amount_is_total":true,"holder":"satır bir kart sahibi bölümünün altındaysa o kişinin adı, yoksa boş","category":"listeden kategori ya da null"}`;
 const txRules=()=>`Bugün ${today()}. Yıl yoksa bugünden önceki en yakın tarihi kullan; "Bugün", "Dün" ifadelerini tarihe çevir.
 Kategori listesi: ${catPromptList().join(', ')}.
 amount her zaman pozitif TL. İade/para girişi ise income true. Taksitli işlemde installments toplam taksit, installment_no kaçıncı; satırdaki tutar toplamsa amount_is_total true, o ayın taksitiyse false. Kart borcu ödeme satırlarını ve 0,00 TL kampanya/puan satırlarını atla. Ekstrede "**** 1234 AD SOYAD Harcamaları" gibi kart sahibi başlıkları varsa altındaki satırların holder alanına o adı yaz. Görüntüler aynı listenin kaydırılmış parçalarıysa üst üste binen satırları bir kez yaz.`;
 function holderPerson(h){if(!h)return null;const k=asciiUp(h);const p=S.persons.find(p=>k.includes(asciiUp(p.name.split(' ')[0])));return p?.id||null}
 function rowFromAI(r,src,isCard){
   const inst=Math.max(1,Math.round(num(r.installments)||1)),no=Math.max(1,Math.round(num(r.installment_no)||1));
-  let amount=Math.abs(num(r.amount)),date=/^\d{4}-\d{2}-\d{2}$/.test(r.date||'')?r.date:today();let extra={};
+  let amount=Math.abs(trAmount(r.amount)),date=/^\d{4}-\d{2}-\d{2}$/.test(r.date||'')?r.date:today();let extra={};
   if(inst>1){if(r.amount_is_total===false)amount=amount*inst;if(no>1)extra={nextDate:date,instDone:no-1}}
   const m=matchMerchant(r.merchant),ai=parseCat(r.category);const hp=holderPerson(r.holder);
   const row={merchant:String(r.merchant||'Bilinmeyen').trim(),amount:r2(amount),date,inst,...extra,kind:r.income?(isCard?'iade':'gelir'):'gider',
     cat:m?catVal(m.category,m.sub):(ai?catVal(ai.category,ai.sub):catVal('Diğer','')),personId:hp||cardById(srcParse(src).cardId)?.holderId||ME,known:!!m,remember:!m,src,source:'Diğer'};
   row.dup=dupState(row);row.on=row.dup!=='dup';return row;
 }
-function dedupeChunks(chunks){const out=[];let prev=new Set();chunks.forEach((arr,ci)=>{const keys=new Set();arr.forEach(r=>{const k=[r.date,r2(Math.abs(num(r.amount))),firstWord(r.merchant)].join('|');keys.add(k);if(ci>0&&prev.has(k))return;out.push(r)});prev=keys});return out}
+function dedupeChunks(chunks){const out=[];let prev=new Set();chunks.forEach((arr,ci)=>{const keys=new Set();arr.forEach(r=>{const k=[r.date,r2(Math.abs(trAmount(r.amount))),firstWord(r.merchant)].join('|');keys.add(k);if(ci>0&&prev.has(k))return;out.push(r)});prev=keys});return out}
 function formSS(){return head('Ekran görüntüsünden ekle')+`<form data-form="ss"><label class="f">Hangi kart ya da hesap?<select id="ssSrc" name="src">${srcOpts(defaultSrc())}</select></label><label class="f">Görüntü(ler)<input id="ssFiles" name="files" type="file" accept="${esc(imgAccept())}" multiple required></label><p class="small muted" style="margin:0">Liste uzunsa kaydırıp birkaç görüntü al ya da tam sayfa PDF yükle. Daha önce eklediklerini iki kez eklemem.</p>${imgOk()?'':noImgMsg}<button class="btn" type="submit" id="ssGo">Oku</button><div id="ssStatus" class="small muted"></div></form>`}
 async function runSS(fd){
   const files=[...document.getElementById('ssFiles').files];const src=fd.get('src')||'';const st=document.getElementById('ssStatus'),btn=document.getElementById('ssGo');
   if(!files.length||pdfGuard(files,st))return;if(!sampleFn){st.textContent='Görüntü okuma kullanılamıyor.';return}
   btn.disabled=true;st.innerHTML='<span class="spin"></span> Okunuyor…';
   try{const res=await askImages(`Görüntü(ler) bir Türk bankasının mobil uygulamasındaki kart veya hesap hareketleri ekranı. Her harcamayı ve para girişini çıkar.\n${txRules()}\nYalnızca JSON dizisi döndür: [${TX_SCHEMA}]. Hareket yoksa [].`,files,(i,n)=>{if(n>1)st.innerHTML=`<span class="spin"></span> Okunuyor (${i}/${n})…`});
-    RV={mode:'ss',rows:dedupeChunks(res.map(a=>Array.isArray(a)?a:[])).filter(r=>r&&num(r.amount)!==0).map(r=>rowFromAI(r,src,src.startsWith('c:')))};renderReview();
+    RV={mode:'ss',rows:dedupeChunks(res.map(a=>Array.isArray(a)?a:[])).filter(r=>r&&trAmount(r.amount)!==0).map(r=>rowFromAI(r,src,src.startsWith('c:')))};renderReview();
   }catch(e){btn.disabled=false;st.textContent=sampleErr(e)}
 }
 function formStmt(cardId){const c=cardById(cardId)||S.cards[0];return head('Ekstre yükle ve karşılaştır')+`<form data-form="stmt"><label class="f">Hangi kart?<select id="stCard" name="cardId">${S.cards.map(x=>opt(x.id,x.name,c?.id)).join('')}</select></label><label class="f">Ekstre ekran görüntüleri<input id="stFiles" name="files" type="file" accept="${esc(imgAccept())}" multiple required></label><div class="banner"><span>Ekstreyi <b>PDF</b> olarak ya da <b>ekran görüntüleriyle</b> yükleyebilirsin. Ekran görüntüsüyse kaydırarak birkaç tane al ve <b>sırayla birlikte</b> seç.</span></div>${imgOk()?'':noImgMsg}<button class="btn" type="submit" id="stGo">Oku ve karşılaştır</button><div id="stStatus" class="small muted"></div></form>`}
@@ -1048,16 +1056,16 @@ async function runStmt(fd){
   try{
     const res=await askImages(`Görüntüler bir Türk bankasının kredi kartı ekstresinin sırayla ekran görüntüleri. Dönemdeki tüm harcama ve iade satırlarını çıkar.\n${txRules()}\nEkstredeki taksit satırlarında ("2/6", "6/5.taksit") tutar o ayın taksitidir: amount_is_total false.\nYalnızca şu JSON nesnesini döndür:\n{"period_start":"YYYY-MM-DD|null","period_end":"hesap kesim tarihi|null","due_date":"son ödeme tarihi|null","next_cut":"bir sonraki kesim tarihi|null","next_due":"bir sonraki son ödeme|null","limit":"kart limiti sayı|null","total":"dönem borcu sayı|null","rows":[${TX_SCHEMA}]}`,files,(i,n)=>{if(n>1)st.innerHTML=`<span class="spin"></span> Okunuyor (${i}/${n})…`});
     const meta={};res.forEach(o=>{if(o&&typeof o==='object')['period_start','period_end','due_date','next_cut','next_due','limit','total'].forEach(k=>{if(meta[k]==null&&o[k]!=null&&o[k]!=='null')meta[k]=o[k]})});
-    const rows=dedupeChunks(res.map(o=>Array.isArray(o?.rows)?o.rows:[])).filter(r=>r&&num(r.amount)!==0);
+    const rows=dedupeChunks(res.map(o=>Array.isArray(o?.rows)?o.rows:[])).filter(r=>r&&trAmount(r.amount)!==0);
     const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')?s:null;
     const end=iso(meta.period_end)||(hasDays(card)?lastCut(card):today());const start=iso(meta.period_start)||addDays(addMonths(end,-1),1);
     const cands=livePortions().filter(p=>p.cardId===card.id&&p.pdate>=addDays(start,-5)&&p.pdate<=addDays(end,3)).map(p=>({...p,used:false}));
     const matched=[],missing=[];const src='c:'+card.id;
-    rows.forEach(r=>{const shown=Math.abs(num(r.amount)),sign=r.income?-1:1,n=Math.max(1,Math.round(num(r.installments)||1));const dt=iso(r.date)||end;let best=null,bs=1e9;
+    rows.forEach(r=>{const shown=Math.abs(trAmount(r.amount)),sign=r.income?-1:1,n=Math.max(1,Math.round(num(r.installments)||1));const dt=iso(r.date)||end;let best=null,bs=1e9;
       cands.forEach(c=>{if(c.used||Math.abs(c.pamount-sign*shown)>0.02)return;const dd=Math.abs(daysBetween(c.pdate,dt));if(dd>(n>1?400:4))return;const sc=dd+(firstWord(c.merchant)===firstWord(r.merchant)?0:3);if(sc<bs){bs=sc;best=c}});
       if(best){best.used=true;matched.push({r,c:best})}else{const row=rowFromAI({...r,date:dt},src,true);if(n>1&&row.instDone)row.nextDate=end;row.on=true;row.dup=null;missing.push(row)}});
     const extras=cands.filter(c=>!c.used&&c.pdate>=start&&c.pdate<=end);
-    RV={mode:'stmt',rows:missing,card,start,end,due:iso(meta.due_date),nextCut:iso(meta.next_cut),nextDue:iso(meta.next_due),limit:num(meta.limit)||null,bankTotal:meta.total!=null?num(meta.total):null,matched,extras,appTotal:cands.filter(c=>c.pdate>=start&&c.pdate<=end).reduce((a,c)=>a+c.pamount,0)};
+    RV={mode:'stmt',rows:missing,card,start,end,due:iso(meta.due_date),nextCut:iso(meta.next_cut),nextDue:iso(meta.next_due),limit:trAmount(meta.limit)||null,bankTotal:meta.total!=null?trAmount(meta.total):null,matched,extras,appTotal:cands.filter(c=>c.pdate>=start&&c.pdate<=end).reduce((a,c)=>a+c.pamount,0)};
     renderReview();
   }catch(e){btn.disabled=false;st.textContent=sampleErr(e)}
 }
@@ -1067,7 +1075,8 @@ function rvRow(r,i){
     <div class="h"><input class="cb" type="checkbox" id="rv_on_${i}" data-rv="${i}" data-f="on" ${r.on?'checked':''} aria-label="Dahil et"><div class="main">${esc(r.merchant)}</div><b class="amt ${r.kind!=='gider'?'plus':''}">${r.kind!=='gider'?'+':''}${TL2(shown)}</b></div>
     ${r.dup==='dup'?'<div class="small" style="color:var(--warn);font-weight:600">Zaten eklenmiş, işaretini kaldırdım.</div>':r.dup==='similar'?'<div class="small" style="color:var(--warn);font-weight:600">Benzer bir kayıt var, kontrol et.</div>':''}
     ${r.inst>1?`<div class="small muted">${r.inst} taksit${r.instDone?` · ${r.instDone} tanesi ödenmiş`:''} · toplam ${TL2(r.amount)}</div>`:''}
-    <div class="three"><select id="rv_per_${i}" data-rv="${i}" data-f="personId" aria-label="Kim harcadı">${personOpts(r.personId)}</select><input type="date" id="rv_date_${i}" data-rv="${i}" data-f="date" value="${r.date}" aria-label="Tarih"><select id="rv_kind_${i}" data-rv="${i}" data-f="kind" aria-label="Tür">${opt('gider','Harcama',r.kind)}${opt('iade','İade',r.kind)}${opt('gelir','Gelir',r.kind)}</select></div>
+    <div class="two"><label class="mini">Tutar (₺)${r.inst>1?' · toplam':''}<input type="number" step="0.01" inputmode="decimal" id="rv_amt_${i}" data-rv="${i}" data-f="amount" value="${r.amount}"></label><label class="mini">Tarih<input type="date" id="rv_date_${i}" data-rv="${i}" data-f="date" value="${r.date}"></label></div>
+    <div class="two"><label class="mini">Kim harcadı<select id="rv_per_${i}" data-rv="${i}" data-f="personId">${personOpts(r.personId)}</select></label><label class="mini">Tür<select id="rv_kind_${i}" data-rv="${i}" data-f="kind">${opt('gider','Harcama',r.kind)}${opt('iade','İade',r.kind)}${opt('gelir','Gelir',r.kind)}</select></label></div>
     ${r.kind==='gelir'?`<select id="rv_src2_${i}" data-rv="${i}" data-f="source" aria-label="Gelir türü">${INCOME_SRC.map(s=>opt(s,s,r.source)).join('')}</select>`:mine?`${!r.known?'<div class="ask">Bu işyerini tanımadım. Ne harcaması?</div>':''}<select id="rv_cat_${i}" data-rv="${i}" data-f="cat" aria-label="Kategori">${catOpts(r.cat)}</select>${!r.known?`<label class="check"><input type="checkbox" id="rv_rem_${i}" data-rv="${i}" data-f="remember" ${r.remember?'checked':''}> Bir dahakine kendim tanıyayım</label>`:''}`:`<div class="small" style="color:var(--other);font-weight:600">${esc(personName(r.personId))} harcaması · senin harcamana karışmaz</div>`}
   </div>`;
 }
@@ -1120,19 +1129,19 @@ async function runFis(){
   btn.disabled=true;st.innerHTML='<span class="spin"></span> Fiş okunuyor…';
   const known=Object.values(S.prod.map).slice(0,150).map(p=>p.name+(p.size?' '+p.size:'')).join(', ');
   const prompt=`Görüntü(ler) Türkiye'den bir market fişi; birden fazlaysa aynı fişin parçaları, tekrar eden satırları bir kez yaz. Bugün ${today()}.
-Yalnızca şu JSON'u döndür: {"store":"kısa marka adı","date":"YYYY-MM-DD","total":fiş TOPLAMI,"items":[{"raw":"fişteki ad aynen","name":"genel ürün adı, marka ve gramajsız (Muz, Peçete, Süt)","brand":"","size":"paket gramajı/hacmi, tartılıda boş","qty":sayı,"unit":"adet|kg","unitPrice":birim ya da kg fiyatı,"lineTotal":satır tutarı,"discount":ürüne indirim (pozitif),"group":"${PGROUPS.join(' | ')}"}]}
+Yalnızca şu JSON'u döndür: {"store":"kısa marka adı","date":"YYYY-MM-DD","total":"fiş TOPLAMI, ekranda yazdığı gibi metin","items":[{"raw":"fişteki ad aynen","name":"genel ürün adı, marka ve gramajsız (Muz, Peçete, Süt)","brand":"","size":"paket gramajı/hacmi, tartılıda boş","qty":sayı,"unit":"adet|kg","unitPrice":"birim ya da kg fiyatı, fişte yazdığı gibi metin","lineTotal":"satır tutarı, fişte yazdığı gibi metin","discount":"ürüne indirim, metin; yoksa 0","group":"${PGROUPS.join(' | ')}"}]}
 Kurallar: "2 x 12,50" ya da üst/alt satırdaki "2 AD X 12,50": qty 2, unitPrice 12,50, lineTotal 25,00; çarpanı doğru ürüne bağla, tek ürün sanma. Tartılı "0,845 KG X 89,90": qty 0.845, unit kg, unitPrice 89,90. İndirim satırlarını ayrı ürün yazma, üstündeki ürünün discount'una ekle. KDV, ara toplam, ödeme satırlarını yazma. Virgül ondalıktır.${known?` Bilinen ürün adları (aynı ürünse bunları kullan): ${known}.`:''}`;
   try{const res=(await askImages(prompt,files.slice(0,sampleCaps?.images?.maxCount||4)))[0]||{};
-    RC={store:tidyStore(res.store),date:/^\d{4}-\d{2}-\d{2}$/.test(res.date||'')?res.date:today(),total:r2(num(res.total)),items:(Array.isArray(res.items)?res.items:[]).map(fisItem)};renderFis();
+    RC={store:tidyStore(res.store),date:/^\d{4}-\d{2}-\d{2}$/.test(res.date||'')?res.date:today(),total:r2(trAmount(res.total)),items:(Array.isArray(res.items)?res.items:[]).map(fisItem)};renderFis();
   }catch(e){btn.disabled=false;st.textContent=sampleErr(e)}
 }
 function tidyStore(s){s=String(s||'Market').trim();const k=asciiUp(s).replace(/\s/g,'');const map={MIGROS:'Migros',FILE:'File',A101:'A101',BIM:'BİM',SOK:'Şok',CARREFOURSA:'CarrefourSA',MACROFOOD:'Macrofood',METRO:'Metro',HAKMAR:'Hakmar',TARIMKREDI:'Tarım Kredi'};for(const[a,b]of Object.entries(map))if(k.startsWith(a))return b;return s.slice(0,24)}
 function findProd(name,size){const k=normProd(name)+'|'+normSize(size);return Object.keys(S.prod.map).find(pid=>{const p=S.prod.map[pid];return normProd(p.name)+'|'+normSize(p.size||'')===k})||null}
 function fisItem(it){
-  const qty=Math.abs(num(it.qty))||1;let up=Math.abs(num(it.unitPrice)),lt=num(it.lineTotal);const unit=String(it.unit||'').toLowerCase().startsWith('k')?'kg':'adet';let warn='';
+  const qty=Math.abs(trAmount(it.qty))||1;let up=Math.abs(trAmount(it.unitPrice)),lt=trAmount(it.lineTotal);const unit=String(it.unit||'').toLowerCase().startsWith('k')?'kg':'adet';let warn='';
   if(!lt&&up)lt=r2(qty*up);if(!up&&lt)up=r2(lt/qty);if(Math.abs(qty*up-lt)>0.06&&lt>0){up=r2(lt/qty);warn='Adet × fiyat satır tutarını tutmuyordu, birim fiyatı satırdan hesapladım.'}
   const name=String(it.name||it.raw||'Ürün').trim(),size=String(it.size||'').trim();const al=S.prod.alias[normProd(it.raw)];const ex=al&&S.prod.map[al]?al:findProd(name,size);
-  return {raw:String(it.raw||name),name:ex?S.prod.map[ex].name:name,size:ex?(S.prod.map[ex].size||''):size,brand:String(it.brand||''),qty,unit,unitPrice:up,lineTotal:r2(lt),discount:r2(Math.abs(num(it.discount))),group:PGROUPS.includes(it.group)?it.group:(ex?S.prod.map[ex].group:'Diğer'),warn,on:true};
+  return {raw:String(it.raw||name),name:ex?S.prod.map[ex].name:name,size:ex?(S.prod.map[ex].size||''):size,brand:String(it.brand||''),qty,unit,unitPrice:up,lineTotal:r2(lt),discount:r2(Math.abs(trAmount(it.discount))),group:PGROUPS.includes(it.group)?it.group:(ex?S.prod.map[ex].group:'Diğer'),warn,on:true};
 }
 function renderFis(){
   const body=document.getElementById('sheetBody');if(!RC)return;const items=RC.items.filter(i=>i.on);const sum=r2(items.reduce((a,i)=>a+i.lineTotal-i.discount,0));const diff=r2(RC.total-sum);const st=productStats();
@@ -1243,9 +1252,10 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='restoreFile'&&t.files?.[0]){restoreFrom(t.files[0]);return}
+  if(t.id==='apiModel'){ls.set('kd_model',t.value);toast('Okuma kalitesi değişti');return}
   if(t.id==='targetDate'){if(t.value){ls.set('kd3_target',t.value);render()}return}
   if((t.name==='type'||t.id==='txPerson')&&t.closest('form[data-form="tx"]'))syncTxForm();
-  if(t.dataset?.rv!==undefined&&RV){const r=RV.rows[+t.dataset.rv],f=t.dataset.f;r[f]=t.type==='checkbox'?t.checked:(f==='amount'?Math.abs(num(t.value)):t.value);if(['on','kind','personId'].includes(f))keepScroll(renderReview)}
+  if(t.dataset?.rv!==undefined&&RV){const r=RV.rows[+t.dataset.rv],f=t.dataset.f;r[f]=t.type==='checkbox'?t.checked:(f==='amount'?Math.abs(num(t.value)):t.value);if(['on','kind','personId','amount'].includes(f))keepScroll(renderReview)}
   if(t.dataset?.fi!==undefined&&RC){const it=RC.items[+t.dataset.fi],f=t.dataset.f;if(f==='on')it.on=t.checked;else if(['qty','unitPrice','lineTotal','discount'].includes(f)){it[f]=Math.abs(num(t.value));if(f==='qty'||f==='unitPrice')it.lineTotal=r2(it.qty*it.unitPrice);if(f==='lineTotal'&&it.qty)it.unitPrice=r2(it.lineTotal/it.qty);it.warn=''}else it[f]=t.value;keepScroll(renderFis)}
   if(t.dataset?.fc&&RC){const f=t.dataset.fc;RC[f]=f==='total'?r2(num(t.value)):t.value;if(f==='total')keepScroll(renderFis)}
 });
