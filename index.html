@@ -609,15 +609,23 @@ function partition(docs){
   ['cards','accounts','persons'].forEach(k=>S[k].sort((a,b)=>(a.order??1e9)-(b.order??1e9)||(a.ts||0)-(b.ts||0)));
   document.getElementById('prodNames').innerHTML=Object.values(S.prod.map).map(p=>`<option value="${esc(p.name)}">`).join('');
 }
-/* otomatik kur: GitHub'daki iş Harem Altın alış fiyatlarını 15 dakikada bir prices.json'a yazar; uygulama internet varken okur, yoksa son kur kalır. Gümüş elle girilir. */
-const KUR_URL='https://raw.githubusercontent.com/prm5353/kasa-defteri/data/prices.json';
+/* otomatik kur: Harem Altın'ın canlı fiyat bağlantısından (websocket) alış fiyatları. İnternet varken açılışta ve 15 dakikada bir; yoksa son kur kalır. Gümüş elle girilir. Yarım/tam = 2/4 çeyrek. */
+const KUR_WS='wss://hrmsocketonly.haremaltin.com/socket.io/?EIO=4&transport=websocket';
+const KUR_MAP={gram:'KULCEALTIN',ceyrek:'CEYREK_YENI',usd:'USDTRY',eur:'EURTRY'};
 let kurBusy=false;
+function kurFetch(){return new Promise((res,rej)=>{let ws;const got={};const done=()=>{try{ws&&ws.close()}catch(e){}};
+  const to=setTimeout(()=>{done();Object.keys(got).length?res(got):rej(new Error('zaman aşımı'))},15000);
+  try{ws=new WebSocket(KUR_WS)}catch(e){clearTimeout(to);rej(e);return}
+  ws.onerror=()=>{clearTimeout(to);done();Object.keys(got).length?res(got):rej(new Error('bağlanamadı'))};
+  ws.onmessage=ev=>{const m=String(ev.data);if(m[0]==='0'){ws.send('40');return}if(m==='2'){ws.send('3');return}
+    if(m.startsWith('42')){try{const [ename,payload]=JSON.parse(m.slice(2));if(ename!=='price_changed')return;const d=payload?.data||{};
+      Object.entries(KUR_MAP).forEach(([k,code])=>{const v=num(d[code]?.alis);if(v>0)got[k]={v,t:d[code].tarih||''}});
+      if(Object.keys(KUR_MAP).every(k=>got[k])){clearTimeout(to);done();res(got)}}catch(e){}}}})}
 async function autoPrices(force){if(kurBusy||!db||(typeof navigator!=='undefined'&&navigator.onLine===false))return;const P=S.prices||{};
-  if(!force&&P.autoCheck&&Date.now()-P.autoCheck<10*60*1000)return;kurBusy=true;
-  try{const r=await fetch(KUR_URL+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error(r.status);const j=await r.json();
-    const cur={};['gram','ceyrek','usd','eur'].forEach(k=>{const v=num(j[k]);if(v>0)cur[k]=v});if(!Object.keys(cur).length)throw new Error('boş');
+  if(!force&&P.autoCheck&&Date.now()-P.autoCheck<14*60*1000)return;kurBusy=true;
+  try{const got=await kurFetch();const cur={};Object.entries(got).forEach(([k,o])=>cur[k]=o.v);
     const hist={...(P.history||{})};hist[today()]=clean({...(hist[today()]||{}),...PRICED.reduce((o,k)=>(P[k]?{...o,[k]:P[k]}:o),{}),...cur});
-    await db.doc('market/prices').set(clean({...P,...cur,history:hist,updatedAt:j.at||new Date().toISOString(),source:j.source||'Harem Altın · alış',autoCheck:Date.now(),autoErr:''}));
+    await db.doc('market/prices').set(clean({...P,...cur,history:hist,updatedAt:new Date().toISOString(),source:'Harem Altın · alış',autoCheck:Date.now(),autoErr:Object.keys(KUR_MAP).every(k=>got[k])?'':'eksik'}));
   }catch(e){try{await db.doc('market/prices').set(clean({...P,autoCheck:Date.now(),autoErr:String(e.message||e)}))}catch(_){}}
   finally{kurBusy=false}}
 async function boot(){

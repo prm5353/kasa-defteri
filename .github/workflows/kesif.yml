@@ -1,9 +1,0 @@
-name: Harem inceleme
-on: workflow_dispatch
-jobs:
-  k:
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install -q websocket-client && python3 tools/kesif.py
