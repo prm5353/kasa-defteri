@@ -564,6 +564,8 @@ async function boot(){
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
   db=localDb;base=localDb.collection();
   base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render()});
+  /* Parafly: kesim günündeki (25) harcamalar bankada yeni döneme yazılıyor; son gün 24 */
+  try{const pf=S.cards.find(c=>c.id==='card-parafly');if(pf&&pf.cuts&&pf.cuts['2026-10-25']){const cuts={};Object.entries(pf.cuts).forEach(([k,v])=>{cuts[k.endsWith('-25')?k.slice(0,8)+'24':k]=v});await put({...pf,cuts,cutDay:24})}}catch(e){}
   db.doc('market/prices').onSnapshot(s=>{S.prices=s.exists?(s.data()||{}):{};if(S.loaded)render()});
   sampleFn=apiSample;sampleCaps={images:{maxCount:3,mediaTypes:['image/*','application/pdf']}};
   if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
