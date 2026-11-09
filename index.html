@@ -817,15 +817,18 @@ function monthPlan(mk){
   S.recs.forEach(r=>{const o=recOcc(r,mk);if(!o)return;(r.dir==='gelir'?ins:outs).push({k:'rec',id:r.id,title:r.name,date:o.date,amount:o.amount,done:o.done,tag:o.no?(o.count?`${o.no}/${o.count}`:`${o.no}`):'',goal:r.dir==='hedef'})});
   S.cards.filter(c=>!c.ticari).forEach(c=>cardDuesInMonth(c,mk).forEach(s=>{
     const tic=ticariAmt(s.items);const prev=prevCut(c,s.cut);const open=s.cut>=t;
-    const est=open&&!c.holderId?estSpend(src=>src==='c:'+c.id,addDays(prev>t?prev:t,prev>t?1:1),s.cut):0;const cert=s.total-tic;
+    const est=open&&!c.holderId?estSpend(src=>src==='c:'+c.id,addDays(prev>t?prev:t,prev>t?1:1),s.cut):0;
+    const oth=Object.entries(s.by).filter(([pid,v])=>pid!==ME&&v>0.5);const othT=oth.reduce((a,[,v])=>a+v,0);
+    /* başkalarının payı kendi günlerinde ödendiği için plana girmez; sadece benim payım */
+    const cert=s.total-tic-othT;
     if(cert+est<=0.5)return;
-    outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:cert+est,cert,est,done:s.paid,tag:[open?'dönem açık':'',est>0.5?`${TL(cert)} kesin + ~${TL(est)} tahmini`:'',tic>0.5?`ticari ${TL(tic)} hariç`:''].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic+est});
+    outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:cert+est,cert,est,done:s.paid,tag:[open?'dönem açık':'',est>0.5?`${TL(cert)} kesin + ~${TL(est)} tahmini`:'',tic>0.5?`ticari ${TL(tic)} hariç`:'',...oth.map(([pid,v])=>`${personName(pid)} ${TL(v)} kendisi öder`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic+est});
     Object.entries(s.by).forEach(([pid,a])=>{if(pid===ME||a<=0.5)return;const L=owedLeft(pid,c.id,s.cut);
-      if(L){const got=L.amt-L.left;if(L.left<=0.5){ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:L.amt,done:true,tag:c.name+' · alındı'});return}
-        if(got>0.5)ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:got,done:true,tag:c.name+' · alındı'});
-        ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:L.left,done:false,tag:c.name+(got>0.5?' · kalan':'')});return}
+      if(L){const got=L.amt-L.left;if(L.left<=0.5){ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:L.amt,done:true,tag:c.name+' · alındı'});return}
+        if(got>0.5)ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:got,done:true,tag:c.name+' · alındı'});
+        ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:L.left,done:false,tag:c.name+(got>0.5?' · kalan':'')});return}
       const got=S.tx.filter(x=>x.type==='tahsilat'&&x.personId===pid&&x.date.slice(0,7)===mk).reduce((q,x)=>q+x.amount,0);
-      ins.push({k:'person',id:pid,title:personName(pid),date:s.due,amount:a,done:got>=a-1,tag:c.name})});
+      ins.push({info:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:a,done:got>=a-1,tag:c.name})});
   }));
   if(mk>=t.slice(0,7)){const a=mk===t.slice(0,7)?t:mk+'-01';const v=estSpend(src=>src.startsWith('a:'),mk===t.slice(0,7)?addDays(t,1):a,monthEnd(mk));if(v>0.5)outs.push({k:'estcash',id:mk,title:'Nakit/hesaptan harcamalar',date:a,amount:v,done:false,tag:'tahmini'})}
   S.plans.forEach(pl=>{const s=planStatus(pl);const[y,m]=mk.split('-').map(Number);const date=dayIn(y,m-1,pl.day||1);
@@ -847,8 +850,8 @@ function cashNow(){return S.accounts.reduce((s,a)=>s+accBalance(a),0)}
 /* ufuk: en az 45 gün; bir ay sonra yapacağın harcamaların kart ödemesi de içeride kalsın diye her kartın (bugün+30) dönemine ait son ödeme gününe kadar */
 function projDays(){const t=today();const d30=addDays(t,30);let h=addDays(t,45);S.cards.filter(c=>!c.ticari&&hasDays(c)).forEach(c=>{const due=dueFor(c,cutFor(c,d30));if(due>h)h=due});return Math.min(75,daysBetween(t,h))}
 function projection(days){days=days||projDays();const t=today();const end=addDays(t,days);const ev=[];let m=t.slice(0,7);
-  while(m<=end.slice(0,7)){const P=monthPlan(m);P.ins.forEach(x=>{if(!x.done&&x.date<=end&&!(x.k==='income'))ev.push({x,d:x.date<t?t:x.date,s:1})});P.outs.forEach(x=>{if(!x.done&&x.date<=end)ev.push({x,d:x.date<t?t:x.date,s:-1})});m=shiftMonth(m,1)}
-  ev.sort((a,b)=>a.d.localeCompare(b.d)||b.s-a.s);let bal=cashNow();const start=bal;let min={bal,d:t,x:null};const pts=[{d:t,bal}];
+  while(m<=end.slice(0,7)){const P=monthPlan(m);P.ins.forEach(x=>{if(!x.done&&!x.info&&x.date<=end&&!(x.k==='income'))ev.push({x,d:x.date<t?t:x.date,s:1})});P.outs.forEach(x=>{if(!x.done&&x.date<=end)ev.push({x,d:x.date<t?t:x.date,s:-1})});m=shiftMonth(m,1)}
+  ev.sort((a,b)=>a.d.localeCompare(b.d)||b.s-a.s);let bal=cashNow()-heldTotal();const start=bal;let min={bal,d:t,x:null};const pts=[{d:t,bal}];
   ev.forEach(e=>{bal+=e.s*e.x.amount;e.bal=bal;pts.push({d:e.d,bal});if(bal<min.bal)min={bal,d:e.d,x:e.x}});return {start,ev,min,end:bal,pts,days}}
 function safeBox(){if(!S.cards.length&&!S.recs.length)return '';const P=projection();const v=P.min.bal;
   return `<section class="sec tap safe" data-act="projsheet"><div class="eyebrow">Plan dışı rahat harcayabileceğin · önümüzdeki ${P.days} gün</div>
@@ -857,7 +860,7 @@ function safeBox(){if(!S.cards.length&&!S.recs.length)return '';const P=projecti
 function projSheet(){const P=projection();const W=340,H=120;const ts=P.pts.map(p=>daysBetween(today(),p.d));const vs=P.pts.map(p=>p.bal);const mn=Math.min(0,...vs),mx=Math.max(1,...vs);
   const X=d=>d/P.days*W,Y=v=>H-8-(v-mn)/(mx-mn||1)*(H-16);let path='';P.pts.forEach((p,i)=>{const x=X(ts[i]),y=Y(p.bal);path+=(i?` H${x.toFixed(1)} V${y.toFixed(1)}`:`M${x.toFixed(1)} ${y.toFixed(1)}`)});
   openSheet(head(`Nakit akışı · ${P.days} gün`)+`<section class="sec"><div class="eyebrow">Plan dışı rahat harcayabileceğin</div><div class="total" style="color:${P.min.bal<0?'var(--crit)':'var(--plus)'}">${P.min.bal<0?'−':''}${TL(Math.abs(P.min.bal))}</div>
-    <div class="small muted">Bugün hesaplarında ${TL(P.start)}. Market, yakıt, fatura gibi normal harcamaların tahmini aşağıda zaten düşüldü; bu rakam onların üstüne yapacağın ekstra harcama içindir. Ticari gelir ve giderler dahil değil.</div>
+    <div class="small muted">Bugün hesaplarında senin olan ${TL(P.start)}${heldTotal()>0.5?` (kişilerden alıp karta yatıracağın ${TL(heldTotal())} hariç)`:''}. Market, yakıt, fatura gibi normal harcamaların tahmini aşağıda zaten düşüldü; bu rakam onların üstüne yapacağın ekstra harcama içindir. Ticari gelir ve giderler, Fatih ve Caner'in payları dahil değil.</div>
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;margin-top:10px" role="img" aria-label="Tahmini bakiye"><line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--crit)" stroke-dasharray="4 4" opacity=".6"/><path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2"/>${P.min.x?`<circle cx="${X(daysBetween(today(),P.min.d))}" cy="${Y(P.min.bal)}" r="4" fill="${P.min.bal<0?'var(--crit)':'var(--warn)'}"/>`:''}</svg>
     <div class="sumline small"><span class="muted">${fmtD(today())}</span><span class="muted">${fmtD(addDays(today(),P.days))}</span></div>
     <button class="btn ghost sm" data-act="plansheet" style="margin-top:6px">Harcama planını düzenle</button></section>
@@ -873,16 +876,16 @@ function planSheet(mk){mk=mk||planEditMonth||today().slice(0,7);planEditMonth=mk
       <p class="small muted" style="margin-top:8px">Değiştirdiğin tutarlar sadece ${monthLabel(mk)} için geçerli. Örneğin gezi planlıyorsan Gezi'ye tutar yaz.</p></section>`)}
 function cashFlow(mk){
   const cur=today().slice(0,7);if(mk<cur)return null;const t=today();
-  let bal=cashNow();
-  for(let m=cur;m<mk;m=shiftMonth(m,1)){const P=monthPlan(m);P.ins.filter(x=>!x.done).forEach(x=>bal+=x.amount);P.outs.filter(x=>!x.done).forEach(x=>bal-=x.amount)}
+  let bal=cashNow()-heldTotal();
+  for(let m=cur;m<mk;m=shiftMonth(m,1)){const P=monthPlan(m);P.ins.filter(x=>!x.done&&!x.info).forEach(x=>bal+=x.amount);P.outs.filter(x=>!x.done).forEach(x=>bal-=x.amount)}
   const start=bal;const P=monthPlan(mk);
-  const ev=[...P.ins.filter(x=>!x.done).map(x=>({x,d:x.date<t?t:x.date,s:1})),...P.outs.filter(x=>!x.done).map(x=>({x,d:x.date<t?t:x.date,s:-1}))]
+  const ev=[...P.ins.filter(x=>!x.done&&!x.info).map(x=>({x,d:x.date<t?t:x.date,s:1})),...P.outs.filter(x=>!x.done).map(x=>({x,d:x.date<t?t:x.date,s:-1}))]
     .sort((a,b)=>a.d.localeCompare(b.d)||b.s-a.s);
   const short=[];ev.forEach(e=>{bal+=e.s*e.x.amount;if(e.s<0&&bal<-0.5){const miss=Math.min(e.x.amount,-bal);e.x.short=miss;short.push({x:e.x,d:e.d,miss})}});
   return {P,start,end:bal,short,withBal:S.accounts.some(a=>a.balanceAt)};
 }
 function planLine(x){
-  return `<div class="pl tap ${x.done?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pr"><span class="pn">${esc(x.title)}</span><b>${TL(x.amount)}</b></div><div class="pd">${fmtD(x.date)}${x.tag?` · ${esc(x.tag)}`:''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' · ✓':''}${x.mine!=null&&Math.abs(x.mine-x.amount)>1?` · benim ${TL(x.mine)}`:''}${x.goal?' · hedef':''}</div></div>`;
+  return `<div class="pl tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pr"><span class="pn">${esc(x.title)}</span><b>${TL(x.amount)}</b></div><div class="pd">${fmtD(x.date)}${x.tag?` · ${esc(x.tag)}`:''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' · ✓':''}${x.mine!=null&&Math.abs(x.mine-x.amount)>1?` · benim ${TL(x.mine)}`:''}${x.goal?' · hedef':''}</div></div>`;
 }
 function planTable(mk){
   const F=cashFlow(mk);if(F)return planTableFlow(mk,F);
@@ -902,13 +905,13 @@ function planTable(mk){
   </section>`;
 }
 function planTableFlow(mk,F){
-  const P=F.P;const pin=P.ins.filter(x=>!x.done),pout=P.outs.filter(x=>!x.done);const inT=F.start+pin.reduce((a,x)=>a+x.amount,0),outT=pout.reduce((a,x)=>a+x.amount,0);
+  const P=F.P;const pin=P.ins.filter(x=>!x.done&&!x.info),pinfo=P.ins.filter(x=>!x.done&&x.info),pout=P.outs.filter(x=>!x.done);const inT=F.start+pin.reduce((a,x)=>a+x.amount,0),outT=pout.reduce((a,x)=>a+x.amount,0);
   const doneIn=P.ins.filter(x=>x.done),doneOut=P.outs.filter(x=>x.done);const goals=P.outs.filter(x=>x.goal);const cur=mk===today().slice(0,7);
-  const startLine=`<div class="pl ${cur?"tap":""}" ${cur?"data-act=\"cashsheet\"":""}><div class="pr"><span class="pn">${cur?'Hesaplarımdaki para':'Önceki aydan devreden'}</span><b style="color:${F.start<0?'var(--crit)':'inherit'}">${TL(F.start)}</b></div><div class="pd">${cur?(F.withBal?'bugün':'<b style="color:var(--warn)">bakiyeleri gir</b>'):'tahmini'}</div></div>`;
+  const startLine=`<div class="pl ${cur?"tap":""}" ${cur?"data-act=\"cashsheet\"":""}><div class="pr"><span class="pn">${cur?'Hesaplarımdaki para':'Önceki aydan devreden'}</span><b style="color:${F.start<0?'var(--crit)':'inherit'}">${TL(F.start)}</b></div><div class="pd">${cur?(F.withBal?'bugün'+(heldTotal()>0.5?` · kişilerin karta ödenecek ${TL(heldTotal())}'si hariç`:''):'<b style="color:var(--warn)">bakiyeleri gir</b>'):'tahmini'}</div></div>`;
   const warn=F.short.length?`<div class="banner" style="background:color-mix(in srgb,var(--crit) 16%,transparent);margin-top:10px;flex-direction:column;align-items:stretch;gap:4px"><b>⚠ Para bulman gereken ödemeler</b>${F.short.map(s=>`<div class="sumline small"><span>${fmtD(s.d)} · ${esc(s.x.title)}</span><b style="color:var(--crit)">${TL(s.miss)} eksik</b></div>`).join('')}<div class="small muted">Hesaplarındaki para ve o tarihe kadar gelecek alacaklar bu ödemeleri karşılamıyor.</div></div>`:'';
   return `<section class="sec plan">${monthBar(mk,'pprev','pnext')}<div class="btnrow" style="justify-content:center;margin-top:6px"><button class="btn ghost sm" data-act="plansheet">Harcama planı</button><button class="btn ghost sm" data-act="projsheet">Nakit akışı</button></div>${warn}
     <div class="cols" style="margin-top:10px">
-      <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>${startLine}${pin.map(planLine).join('')}${doneIn.length?`<div class="pd" style="margin-top:4px">Gelenler (hesaba girdi)</div>${doneIn.map(planLine).join('')}`:''}
+      <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>${startLine}${pin.map(planLine).join('')}${pinfo.length?`<div class="pd" style="margin-top:4px">Kendi günlerinde ödeyecekler (hesaba katılmaz)</div>${pinfo.map(x=>planLine({...x,muted:true})).join('')}`:''}${doneIn.length?`<div class="pd" style="margin-top:4px">Gelenler (hesaba girdi)</div>${doneIn.map(planLine).join('')}`:''}
         <button class="addl" data-act="addticari">+ Ticari gelir</button><button class="addl" data-act="newrec" data-dir="gelir">+ Sabit gelir</button></div>
       <div class="col"><div class="eyebrow">Giderler</div>${pout.map(planLine).join('')||'<div class="small muted">Bekleyen gider yok</div>'}${doneOut.length?`<div class="pd" style="margin-top:4px">Ödenenler</div>${doneOut.map(planLine).join('')}`:''}
         <button class="addl" data-act="newrec" data-dir="gider">+ Sabit gider</button>${goals.length?'':'<button class="addl" data-act="newrec" data-dir="hedef">+ Birikim hedefi</button>'}</div>
@@ -1031,6 +1034,8 @@ function heldMoney(){const since=addDays(START(),-40);const out={};
 function heldByAcc(){const m={};heldMoney().forEach(o=>{const tot=Object.values(o.where).reduce((a,v)=>a+v,0);Object.entries(o.where).forEach(([w,v])=>{const k=w||'Nakit';(m[k]=m[k]||[]).push({pid:o.pid,amt:o.held*v/tot})})});
   Object.entries(m).forEach(([k,l])=>{const a=S.accounts.find(x=>x.name===k)||(k==='Nakit'?S.accounts.find(isCashAcc):null);const bal=a?Math.max(0,accBalance(a)):0;const sum=l.reduce((q,x)=>q+x.amt,0);if(sum>bal){const f=sum>0?bal/sum:0;l.forEach(x=>x.amt*=f)}});return m}
 function heldNote(names){const m=heldByAcc();const by={};names.forEach(n=>(m[n]||[]).forEach(x=>by[x.pid]=(by[x.pid]||0)+x.amt));const e=Object.entries(by).filter(([,v])=>v>0.5);return e.length?`<div class="s" style="color:var(--other)">${e.map(([p,v])=>`içinde ${esc(personName(p))} parası ${TL(v)} · karta ödenecek`).join(' · ')}</div>`:''}
+/* başkalarından alıp henüz karta yatırmadığım ve hesabımda duran para: benim param değil */
+function heldTotal(){const M=heldByAcc();return Object.values(M).flat().reduce((a,x)=>a+x.amt,0)}
 function heldSection(){const H=heldMoney();if(!H.length)return '';const M=heldByAcc();H.forEach(o=>{o.inHand=0;o.at={};Object.entries(M).forEach(([k,l])=>l.forEach(x=>{if(x.pid===o.pid&&x.amt>0.5){o.inHand+=x.amt;o.at[k]=x.amt}}));o.used=Math.max(0,o.held-o.inHand)});const tot=H.reduce((a,o)=>a+o.inHand,0);
   return `<section class="sec"><h2>Elimde duran, karta ödenecek para<span class="sp"></span><span class="sum">${TL(tot)}</span></h2>
     ${H.map(o=>`<div class="owe tap" data-act="person" data-id="${o.pid}"><div class="sumline" style="font-weight:700"><span>${esc(personName(o.pid))} · elimde</span><b>${TL(o.inHand)}</b></div>
