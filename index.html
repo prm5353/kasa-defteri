@@ -1041,12 +1041,13 @@ function formTx(x,type){
   x=x||{};type=x.type||type||'gider';const sv=(x.id||x.account)?srcVal(x):defaultSrc();
   return head(x.id?'Kaydı düzenle':'Yeni kayıt')+`<form data-form="tx"><input type="hidden" name="id" value="${esc(x.id||'')}">
     <label class="f">Tür<select id="txType" name="type">${[['gider','Harcama'],['gelir','Gelir'],['tahsilat','Biri bana ödedi'],['verdim','Birine para verdim'],['transfer','Hesaplar arası transfer'],...(type==='odeme'?[['odeme','Planlı ödeme']]:[])].map(([v,l])=>opt(v,l,type)).join('')}</select></label>
-    <div class="two"><label class="f">Tutar (₺)<input id="txAmount" name="amount" type="number" step="0.01" inputmode="decimal" required value="${x.amount!=null?Math.abs(x.amount):''}"></label><label class="f">Tarih<input id="txDate" name="date" type="date" required value="${x.date||today()}"></label></div>
+    <div class="two"><label class="f">Tutar (₺) <span class="small muted" data-for="gider">· taksitliyse aylık</span><input id="txAmount" name="amount" type="number" step="0.01" inputmode="decimal" required value="${x.amount!=null?Math.round(Math.abs(x.amount)/(x.type==='gider'&&x.inst>1?x.inst:1)*100)/100:''}"></label><label class="f">Tarih<input id="txDate" name="date" type="date" required value="${x.date||today()}"></label></div>
     <label class="f" data-for="gider gelir verdim transfer">Açıklama / işyeri<input id="txMerchant" name="merchant" value="${esc(x.merchant||'')}"></label>
     <label class="f" data-for="gider">Kim harcadı<select id="txPerson" name="personId">${personOpts(x.personId||ME)}</select></label>
     <div class="two" data-for="gider"><label class="f">Bir kısmı başkasının mı?<select id="txSplitP" name="splitP">${opt('','Hayır','')}${S.persons.map(p=>opt(p.id,p.name,'')).join('')}</select></label><label class="f">Onun payı (${(x.inst||1)>1?'aylık ':''}₺)<input id="txSplitA" name="splitAmt" type="number" step="0.01" inputmode="decimal" placeholder="ör. 69240"></label></div>
     <div class="f" data-for="gider" id="catWrap"><span class="lbl2">Kategori</span><input type="hidden" name="cat" value="${esc(catVal(x.category||'Market',x.sub))}">${catButton(catVal(x.category||'Market',x.sub),'form')}</div>
-    <div class="two" data-for="gider"><label class="f">Taksit sayısı<input id="txInst" name="inst" type="number" min="1" max="36" value="${x.inst||1}"></label><label class="check" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="refund" ${x.amount<0?'checked':''}> İade</label></div>
+    <div class="two" data-for="gider"><label class="f">Taksit sayısı<input id="txInst" name="inst" type="number" min="1" max="36" value="${x.inst||1}"></label><label class="f">Kaçıncı taksit<input id="txInstNo" name="instNo" type="number" min="1" max="36" value="${x.nextDate?(x.instDone||0)+1:1}"></label></div>
+    <div data-for="gider"><p class="small muted" style="margin:0 0 6px">Bankada "(2/2)" gibi görünen eski bir taksitse: taksit sayısı 2, kaçıncı taksit 2 yaz. Sadece kalan taksitler borca eklenir.</p><label class="check"><input type="checkbox" name="refund" ${x.amount<0?'checked':''}> İade</label></div>
     <label class="f" data-for="gelir">Gelir türü<select id="txSrc" name="source">${INCOME_SRC.map(s=>opt(s,s,x.source||'Maaş')).join('')}</select></label>
     <label class="f" data-for="tahsilat verdim">Kişi<select id="txWho" name="who">${S.persons.map(p=>opt(p.id,p.name,x.personId)).join('')}</select></label>
     <div class="f"><span class="lbl2" id="srcLbl">Kart / hesap</span>${chipPick('src',srcChoices(),sv)}</div>
@@ -1474,7 +1475,10 @@ document.addEventListener('submit',async e=>{
   try{switch(f.dataset.form){
     case 'tx':{const type=g('type');const amount=Math.abs(num(g('amount')));if(amount<=0){toast('Tutar gir');return}
       const old=S.tx.find(x=>x.id===g('id'));const o={...(old||{}),id:g('id')||newId(),type,amount,date:g('date'),note:g('note')||'',...srcParse(g('src')),ts:old?.ts||Date.now(),via:old?.via||'manuel'};
-      if(type==='gider'){const pid=g('personId');const c=pid===ME?(parseCat(g('cat'))||{category:'Diğer',sub:''}):{category:'',sub:''};Object.assign(o,{merchant:g('merchant'),category:c.category,sub:c.sub,personId:pid,inst:Math.max(1,Math.round(num(g('inst'))||1))});if(fd.has('refund'))o.amount=-amount}
+      if(type==='gider'){const pid=g('personId');const c=pid===ME?(parseCat(g('cat'))||{category:'Diğer',sub:''}):{category:'',sub:''};Object.assign(o,{merchant:g('merchant'),category:c.category,sub:c.sub,personId:pid,inst:Math.max(1,Math.round(num(g('inst'))||1))});
+        const n=o.inst,no=Math.min(n,Math.max(1,Math.round(num(g('instNo'))||1)));o.amount=amount*n;
+        if(n>1&&no>1){if(!(old&&old.nextDate&&old.instDone===no-1&&old.cardId===o.cardId)){const cd=cardById(o.cardId);let nd=o.date;if(cd&&hasDays(cd)){const lc=lastCut(cd);if(nd<=lc)nd=cutFor(cd,addDays(lc,1))}o.nextDate=nd}o.instDone=no-1}else{delete o.nextDate;delete o.instDone}
+        if(fd.has('refund'))o.amount=-o.amount}
       else if(type==='gelir')Object.assign(o,{merchant:g('merchant'),source:g('source')});
       else if(type==='transfer'){const to=srcParse(g('to'));Object.assign(o,{merchant:g('merchant')||'Transfer',toCardId:to.cardId,toAccount:to.account})}
       else Object.assign(o,{personId:g('who'),merchant:type==='tahsilat'?'Ödeme aldım':(g('merchant')||'Verdim')});
