@@ -333,8 +333,10 @@ function parseCat(str){if(!str)return null;const[m,s]=String(str).split(/›|\|/
 function portions(t){
   const n=Math.max(1,Math.round(t.inst||1));const per=t.amount/n;
   if(n===1)return [{...t,pdate:t.date,pamount:t.amount,pi:1,pn:1}];
-  const done=t.nextDate?Math.max(0,Math.round(t.instDone||0)):0;const first=t.nextDate||t.date;
+  const done=t.nextDate?Math.max(0,Math.round(t.instDone||0)):0;let first=t.nextDate||t.date;
   const card=t.cardId?S.cards.find(c=>c.id===t.cardId):null;
+  /* kesim günü sonradan değiştiyse (25→24) kayıtlı taksit tarihini en yakın kesime oturt */
+  if(t.nextDate&&card&&hasDays(card)){const near=cutCands(card,t.nextDate).find(c=>Math.abs(daysBetween(c,t.nextDate))<=3);if(near)first=near}
   const out=[];let cut=card&&hasDays(card)?cutFor(card,first):null;
   for(let j=0;j<n-done;j++){
     let pd;
