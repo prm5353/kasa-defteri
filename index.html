@@ -300,9 +300,18 @@ function parseCat(str){if(!str)return null;const[m,s]=String(str).split(/›|\|/
 /* ===================== HESAPLAR ===================== */
 function portions(t){
   const n=Math.max(1,Math.round(t.inst||1));const per=t.amount/n;
-  if(t.nextDate&&n>1){const done=Math.max(0,Math.round(t.instDone||0));return Array.from({length:Math.max(0,n-done)},(_,j)=>({...t,pdate:addMonths(t.nextDate,j),pamount:per,pi:done+j+1,pn:n}))}
   if(n===1)return [{...t,pdate:t.date,pamount:t.amount,pi:1,pn:1}];
-  return Array.from({length:n},(_,i)=>({...t,pdate:addMonths(t.date,i),pamount:per,pi:i+1,pn:n}));
+  const done=t.nextDate?Math.max(0,Math.round(t.instDone||0)):0;const first=t.nextDate||t.date;
+  const card=t.cardId?S.cards.find(c=>c.id===t.cardId):null;
+  const out=[];let cut=card&&hasDays(card)?cutFor(card,first):null;
+  for(let j=0;j<n-done;j++){
+    let pd;
+    if(j===0)pd=first;
+    else if(cut){cut=cutFor(card,addDays(cut,1));pd=cut}
+    else pd=addMonths(first,j);
+    out.push({...t,pdate:pd,pamount:per,pi:done+j+1,pn:n});
+  }
+  return out;
 }
 let _ep=null;
 const livePortions=()=>_ep||(_ep=S.tx.filter(t=>t.type==='gider').flatMap(portions));
@@ -1024,17 +1033,18 @@ const noImgMsg='<p class="small" style="color:var(--warn);margin:0">Görüntü o
 function pdfGuard(){return false}
 async function askImages(prompt,files,onP){const max=sampleCaps?.images?.maxCount||4;const ch=[];for(let i=0;i<files.length;i+=max)ch.push(files.slice(i,i+max));const out=[];for(let i=0;i<ch.length;i++){onP&&onP(i+1,ch.length);out.push(await sampleFn.json(prompt,{images:ch[i]}))}return out}
 const sampleErr=e=>({no_key:'Önce Ayarlar\'dan API anahtarını gir.',bad_key:'API anahtarı geçersiz. Ayarlar\'dan kontrol et.',no_credit:'API kredin bitmiş. Anthropic Console\'dan kredi yükle.',rate_limited:'Çok sık istek gönderildi, bir dakika sonra dene.',invalid_json:'Cevabı çözemedim. Bir kez daha dene; olmazsa Ayarlar → "Son okuma cevabını kopyala" ile bana gönder.',network:'İnternet bağlantısı yok gibi görünüyor.',image_rejected:'Bu görüntü açılamadı. Ekran görüntüsü ya da JPEG fotoğraf yükle.'})[e?.code]||'Okuma başarısız: '+(e?.message||'hata');
-const TX_SCHEMA=`{"merchant":"işyeri/açıklama aynen","amount":"tutar ekranda yazdığı gibi, metin olarak, ör. \\"2.487,50\\"","date":"YYYY-MM-DD","income":false,"installments":1,"installment_no":1,"amount_is_total":true,"holder":"satır bir kart sahibi bölümünün altındaysa o kişinin adı, yoksa boş","category":"listeden kategori ya da null"}`;
+const TX_SCHEMA=`{"merchant":"işyeri/açıklama aynen","amount":"tutar ekranda yazdığı gibi, metin olarak, ör. \\"2.487,50\\"","date":"YYYY-MM-DD","income":false,"installments":1,"installment_no":1,"total_amount":"taksitli işlemin TOPLAM tutarı satırda ayrıca yazıyorsa (ör. parantez içinde) metin olarak, yoksa boş","holder":"satır bir kart sahibi bölümünün altındaysa o kişinin adı, yoksa boş","category":"listeden kategori ya da null"}`;
 const txRules=()=>`Bugün ${today()}. Yıl yoksa bugünden önceki en yakın tarihi kullan; "Bugün", "Dün" ifadelerini tarihe çevir.
 Kategori listesi: ${catPromptList().join(', ')}.
-amount her zaman pozitif TL. İade/para girişi ise income true. Taksitli işlemde installments toplam taksit, installment_no kaçıncı; satırdaki tutar toplamsa amount_is_total true, o ayın taksitiyse false. Kart borcu ödeme satırlarını ve 0,00 TL kampanya/puan satırlarını atla. Ekstrede "**** 1234 AD SOYAD Harcamaları" gibi kart sahibi başlıkları varsa altındaki satırların holder alanına o adı yaz. Görüntüler aynı listenin kaydırılmış parçalarıysa üst üste binen satırları bir kez yaz.`;
+amount her zaman pozitif TL. İade/para girişi ise income true. Taksitli işlemde (ör. "(09/12)", "Taksit: 09/12", "6/5.taksit") installments toplam taksit sayısı (12), installment_no kaçıncı taksit (9); amount satırın tutar sütununda yazan tutardır, yani o ayın taksitidir, bölme ya da çarpma yapma. Kart borcu ödeme satırlarını, 0,00 TL satırlarını ve TL tutarı olmayan mil puan, ParafPara, chip-para gibi puan satırlarını atla. Ekstrede "**** 1234 AD SOYAD Harcamaları" gibi kart sahibi başlıkları varsa altındaki satırların holder alanına o adı yaz. Görüntüler aynı listenin kaydırılmış parçalarıysa üst üste binen satırları bir kez yaz.`;
 function holderPerson(h){if(!h)return null;const k=asciiUp(h);const p=S.persons.find(p=>k.includes(asciiUp(p.name.split(' ')[0])));return p?.id||null}
 function rowFromAI(r,src,isCard){
   const inst=Math.max(1,Math.round(num(r.installments)||1)),no=Math.max(1,Math.round(num(r.installment_no)||1));
   let amount=Math.abs(trAmount(r.amount)),date=/^\d{4}-\d{2}-\d{2}$/.test(r.date||'')?r.date:today();let extra={};
-  if(inst>1){if(r.amount_is_total===false)amount=amount*inst;if(no>1)extra={nextDate:date,instDone:no-1}}
+  let per=amount;if(inst>1){const tot=trAmount(r.total_amount);amount=tot>per*1.5?tot:per*inst;per=amount/inst;
+    if(no>1){const cd=cardById(srcParse(src).cardId);let nd=date;if(cd&&hasDays(cd)){const lc=lastCut(cd);if(date<=lc)nd=cutFor(cd,addDays(lc,1))}extra={nextDate:nd,instDone:no-1}}}
   const m=matchMerchant(r.merchant),ai=parseCat(r.category);const hp=holderPerson(r.holder);
-  const row={merchant:String(r.merchant||'Bilinmeyen').trim(),amount:r2(amount),date,inst,...extra,kind:r.income?(isCard?'iade':'gelir'):'gider',
+  const row={merchant:String(r.merchant||'Bilinmeyen').trim(),amount:r2(amount),per:r2(per),no,date,inst,...extra,kind:r.income?(isCard?'iade':'gelir'):'gider',
     cat:m?catVal(m.category,m.sub):(ai?catVal(ai.category,ai.sub):catVal('Diğer','')),personId:hp||cardById(srcParse(src).cardId)?.holderId||ME,known:!!m,remember:!m,src,source:'Diğer'};
   row.dup=dupState(row);row.on=row.dup!=='dup';return row;
 }
@@ -1054,7 +1064,7 @@ async function runStmt(fd){
   if(!files.length||!card||pdfGuard(files,st))return;if(!sampleFn){st.textContent='Görüntü okuma kullanılamıyor.';return}
   btn.disabled=true;st.innerHTML='<span class="spin"></span> Ekstre okunuyor…';
   try{
-    const res=await askImages(`Görüntüler bir Türk bankasının kredi kartı ekstresinin sırayla ekran görüntüleri. Dönemdeki tüm harcama ve iade satırlarını çıkar.\n${txRules()}\nEkstredeki taksit satırlarında ("2/6", "6/5.taksit") tutar o ayın taksitidir: amount_is_total false.\nYalnızca şu JSON nesnesini döndür:\n{"period_start":"YYYY-MM-DD|null","period_end":"hesap kesim tarihi|null","due_date":"son ödeme tarihi|null","next_cut":"bir sonraki kesim tarihi|null","next_due":"bir sonraki son ödeme|null","limit":"kart limiti sayı|null","total":"dönem borcu sayı|null","rows":[${TX_SCHEMA}]}`,files,(i,n)=>{if(n>1)st.innerHTML=`<span class="spin"></span> Okunuyor (${i}/${n})…`});
+    const res=await askImages(`Görüntüler bir Türk bankasının kredi kartı ekstresinin sırayla ekran görüntüleri. Dönemdeki tüm harcama ve iade satırlarını çıkar.\n${txRules()}\nEkstredeki taksit satırlarında ("2/6", "6/5.taksit") tutar o ayın taksitidir; toplam tutar parantez içinde yazıyorsa total_amount alanına yaz.\nYalnızca şu JSON nesnesini döndür:\n{"period_start":"YYYY-MM-DD|null","period_end":"hesap kesim tarihi|null","due_date":"son ödeme tarihi|null","next_cut":"bir sonraki kesim tarihi|null","next_due":"bir sonraki son ödeme|null","limit":"kart limiti sayı|null","total":"dönem borcu sayı|null","rows":[${TX_SCHEMA}]}`,files,(i,n)=>{if(n>1)st.innerHTML=`<span class="spin"></span> Okunuyor (${i}/${n})…`});
     const meta={};res.forEach(o=>{if(o&&typeof o==='object')['period_start','period_end','due_date','next_cut','next_due','limit','total'].forEach(k=>{if(meta[k]==null&&o[k]!=null&&o[k]!=='null')meta[k]=o[k]})});
     const rows=dedupeChunks(res.map(o=>Array.isArray(o?.rows)?o.rows:[])).filter(r=>r&&trAmount(r.amount)!==0);
     const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')?s:null;
@@ -1070,12 +1080,12 @@ async function runStmt(fd){
   }catch(e){btn.disabled=false;st.textContent=sampleErr(e)}
 }
 function rvRow(r,i){
-  const mine=r.personId===ME&&r.kind!=='gelir';const shown=r.inst>1&&r.nextDate?r.amount/r.inst:r.amount;
+  const mine=r.personId===ME&&r.kind!=='gelir';const shown=r.inst>1?r.amount/r.inst:r.amount;
   return `<div class="rv ${r.personId!==ME?'oth':!r.known&&mine?'new':''} ${r.on?'':'off'}">
     <div class="h"><input class="cb" type="checkbox" id="rv_on_${i}" data-rv="${i}" data-f="on" ${r.on?'checked':''} aria-label="Dahil et"><div class="main">${esc(r.merchant)}</div><b class="amt ${r.kind!=='gider'?'plus':''}">${r.kind!=='gider'?'+':''}${TL2(shown)}</b></div>
     ${r.dup==='dup'?'<div class="small" style="color:var(--warn);font-weight:600">Zaten eklenmiş, işaretini kaldırdım.</div>':r.dup==='similar'?'<div class="small" style="color:var(--warn);font-weight:600">Benzer bir kayıt var, kontrol et.</div>':''}
-    ${r.inst>1?`<div class="small muted">${r.inst} taksit${r.instDone?` · ${r.instDone} tanesi ödenmiş`:''} · toplam ${TL2(r.amount)}</div>`:''}
-    <div class="two"><label class="mini">Tutar (₺)${r.inst>1?' · toplam':''}<input type="number" step="0.01" inputmode="decimal" id="rv_amt_${i}" data-rv="${i}" data-f="amount" value="${r.amount}"></label><label class="mini">Tarih<input type="date" id="rv_date_${i}" data-rv="${i}" data-f="date" value="${r.date}"></label></div>
+    ${r.inst>1?`<div class="small" style="color:var(--accent);font-weight:600">Taksit ${(r.instDone||0)+1}/${r.inst} · aylık ${TL2(r.amount/r.inst)} · toplam ${TL2(r.amount)}${r.instDone?` · ${r.inst-r.instDone} taksit kaldı`:''}</div>`:''}
+    <div class="two"><label class="mini">${r.inst>1?'Aylık taksit (₺)':'Tutar (₺)'}<input type="number" step="0.01" inputmode="decimal" id="rv_amt_${i}" data-rv="${i}" data-f="amount" value="${r2(r.inst>1?r.amount/r.inst:r.amount)}"></label><label class="mini">Tarih<input type="date" id="rv_date_${i}" data-rv="${i}" data-f="date" value="${r.date}"></label></div>
     <div class="two"><label class="mini">Kim harcadı<select id="rv_per_${i}" data-rv="${i}" data-f="personId">${personOpts(r.personId)}</select></label><label class="mini">Tür<select id="rv_kind_${i}" data-rv="${i}" data-f="kind">${opt('gider','Harcama',r.kind)}${opt('iade','İade',r.kind)}${opt('gelir','Gelir',r.kind)}</select></label></div>
     ${r.kind==='gelir'?`<select id="rv_src2_${i}" data-rv="${i}" data-f="source" aria-label="Gelir türü">${INCOME_SRC.map(s=>opt(s,s,r.source)).join('')}</select>`:mine?`${!r.known?'<div class="ask">Bu işyerini tanımadım. Ne harcaması?</div>':''}<select id="rv_cat_${i}" data-rv="${i}" data-f="cat" aria-label="Kategori">${catOpts(r.cat)}</select>${!r.known?`<label class="check"><input type="checkbox" id="rv_rem_${i}" data-rv="${i}" data-f="remember" ${r.remember?'checked':''}> Bir dahakine kendim tanıyayım</label>`:''}`:`<div class="small" style="color:var(--other);font-weight:600">${esc(personName(r.personId))} harcaması · senin harcamana karışmaz</div>`}
   </div>`;
@@ -1255,7 +1265,7 @@ document.addEventListener('change',e=>{
   if(t.id==='apiModel'){ls.set('kd_model',t.value);toast('Okuma kalitesi değişti');return}
   if(t.id==='targetDate'){if(t.value){ls.set('kd3_target',t.value);render()}return}
   if((t.name==='type'||t.id==='txPerson')&&t.closest('form[data-form="tx"]'))syncTxForm();
-  if(t.dataset?.rv!==undefined&&RV){const r=RV.rows[+t.dataset.rv],f=t.dataset.f;r[f]=t.type==='checkbox'?t.checked:(f==='amount'?Math.abs(num(t.value)):t.value);if(['on','kind','personId','amount'].includes(f))keepScroll(renderReview)}
+  if(t.dataset?.rv!==undefined&&RV){const r=RV.rows[+t.dataset.rv],f=t.dataset.f;r[f]=t.type==='checkbox'?t.checked:(f==='amount'?r2(Math.abs(num(t.value))*(r.inst>1?r.inst:1)):t.value);if(['on','kind','personId','amount'].includes(f))keepScroll(renderReview)}
   if(t.dataset?.fi!==undefined&&RC){const it=RC.items[+t.dataset.fi],f=t.dataset.f;if(f==='on')it.on=t.checked;else if(['qty','unitPrice','lineTotal','discount'].includes(f)){it[f]=Math.abs(num(t.value));if(f==='qty'||f==='unitPrice')it.lineTotal=r2(it.qty*it.unitPrice);if(f==='lineTotal'&&it.qty)it.unitPrice=r2(it.lineTotal/it.qty);it.warn=''}else it[f]=t.value;keepScroll(renderFis)}
   if(t.dataset?.fc&&RC){const f=t.dataset.fc;RC[f]=f==='total'?r2(num(t.value)):t.value;if(f==='total')keepScroll(renderFis)}
 });
