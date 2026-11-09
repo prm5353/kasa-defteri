@@ -872,7 +872,8 @@ function cardBlock(c,st){
     <div class="box"><span class="eyebrow">Kimin ne kadar harcadığı</span>${splitRows(T.by,c.id,'all')}</div>
     ${!st.noDays&&!st.last.paid&&st.last.total>0.5?periodBox(c,st.last,true):''}
     ${!st.noDays&&st.open.total>0.5?periodBox(c,st.open,false):''}
-    <div class="btnrow" style="margin-top:10px"><button class="btn sm" data-act="paycard" data-id="${c.id}">Karta ödeme yaptım</button>${c.holderId?'':`<button class="btn ghost sm" data-act="spends" data-v="${c.id}">Nereye harcadım</button>`}</div>
+    <div class="btnrow" style="margin-top:10px"><button class="btn sm ghost" data-act="lump" data-id="${c.id}" data-m="stmt">Ekstre borcunu gir</button><button class="btn sm ghost" data-act="lump" data-id="${c.id}" data-m="open">Dönem içi kullanımı gir</button></div>
+    <div class="btnrow" style="margin-top:8px"><button class="btn sm" data-act="paycard" data-id="${c.id}">Karta ödeme yaptım</button>${c.holderId?'':`<button class="btn ghost sm" data-act="spends" data-v="${c.id}">Nereye harcadım</button>`}</div>
     <details style="margin-top:12px" ${(rFrom||rTo)?'open':''}><summary>Tarih aralığı seç</summary>
       <form data-form="crange" style="margin-top:8px"><input type="hidden" name="id" value="${c.id}"><div class="two"><label class="f">Başlangıç<input type="date" name="from" value="${rFrom}"></label><label class="f">Bitiş<input type="date" name="to" value="${rTo}"></label></div><div class="btnrow"><button class="btn sm" type="submit">Göster</button>${(rFrom||rTo)?`<button class="btn sm ghost" type="button" data-act="crclear" data-id="${c.id}">Temizle</button>`:''}</div></form>
       ${inRange?`<div class="box"><div class="sumline"><span>${rFrom?fmtD(rFrom):'Başından'} – ${rTo?fmtD(rTo):'bugün'}</span><b>${TL(inRange.reduce((a,p)=>a+p.pamount,0))}</b></div>${Object.entries(rBy).map(([p,v])=>`<div class="sumline"><span>${p===ME?'Benim':esc(personName(p))}</span><b>${TL(v)}</b></div>`).join('')}<div class="small muted">Bu aralık sadece görüntüleme içindir, toplam borcu etkilemez.</div></div>${[...inRange].sort((a,b)=>b.pdate.localeCompare(a.pdate)).map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')}`:''}
@@ -887,6 +888,17 @@ function periodBox(c,s,kesik){const mine=s.by[ME]||0;const oth=Object.entries(s.
     <div class="sumline"><span style="font-weight:700">Benim payım</span><b style="color:var(--accent)">${TL(mine)}</b></div>
     ${oth.map(([p,v])=>`<div class="sumline"><span>${esc(personName(p))}</span><b style="color:var(--other)">${TL(v)}</b></div>`).join('')}
     <div class="sumline"><span>Son ödeme</span><b>${fmtD(s.due)}</b></div>${kesik?(s.checked?'<span class="chip ok">Ekstre yüklendi, bu harcamalar yeni döneme karışmaz</span>':'<div class="small muted">Ekstreyi yüklersen içindeki harcamalar bu ekstreye sabitlenir.</div>'):bankCmpLine(c,s)}</div>`}
+/* satır satır girmeden, ekstre borcunu ya da dönem içi kullanımı toplam tutar olarak gir */
+function formLump(cardId,mode){const c=cardById(cardId);const holder=c.holderId||'';const st=cardState(c);
+  const isS=mode==='stmt';const cut=isS?(st&&!st.noDays?st.last.cut:today()):(st&&!st.noDays?st.open.cut:'');
+  const ex=S.tx.filter(t=>t.cardId===c.id&&t.lump===mode&&t.stmtCut===cut);const exOf=pid=>ex.filter(t=>t.personId===pid).reduce((a,t)=>a+t.amount,0)||'';
+  return head(`${esc(c.name)} · ${isS?'ekstre borcu':'dönem içi kullanım'}`)+`<form data-form="lump"><input type="hidden" name="id" value="${c.id}"><input type="hidden" name="mode" value="${mode}">
+    <p class="small muted" style="margin:0">${isS?'Ekstredeki <b>dönem borcunu</b> kişilere göre gir. Satır satır girmen gerekmez. Aynı ekstre için tekrar girersen eskisinin yerine geçer, dönem içi kullanım tutarı da silinir.':'Banka uygulamasındaki <b>dönem içi harcama</b> tutarını gir. Her girişte bir öncekinin yerine geçer, üst üste eklenmez. Ekstre kesilince "Ekstre borcunu gir" ile kesin tutarı girersin.'}</p>
+    ${isS?`<div class="two"><label class="f">Hesap kesim tarihi<input type="date" name="cut" value="${cut}" required></label><label class="f">Son ödeme tarihi<input type="date" name="due" value="${st&&!st.noDays?st.last.due:''}" required></label></div>`:''}
+    ${holder?`<label class="f">${esc(personName(holder))} harcaması (₺)<input name="a_${holder}" type="number" step="0.01" inputmode="decimal" value="${exOf(holder)}"></label>`:''}
+    <label class="f">Benim harcamam (₺)<input name="a_${ME}" type="number" step="0.01" inputmode="decimal" value="${exOf(ME)}"></label>
+    ${S.persons.filter(p=>p.id!==holder).map(p=>`<label class="f">${esc(p.name)} (₺)<input name="a_${p.id}" type="number" step="0.01" inputmode="decimal" value="${exOf(p.id)}"></label>`).join('')}
+    <button class="btn" type="submit">Kaydet</button></form>`}
 function stmtPersonSheet(cardId,cut,pid){
   const c=cardById(cardId);const s=cut==='all'?(()=>{const T=cardTotals(c);return {items:T.billed,due:nextPay(c,cardState(c))?.due||today()}})():stmt(c,cut);const items=s.items.filter(p=>p.personId===pid).sort((a,b)=>b.pdate.localeCompare(a.pdate));
   const tot=items.reduce((a,p)=>a+p.pamount,0);let byCat='';
@@ -1385,6 +1397,7 @@ document.addEventListener('click',async e=>{
     case 'delacc':if(armed(el,'Kayıtlar kalır, hesap silinir. Tekrar dokun')){await del(id);closeSheet();toast('Hesap silindi')}break;
     case 'newacc':openSheet(formAccount());break;
     case 'paycard':openSheet(formPayCard(id));break;
+    case 'lump':openSheet(formLump(id,el.dataset.m));break;
     case 'crclear':cardRange[id]={};openSheet(head(esc(cardById(id).name))+cardBlock(cardById(id),cardState(cardById(id))));break;
     case 'cardopen':openSheet(head(esc(cardById(id)?.name||'Kart'))+cardBlock(cardById(id),cardState(cardById(id))));break;
     case 'reorder':cardReorder=!cardReorder;render();break;
@@ -1570,6 +1583,14 @@ document.addEventListener('submit',async e=>{
     case 'person':await put({k:'person',name:g('name').trim(),opening:0,ts:Date.now()});setTimeout(settingsSheet,250);break;
     case 'catadd':case 'catnew':{const t=catTree();const m=String(g('main')||'').trim();const sb=String(g('sub')||'').trim();if(!m)return;if(!t[m])t[m]=[];if(sb&&!t[m].includes(sb))t[m].push(sb);await saveTree(t);
       if(f.dataset.form==='catnew')setCat(catVal(m,sb));else{toast('Eklendi');setTimeout(()=>{settingsSheet();const d=[...document.querySelectorAll('.catedit')].find(x=>x.querySelector('summary span')?.textContent===m);if(d)d.open=true},150)}break}
+    case 'lump':{const c=cardById(g('id'));const mode=g('mode');let cut,date;
+      if(mode==='stmt'){cut=g('cut');const due=g('due');if(!cut||!due){toast('Tarihleri gir');return}date=cut;const cuts={};Object.entries(c.cuts||{}).forEach(([k,v])=>{if(k<cut&&k.slice(0,7)!==cut.slice(0,7))cuts[k]=v});cuts[cut]=due;await put({...c,cuts,cutDay:parse(cut).getDate(),dueDay:parse(due).getDate()});c.cuts=cuts;c.cutDay=parse(cut).getDate();c.dueDay=parse(due).getDate()}
+      else{const st=cardState(c);cut=st&&!st.noDays?st.open.cut:'';date=today()}
+      const old=S.tx.filter(t=>t.cardId===c.id&&t.stmtCut===cut&&(t.lump===mode||(mode==='stmt'&&t.lump==='open'))).map(t=>t.id);
+      const pids=[ME,...S.persons.map(p=>p.id)];const ts=Date.now();
+      const list=pids.map((pid,i)=>{const v=num(g('a_'+pid));if(!(v>0))return null;return clean({id:newId(),type:'gider',cardId:c.id,account:'',date,amount:v,personId:pid,merchant:mode==='stmt'?`${c.name} ekstresi (${fmtD(cut)})`:`${c.name} dönem içi kullanım`,category:pid===ME?'Diğer':'',sub:'',lump:mode,stmtCut:cut||undefined,inst:1,via:'lump',ts:ts+i})}).filter(Boolean);
+      await saveTx(list,old);if(mode==='stmt'){const ex=S.stmts.find(x=>x.cardId===c.id&&x.cut===cut);await put({...(ex||{}),id:ex?.id,k:'stmt',cardId:c.id,cut,due:g('due'),checked:true,paid:!!ex?.paid})}
+      closeSheet();toast('Kaydedildi');break}
     case 'bankcmp':{const c=cardById(g('id'));const st=cardState(c);await put({...c,bankCheck:{cut:st.open.cut,amount:num(g('amount')),at:today()}});closeSheet();break}
     case 'apikey':{ls.set('kd_apikey',String(g('key')||'').trim());toast('Anahtar kaydedildi');break}
     case 'prodedit':{const p=S.prod.map[g('pid')];p.name=g('name').trim()||p.name;p.group=g('group');await saveProd();_ps=null;closeSheet();render();break}
