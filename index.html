@@ -222,6 +222,21 @@ div.f{display:flex;flex-direction:column;gap:6px}
 form.inline{flex-direction:row;gap:8px;margin-top:6px}
 form.inline .inp{flex:1;padding:8px 10px;font-size:15px}
 .cg.add{border-style:dashed;color:var(--accent);justify-content:center}
+.catgrid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ct{position:relative;border:1px solid var(--line);background:var(--bg);border-radius:14px;padding:12px 6px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;color:var(--ink);min-width:0;min-height:96px;justify-content:center}
+.ct .ic{font-size:30px;line-height:1}
+.ct .nm{font-size:13px;font-weight:600;text-align:center;line-height:1.2;overflow-wrap:anywhere}
+.ct .bd{font-size:10.5px;color:var(--muted);text-align:center}
+.ct .ar{position:absolute;top:6px;right:8px;color:var(--muted);font-weight:700}
+.ct.over{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 14%,var(--bg))}
+.ct.over .nm,.ct.over .bd{color:var(--crit)}
+.ct.near{border-color:var(--warn)}
+.ct.add{border-style:dashed;color:var(--accent)}
+.ct:active{background:var(--accent-soft)}
+.cer{display:flex;align-items:center;gap:6px;padding-block:6px;border-top:1px solid var(--line)}
+.cer:first-child{border-top:0}
+.cer .ic{font-size:22px;background:var(--bg);border:1px solid var(--line);border-radius:10px;width:40px;height:40px;cursor:pointer}
+.cer .nm{flex:1;min-width:0;font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis}
 .ro{font-size:12.5px;color:var(--muted);background:var(--chip);border-radius:10px;padding:8px 12px}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 html{padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -338,7 +353,7 @@ const srcVal=t=>t.cardId?'c:'+t.cardId:(t.account?'a:'+t.account:'');
 const srcParse=v=>{v=String(v||'');if(v.startsWith('c:'))return {cardId:v.slice(2),account:''};if(v.startsWith('a:'))return {cardId:'',account:v.slice(2)};return {cardId:'',account:''}};
 const hasDays=c=>c&&c.cutDay>0&&c.dueDay>0;
 function catTree(){const t=JSON.parse(JSON.stringify(S.catTree||CAT_TREE));S.cats.forEach(c=>{if(!c.main)return;if(!t[c.main])t[c.main]=[];if(c.sub&&!t[c.main].includes(c.sub))t[c.main].push(c.sub)});return t}
-const saveTree=async t=>{S.catTree=t;await put({id:'cattree',k:'cattree',tree:t});for(const c of S.cats)await del(c.id)};
+const saveTree=async t=>{S.catTree=t;await put({id:'cattree',k:'cattree',tree:t,icons:S.catIcons||{}});for(const c of S.cats)await del(c.id)};
 const catVal=(m,s)=>(m||'Diğer')+'|'+(s||'');
 const catLabel=(m,s)=>s?`${m} › ${s}`:(m||'Diğer');
 const catPromptList=()=>Object.entries(catTree()).flatMap(([m,s])=>[m,...s.map(x=>m+' › '+x)]);
@@ -573,7 +588,7 @@ function partition(docs){
     else if(v.k==='merchants')S.merch=v.map||{};
     else if(v.k==='products')S.prod={map:v.map||{},alias:v.alias||{}};
     else if(v.k==='meta')S.meta=v;
-    else if(v.k==='cattree')S.catTree=v.tree;
+    else if(v.k==='cattree'){S.catTree=v.tree;S.catIcons=v.icons||{}}
     else if(arr[v.k])S[arr[v.k]].push({...v,id:d.id});
   });
   derive();
@@ -1168,13 +1183,35 @@ const srcChoices=()=>[...S.cards.map(c=>['c:'+c.id,c.name]),...S.accounts.map(a=
 function catButton(v,target){const [m,sb]=String(v||'Diğer|').split('|');return `<button type="button" class="catbtn" data-act="catpick" data-target="${esc(target)}"><span>${esc(catLabel(m,sb))}</span><b aria-hidden="true">▾</b></button>`}
 let catTarget=null;
 function recentCats(){const seen=[];S.tx.filter(t=>t.type==='gider'&&t.personId===ME&&t.category).slice(0,80).forEach(t=>{const v=catVal(t.category,t.sub);if(!seen.includes(v))seen.push(v)});return seen.slice(0,6)}
+/* kategori seçici: büyük simgeli butonlar, bütçeyi aşan kırmızı; Düzenle ile sırala, adlandır, ekle, sil */
+const CAT_ICONS={'Market':'🛒','Dışarıda Yemek':'🍽️','Araçlarım':'🚗','Faturalar':'🧾','Ev':'🏠','Alışveriş':'🛍️','Kişisel':'💈','Sağlık':'🩺','Gezi':'✈️','Tütün':'🚬','Nöbet':'🌙','Abonelik':'📺','Ticari Gider':'💼','Banka':'🏦','Diğer':'📦',
+  'Yakıt':'⛽','Otopark':'🅿️','Yıkama':'🧽','Bakım':'🔧','HGS':'🛣️','Sigorta':'🛡️','Vergiler':'🏛️','Cezalar':'🚨','Motosiklet':'🏍️','Araç':'🚙','Elektrik':'💡','Doğalgaz':'🔥','Su Kanalizasyon':'💧','İnternet':'🌐','Cep telefonu':'📱','Sabit Telefon':'☎️','Kablo TV':'📡','Bina Aidat':'🏢','Çöp':'🗑️',
+  'Kira':'🔑','Bakım-onarım':'🛠️','Mobilya':'🛋️','Giyim':'👕','Elektronik':'💻','Hediye':'🎁','Kaan Alp':'👦','Kitaplar':'📚','Saç bakımı':'💇','Spor':'🏋️','Eğitim':'🎓','Kişisel Seyahat':'🧳','Avukatlık':'⚖️','Yatırım':'📈','Eczane':'💊','Laboratuvar':'🧪','Personel Gideri':'👥','Sarf Malzeme':'📦','Medikal':'🩹','Kredi':'💳','Kredi Kartı':'💳','Komisyon':'🧮'};
+const catIcon=(m,sb)=>{const I=S.catIcons||{};return I[sb?m+'|'+sb:m]||(sb?CAT_ICONS[sb]:null)||I[m]||CAT_ICONS[m]||'🏷️'};
+let catEditMode=false,catCurMain=null;
+async function saveCatAll(t,icons){S.catTree=t;if(icons)S.catIcons=icons;await put({id:'cattree',k:'cattree',tree:t,icons:S.catIcons||{}});for(const c of S.cats)await del(c.id)}
+async function catRename(m,sb,nn){const t=catTree();const I={...(S.catIcons||{})};
+  if(sb){t[m]=t[m].map(x=>x===sb?nn:x);if(I[m+'|'+sb]){I[m+'|'+nn]=I[m+'|'+sb];delete I[m+'|'+sb]}}
+  else{const o={};Object.entries(t).forEach(([k,v])=>o[k===m?nn:k]=v);Object.keys(t).forEach(k=>delete t[k]);Object.assign(t,o);Object.keys(I).forEach(k=>{if(k===m||k.startsWith(m+'|')){I[nn+k.slice(m.length)]=I[k];delete I[k]}})}
+  await saveCatAll(t,I);
+  const list=S.tx.filter(x=>x.type==='gider'&&x.category===m&&(!sb||x.sub===sb)).map(x=>sb?{...x,sub:nn}:{...x,category:nn});if(list.length)await saveTx(list);
+  if(!sb){for(const b of S.budgets.filter(b=>b.category===m))await put({...b,category:nn});let ch=false;Object.values(S.merch).forEach(v=>{if(v.category===m){v.category=nn;ch=true}});if(ch)await saveMerch()}
+  else{let ch=false;Object.values(S.merch).forEach(v=>{if(v.category===m&&v.sub===sb){v.sub=nn;ch=true}});if(ch)await saveMerch()}}
 function openCatPop(target,main){
-  catTarget=target;const t=catTree();const pop=document.getElementById('catpop');let h;
-  if(main){const subs=t[main]||[];h=`<div class="pophead"><button class="x" data-act="catback" aria-label="Geri">‹</button><b style="flex:1">${esc(main)}</b><button class="x" data-act="catclose" aria-label="Kapat">✕</button></div>
-    <div class="catgrid"><button class="cg main" data-act="catset" data-v="${esc(catVal(main,''))}">${esc(main)} (genel)</button>${subs.map(sb=>`<button class="cg" data-act="catset" data-v="${esc(catVal(main,sb))}">${esc(sb)}</button>`).join('')}<button class="cg add" data-act="catnewform" data-m="${esc(main)}">+ Yeni alt başlık</button></div>`}
-  else{const rc=recentCats();h=`<div class="pophead"><b style="flex:1">Kategori seç</b><button class="x" data-act="catclose" aria-label="Kapat">✕</button></div>
-    ${rc.length?`<div class="eyebrow" style="margin:2px 0 6px">Son kullanılanlar</div><div class="catgrid">${rc.map(v=>{const[m,sb]=v.split('|');return `<button class="cg" data-act="catset" data-v="${esc(v)}">${esc(catLabel(m,sb))}</button>`}).join('')}</div><div class="eyebrow" style="margin:12px 0 6px">Tüm kategoriler</div>`:''}
-    <div class="catgrid">${Object.entries(t).map(([m,subs])=>`<button class="cg ${subs.length?'has':''}" data-act="catmain" data-m="${esc(m)}" data-v="${esc(catVal(m,''))}">${esc(m)}${subs.length?' <span>›</span>':''}</button>`).join('')}<button class="cg add" data-act="catnewform">+ Yeni kategori</button></div><p class="small muted" style="margin:10px 0 0">Alt başlık eklemek için önce ana başlığa dokun. Silmek için Ayarlar → Harcama kategorileri.</p>`}
+  if(target!==undefined)catTarget=target;const t=catTree();const pop=document.getElementById('catpop');let h;
+  const bu={};budgetUse(today().slice(0,7)).forEach(b=>bu[b.category]=b);
+  const tile=(act,m,sb,label,extra)=>{const b=!sb&&bu[m];const over=b&&b.spent>b.limit;const near=b&&!over&&b.pct>=80;
+    return `<button class="ct ${over?'over':near?'near':''}" data-act="${act}" data-m="${esc(m)}" data-v="${esc(catVal(m,sb||''))}"><span class="ic">${catIcon(m,sb)}</span><span class="nm">${esc(label)}</span>${b?`<span class="bd">${TL(b.spent)} / ${TL(b.limit)}</span>`:''}${extra||''}</button>`};
+  const editHead=(title,back)=>`<div class="pophead">${back?`<button class="x" data-act="catback" aria-label="Geri">‹</button>`:''}<b style="flex:1">${title}</b><button class="btn sm ghost" data-act="catedit">${catEditMode?'Bitti':'Düzenle'}</button><button class="x" data-act="catclose" aria-label="Kapat">✕</button></div>`;
+  const erow=(m,sb,i,n)=>`<div class="cer"><button class="ic" data-act="caticon" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Simgeyi değiştir">${catIcon(m,sb)}</button>${sb?`<span class="nm">${esc(sb)}</span>`:`<button class="nm linkbtn" data-act="catmain" data-m="${esc(m)}" style="text-align:left">${esc(m)} ›</button>`}
+    <button class="x" data-act="catmv" data-m="${esc(m)}" data-s="${esc(sb||'')}" data-d="-1" ${i===0?'disabled':''} aria-label="Yukarı">↑</button><button class="x" data-act="catmv" data-m="${esc(m)}" data-s="${esc(sb||'')}" data-d="1" ${i===n-1?'disabled':''} aria-label="Aşağı">↓</button>
+    <button class="x" data-act="catren" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Adını değiştir">✎</button><button class="x" data-act="catdel" data-m="${esc(m)}" data-s="${esc(sb||'')}" aria-label="Sil">🗑</button></div>`;
+  if(main){const subs=t[main]||[];
+    h=editHead(esc(main),true)+(catEditMode?`<div class="stack" style="gap:0">${subs.map((sb,i)=>erow(main,sb,i,subs.length)).join('')||'<div class="small muted">Alt başlık yok.</div>'}</div><button class="cg add" style="width:100%;margin-top:10px" data-act="catnewform" data-m="${esc(main)}">+ Yeni alt başlık</button>`
+      :`<div class="catgrid3">${tile('catset',main,'',main+' (genel)')}${subs.map(sb=>tile('catset',main,sb,sb)).join('')}<button class="ct add" data-act="catnewform" data-m="${esc(main)}"><span class="ic">＋</span><span class="nm">Yeni alt başlık</span></button></div>`)}
+  else{const ks=Object.keys(t);
+    h=editHead(catEditMode?'Kategorileri düzenle':'Kategori seç')+(catEditMode?`<div class="stack" style="gap:0">${ks.map((m,i)=>erow(m,'',i,ks.length)).join('')}</div><button class="cg add" style="width:100%;margin-top:10px" data-act="catnewform">+ Yeni kategori</button><p class="small muted" style="margin:8px 0 0">Simgeye dokunup değiştir, ✎ ile adını değiştir (eski kayıtlar da yeni adı alır), ↑↓ ile sırala. Alt başlıklar için kategori adına dokun.</p>`
+      :`<div class="catgrid3">${Object.entries(t).map(([m,subs])=>tile(subs.length?'catmain':'catset',m,'',m,subs.length?'<span class="ar">›</span>':'')).join('')}<button class="ct add" data-act="catnewform"><span class="ic">＋</span><span class="nm">Yeni kategori</span></button></div>`)}
   pop.querySelector('.popcard').innerHTML=h;pop.hidden=false;
 }
 function setCat(v){
@@ -1273,7 +1310,7 @@ function settingsSheet(){
       <form data-form="budget" style="margin-top:8px"><div class="two"><label class="f">Kategori<select id="bCat" name="category">${Object.keys(catTree()).map(c=>opt(c,c,'Dışarıda Yemek')).join('')}</select></label><label class="f">Aylık limit (₺)<input id="bLim" name="limit" type="number" required placeholder="10000"></label></div><button class="btn sm" type="submit">Limit ekle</button></form></section>
     <section class="sec"><h2>Kartımı kullananlar</h2>${S.persons.map(p=>`<div class="row"><div class="main"><div class="t">${esc(p.name)}</div><div class="s">${holderCard(p.id)?'Ek kart · '+esc(holderCard(p.id).name):'Kartımı kullanıyor'}</div></div><button class="x" data-act="delperson" data-id="${p.id}" aria-label="Sil">✕</button></div>`).join('')}
       <form data-form="person" style="margin-top:8px"><label class="f">Yeni kişi<input id="perName" name="name" required></label><button class="btn sm" type="submit">Ekle</button></form></section>
-    <section class="sec"><h2>Harcama kategorileri</h2><p class="small muted" style="margin:0 0 6px">Ana başlığa dokunup alt başlıklarını gör; silebilir ya da yenisini ekleyebilirsin.</p>
+    <section class="sec"><h2>Harcama kategorileri<span class="sp"></span><button class="linkbtn" data-act="catsettings">Düzenle</button></h2><p class="small muted" style="margin:0 0 6px">Düzenle ile sırala, adını ve simgesini değiştir, ekle, sil.</p>
       ${Object.entries(catTree()).map(([m,subs])=>`<details class="catedit"><summary><span>${esc(m)}</span><span class="muted small">${subs.length?subs.length+' alt':''}</span></summary>
         ${subs.map(sb=>`<div class="row"><div class="main"><div class="t" style="font-weight:500">${esc(sb)}</div></div><button class="x" data-act="catdelsub" data-m="${esc(m)}" data-s="${esc(sb)}" aria-label="Sil">✕</button></div>`).join('')}
         <form data-form="catadd" class="inline"><input type="hidden" name="main" value="${esc(m)}"><input class="inp" name="sub" placeholder="Yeni alt başlık" required><button class="btn sm" type="submit">Ekle</button></form>
@@ -1496,10 +1533,18 @@ document.addEventListener('click',async e=>{
     case 'reorder':cardReorder=!cardReorder;render();break;
     case 'cardup':case 'carddown':{const arr=[...S.cards];const i=arr.findIndex(c=>c.id===id);const j=a==='cardup'?i-1:i+1;if(j<0||j>=arr.length)break;[arr[i],arr[j]]=[arr[j],arr[i]];for(let k=0;k<arr.length;k++)if(arr[k].order!==k)await put({...arr[k],order:k});break}
     case 'cardtop':{const arr=[S.cards.find(c=>c.id===id),...S.cards.filter(c=>c.id!==id)];for(let k=0;k<arr.length;k++)await put({...arr[k],order:k});closeSheet();toast('En üste alındı');break}
-    case 'catpick':openCatPop(el.dataset.target);break;
-    case 'catmain':openCatPop(catTarget,el.dataset.m);break;
-    case 'catback':openCatPop(catTarget);break;
-    case 'catclose':document.getElementById('catpop').hidden=true;break;
+    case 'catpick':catEditMode=false;openCatPop(el.dataset.target);break;
+    case 'catedit':catEditMode=!catEditMode;{const hb=document.querySelector('#catpop .pophead b');const inMain=document.querySelector('#catpop [data-act="catback"]');openCatPop(undefined,inMain?catCurMain:undefined)}break;
+    case 'catmv':{const t=catTree();const m=el.dataset.m,sb=el.dataset.s,d=+el.dataset.d;
+      if(sb){const a=t[m];const i=a.indexOf(sb);const j=i+d;if(j<0||j>=a.length)break;[a[i],a[j]]=[a[j],a[i]];await saveCatAll(t);openCatPop(undefined,m)}
+      else{const ks=Object.keys(t);const i=ks.indexOf(m);const j=i+d;if(j<0||j>=ks.length)break;[ks[i],ks[j]]=[ks[j],ks[i]];const o={};ks.forEach(k=>o[k]=t[k]);await saveCatAll(o);openCatPop()}break}
+    case 'catren':{const m=el.dataset.m,sb=el.dataset.s;const nn=(prompt('Yeni adı',sb||m)||'').trim();if(!nn||nn===(sb||m))break;const t=catTree();if(sb?t[m].includes(nn):t[nn]){toast('Bu ad zaten var');break}await catRename(m,sb,nn);openCatPop(undefined,sb?m:undefined);toast('Adı değişti')}break;
+    case 'caticon':{const m=el.dataset.m,sb=el.dataset.s;const v=(prompt('Yeni simge (bir emoji yaz, ör. 🍕)',catIcon(m,sb))||'').trim();if(!v)break;const I={...(S.catIcons||{})};I[sb?m+'|'+sb:m]=[...v].slice(0,2).join('');await saveCatAll(catTree(),I);openCatPop(undefined,sb?m:undefined)}break;
+    case 'catdel':{const m=el.dataset.m,sb=el.dataset.s;if(!armed(el,'Sil?'))break;const t=catTree();if(sb)t[m]=t[m].filter(x=>x!==sb);else delete t[m];await saveCatAll(t);openCatPop(undefined,sb?m:undefined);toast('Silindi. Eski kayıtların adı korunur.')}break;
+    case 'catmain':catCurMain=el.dataset.m;openCatPop(undefined,el.dataset.m);break;
+    case 'catback':catCurMain=null;openCatPop();break;
+    case 'catsettings':catEditMode=true;catCurMain=null;openCatPop(null);break;
+    case 'catclose':document.getElementById('catpop').hidden=true;if(!catTarget&&!document.getElementById('sheet').hidden)settingsSheet();break;
     case 'catset':setCat(el.dataset.v);break;
     case 'catnewform':{const m=el.dataset.m||'';document.querySelector('#catpop .popcard').innerHTML=`<div class="pophead"><button class="x" data-act="${m?'catmain':'catback'}" data-m="${esc(m)}" aria-label="Geri">‹</button><b style="flex:1">${m?esc(m)+' · yeni alt başlık':'Yeni kategori'}</b></div><form data-form="catnew">${m?`<input type="hidden" name="main" value="${esc(m)}"><label class="f">Alt başlık adı<input class="inp" name="sub" required autofocus></label>`:`<label class="f">Kategori adı<input class="inp" name="main" required autofocus></label><label class="f">Alt başlık (isteğe bağlı)<input class="inp" name="sub"></label>`}<button class="btn" type="submit">Ekle ve seç</button></form>`;setTimeout(()=>document.querySelector('#catpop input:not([type=hidden])')?.focus(),50);break}
     case 'catdelsub':if(armed(el,'Sil?')){const t=catTree();t[el.dataset.m]=(t[el.dataset.m]||[]).filter(x=>x!==el.dataset.s);await saveTree(t);settingsSheet()}break;
@@ -1678,7 +1723,7 @@ document.addEventListener('submit',async e=>{
     case 'budget':{const cat=g('category');const ex=S.budgets.find(b=>b.category===cat);await put({id:ex?.id,k:'budget',category:cat,limit:num(g('limit'))});setTimeout(settingsSheet,250);break}
     case 'person':await put({k:'person',name:g('name').trim(),opening:0,ts:Date.now()});setTimeout(settingsSheet,250);break;
     case 'catadd':case 'catnew':{const t=catTree();const m=String(g('main')||'').trim();const sb=String(g('sub')||'').trim();if(!m)return;if(!t[m])t[m]=[];if(sb&&!t[m].includes(sb))t[m].push(sb);await saveTree(t);
-      if(f.dataset.form==='catnew')setCat(catVal(m,sb));else{toast('Eklendi');setTimeout(()=>{settingsSheet();const d=[...document.querySelectorAll('.catedit')].find(x=>x.querySelector('summary span')?.textContent===m);if(d)d.open=true},150)}break}
+      if(f.dataset.form==='catnew'){if(catEditMode||!catTarget)openCatPop(undefined,sb?m:undefined);else setCat(catVal(m,sb))}else{toast('Eklendi');setTimeout(()=>{settingsSheet();const d=[...document.querySelectorAll('.catedit')].find(x=>x.querySelector('summary span')?.textContent===m);if(d)d.open=true},150)}break}
     case 'lump':{const c=cardById(g('id'));const mode=g('mode');let cut,date;
       if(mode==='stmt'){cut=g('cut');const due=g('due');if(!cut||!due){toast('Tarihleri gir');return}date=cut;const cuts={};Object.entries(c.cuts||{}).forEach(([k,v])=>{if(k<cut&&k.slice(0,7)!==cut.slice(0,7))cuts[k]=v});cuts[cut]=due;await put({...c,cuts,cutDay:parse(cut).getDate(),dueDay:parse(due).getDate()});c.cuts=cuts;c.cutDay=parse(cut).getDate();c.dueDay=parse(due).getDate()}
       else{const st=cardState(c);cut=st&&!st.noDays?st.open.cut:'';date=today()}
