@@ -186,6 +186,18 @@ details summary{cursor:pointer;font-weight:600;font-size:14px}
 .pick button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .lbl2{font-size:13px;font-weight:600;color:var(--muted)}
 div.f{display:flex;flex-direction:column;gap:6px}
+.catbtn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 11px;font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;text-align:left}
+.catbtn span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.catbtn b{color:var(--muted);font-weight:500}
+.pop{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.pop .bg{position:absolute;inset:0;background:rgba(5,12,9,.45)}
+.popcard{position:relative;background:var(--surface);width:100%;max-width:560px;max-height:80%;overflow:auto;border-radius:20px 20px 0 0;padding:14px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.pophead{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-family:var(--f-display);font-size:18px}
+.catgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cg{border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:12px 10px;font-size:14.5px;font-weight:600;color:var(--ink);cursor:pointer;text-align:left;display:flex;justify-content:space-between;align-items:center;min-width:0}
+.cg span{color:var(--muted)}
+.cg.main{grid-column:1/-1;background:var(--accent-soft);border-color:var(--accent-soft)}
+.cg:active{background:var(--accent);color:var(--accent-ink)}
 .ro{font-size:12.5px;color:var(--muted);background:var(--chip);border-radius:10px;padding:8px 12px}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 html{padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -216,6 +228,7 @@ img{max-width:100%}
 </div></nav>
 
 <div class="sheet" id="sheet" hidden><div class="bg" data-act="close"></div><div class="card" id="sheetBody"></div></div>
+<div class="pop" id="catpop" hidden><div class="bg" data-act="catclose"></div><div class="popcard"></div></div>
 <div class="toast" id="toast" hidden></div>
 <datalist id="prodNames"></datalist>
 
@@ -959,6 +972,24 @@ const accOpts=sel=>S.accounts.map(a=>opt(a.name,a.name,sel)).join('')+opt('','Na
 function catOpts(selV){const t=catTree();return Object.entries(t).map(([m,subs])=>subs.length?`<optgroup label="${esc(m)}">${opt(catVal(m,''),m+' (genel)',selV)}${subs.map(s=>opt(catVal(m,s),catLabel(m,s),selV)).join('')}</optgroup>`:opt(catVal(m,''),m,selV)).join('')}
 function chipPick(name,options,sel){return `<input type="hidden" name="${name}" value="${esc(sel??'')}"><div class="pick" data-pick="${name}">${options.map(([v,l])=>`<button type="button" class="${String(v)===String(sel??'')?'on':''}" data-act="pick" data-name="${name}" data-v="${esc(v)}">${esc(l)}</button>`).join('')}</div>`}
 const srcChoices=()=>[...S.cards.map(c=>['c:'+c.id,c.name]),...S.accounts.map(a=>['a:'+a.name,a.name]),['','Nakit']];
+/* kategori seçici: önce ana başlıklar, sonra alt başlıklar, hepsi düğme */
+function catButton(v,target){const [m,sb]=String(v||'Diğer|').split('|');return `<button type="button" class="catbtn" data-act="catpick" data-target="${esc(target)}"><span>${esc(catLabel(m,sb))}</span><b aria-hidden="true">▾</b></button>`}
+let catTarget=null;
+function recentCats(){const seen=[];S.tx.filter(t=>t.type==='gider'&&t.personId===ME&&t.category).slice(0,80).forEach(t=>{const v=catVal(t.category,t.sub);if(!seen.includes(v))seen.push(v)});return seen.slice(0,6)}
+function openCatPop(target,main){
+  catTarget=target;const t=catTree();const pop=document.getElementById('catpop');let h;
+  if(main){const subs=t[main]||[];h=`<div class="pophead"><button class="x" data-act="catback" aria-label="Geri">‹</button><b style="flex:1">${esc(main)}</b><button class="x" data-act="catclose" aria-label="Kapat">✕</button></div>
+    <div class="catgrid"><button class="cg main" data-act="catset" data-v="${esc(catVal(main,''))}">${esc(main)} (genel)</button>${subs.map(sb=>`<button class="cg" data-act="catset" data-v="${esc(catVal(main,sb))}">${esc(sb)}</button>`).join('')}</div>`}
+  else{const rc=recentCats();h=`<div class="pophead"><b style="flex:1">Kategori seç</b><button class="x" data-act="catclose" aria-label="Kapat">✕</button></div>
+    ${rc.length?`<div class="eyebrow" style="margin:2px 0 6px">Son kullanılanlar</div><div class="catgrid">${rc.map(v=>{const[m,sb]=v.split('|');return `<button class="cg" data-act="catset" data-v="${esc(v)}">${esc(catLabel(m,sb))}</button>`}).join('')}</div><div class="eyebrow" style="margin:12px 0 6px">Tüm kategoriler</div>`:''}
+    <div class="catgrid">${Object.entries(t).map(([m,subs])=>`<button class="cg ${subs.length?'has':''}" data-act="${subs.length?'catmain':'catset'}" data-m="${esc(m)}" data-v="${esc(catVal(m,''))}">${esc(m)}${subs.length?' <span>›</span>':''}</button>`).join('')}</div>`}
+  pop.querySelector('.popcard').innerHTML=h;pop.hidden=false;
+}
+function setCat(v){
+  const tg=catTarget;document.getElementById('catpop').hidden=true;if(!tg)return;
+  if(tg.startsWith('rv:')&&RV){RV.rows[+tg.slice(3)].cat=v;keepScroll(renderReview)}
+  else if(tg==='form'){const f=document.querySelector('form[data-form="tx"]');if(f){f.querySelector('input[name=cat]').value=v;const[m,sb]=v.split('|');f.querySelector('.catbtn span').textContent=catLabel(m,sb)}}
+}
 const head=t=>`<h3><span style="flex:1;min-width:0">${t}</span><button class="x" data-act="close" aria-label="Kapat">✕</button></h3>`;
 const defaultSrc=()=>S.cards[0]?'c:'+S.cards[0].id:'';
 function formTx(x,type){
@@ -969,7 +1000,7 @@ function formTx(x,type){
     <label class="f" data-for="gider gelir verdim transfer">Açıklama / işyeri<input id="txMerchant" name="merchant" value="${esc(x.merchant||'')}"></label>
     <label class="f" data-for="gider">Kim harcadı<select id="txPerson" name="personId">${personOpts(x.personId||ME)}</select></label>
     <div class="two" data-for="gider"><label class="f">Bir kısmı başkasının mı?<select id="txSplitP" name="splitP">${opt('','Hayır','')}${S.persons.map(p=>opt(p.id,p.name,'')).join('')}</select></label><label class="f">Onun payı (${(x.inst||1)>1?'aylık ':''}₺)<input id="txSplitA" name="splitAmt" type="number" step="0.01" inputmode="decimal" placeholder="ör. 69240"></label></div>
-    <label class="f" data-for="gider" id="catWrap">Kategori<select id="txCat" name="cat">${catOpts(catVal(x.category||'Market',x.sub))}</select></label>
+    <div class="f" data-for="gider" id="catWrap"><span class="lbl2">Kategori</span><input type="hidden" name="cat" value="${esc(catVal(x.category||'Market',x.sub))}">${catButton(catVal(x.category||'Market',x.sub),'form')}</div>
     <div class="two" data-for="gider"><label class="f">Taksit sayısı<input id="txInst" name="inst" type="number" min="1" max="36" value="${x.inst||1}"></label><label class="check" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="refund" ${x.amount<0?'checked':''}> İade</label></div>
     <label class="f" data-for="gelir">Gelir türü<select id="txSrc" name="source">${INCOME_SRC.map(s=>opt(s,s,x.source||'Maaş')).join('')}</select></label>
     <label class="f" data-for="tahsilat verdim">Kişi<select id="txWho" name="who">${S.persons.map(p=>opt(p.id,p.name,x.personId)).join('')}</select></label>
@@ -1139,7 +1170,7 @@ function rvRow(r,i){
     <div class="two"><label class="mini">${r.inst>1?'Aylık taksit (₺)':'Tutar (₺)'}<input type="number" step="0.01" inputmode="decimal" id="rv_amt_${i}" data-rv="${i}" data-f="amount" value="${r2(r.inst>1?r.amount/r.inst:r.amount)}"></label><label class="mini">Tarih<input type="date" id="rv_date_${i}" data-rv="${i}" data-f="date" value="${r.date}"></label></div>
     <div class="two"><label class="mini">Kim harcadı<select id="rv_per_${i}" data-rv="${i}" data-f="personId">${personOpts(r.personId)}</select></label><label class="mini">Tür<select id="rv_kind_${i}" data-rv="${i}" data-f="kind">${opt('gider','Harcama',r.kind)}${opt('iade','İade',r.kind)}${opt('gelir','Gelir',r.kind)}</select></label></div>
     ${r.kind!=='gelir'?`<div class="two"><label class="mini">Bir kısmı başkasının mı?<select id="rv_sp_${i}" data-rv="${i}" data-f="splitP">${opt('','Hayır',r.splitP||'')}${S.persons.map(p=>opt(p.id,p.name,r.splitP||'')).join('')}</select></label>${r.splitP?`<label class="mini">${esc(personName(r.splitP))} payı (${r.inst>1?'aylık ':''}₺)<input type="number" step="0.01" inputmode="decimal" id="rv_sa_${i}" data-rv="${i}" data-f="splitAmt" value="${r.splitAmt||''}"></label>`:'<span></span>'}</div>${r.splitP&&r.splitAmt>0?`<div class="small" style="color:var(--other);font-weight:600">${esc(personName(r.splitP))} ${TL2(r.splitAmt)} · senin payın ${TL2((r.inst>1?r.amount/r.inst:r.amount)-r.splitAmt)}</div>`:''}`:''}
-    ${r.kind==='gelir'?`<select id="rv_src2_${i}" data-rv="${i}" data-f="source" aria-label="Gelir türü">${INCOME_SRC.map(s=>opt(s,s,r.source)).join('')}</select>`:mine?`${!r.known?'<div class="ask">Bu işyerini tanımadım. Ne harcaması?</div>':''}<select id="rv_cat_${i}" data-rv="${i}" data-f="cat" aria-label="Kategori">${catOpts(r.cat)}</select>${!r.known?`<label class="check"><input type="checkbox" id="rv_rem_${i}" data-rv="${i}" data-f="remember" ${r.remember?'checked':''}> Bir dahakine kendim tanıyayım</label>`:''}`:`<div class="small" style="color:var(--other);font-weight:600">${esc(personName(r.personId))} harcaması · senin harcamana karışmaz</div>`}
+    ${r.kind==='gelir'?`<select id="rv_src2_${i}" data-rv="${i}" data-f="source" aria-label="Gelir türü">${INCOME_SRC.map(s=>opt(s,s,r.source)).join('')}</select>`:mine?`${!r.known?'<div class="ask">Bu işyerini tanımadım. Ne harcaması?</div>':''}${catButton(r.cat,"rv:"+i)}${!r.known?`<label class="check"><input type="checkbox" id="rv_rem_${i}" data-rv="${i}" data-f="remember" ${r.remember?'checked':''}> Bir dahakine kendim tanıyayım</label>`:''}`:`<div class="small" style="color:var(--other);font-weight:600">${esc(personName(r.personId))} harcaması · senin harcamana karışmaz</div>`}
   </div>`;
 }
 function renderReview(){
@@ -1243,6 +1274,11 @@ document.addEventListener('click',async e=>{
     case 'close':closeSheet();break;
     case 'add':openSheet(menuAdd());break;
     case 'settings':settingsSheet();break;
+    case 'catpick':openCatPop(el.dataset.target);break;
+    case 'catmain':openCatPop(catTarget,el.dataset.m);break;
+    case 'catback':openCatPop(catTarget);break;
+    case 'catclose':document.getElementById('catpop').hidden=true;break;
+    case 'catset':setCat(el.dataset.v);break;
     case 'pick':{const f=el.closest('form')||document;const inp=f.querySelector(`input[type=hidden][name="${el.dataset.name}"]`);if(inp)inp.value=el.dataset.v;el.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el));break}
     case 'search':searchSheet();break;
     case 'gsf':gsFilter=el.dataset.v;document.querySelectorAll('[data-act="gsf"]').forEach(b=>b.classList.toggle('on',b===el));fillSearch();break;
