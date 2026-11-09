@@ -1151,9 +1151,10 @@ function menuAdd(){
 function matchMerchant(raw){const k=normKey(raw);if(!k)return null;let best=null,bk='';Object.entries(S.merch).forEach(([mk,m])=>{if(k===mk||k.startsWith(mk+' ')||k.split(' ')[0]===mk){if(mk.length>bk.length){best=m;bk=mk}}});return best}
 /* bölüştürülmüş harcamalar (aynı groupId) tek harcama gibi karşılaştırılır */
 function groupedTx(){const g={};const out=[];S.tx.forEach(x=>{if(x.groupId){if(!g[x.groupId]){g[x.groupId]={...x,amount:0};out.push(g[x.groupId])}g[x.groupId].amount+=x.amount}else out.push(x)});return out}
+let DUPUSED=new Set();
 function dupState(r){
   const type=r.kind==='gelir'?'gelir':'gider';const amt=r.kind==='iade'?-r.amount:r.amount;let st=null;
-  for(const x of groupedTx()){if(x.type!==type||Math.abs(x.amount-amt)>0.01)continue;const dd=Math.abs(daysBetween(x.date,r.date));if(dd>2)continue;const a=firstWord(x.merchant),b=firstWord(r.merchant);if(dd<=1&&(a===b||!a||!b))return 'dup';st='similar'}
+  for(const x of groupedTx()){if(x.type!==type||Math.abs(x.amount-amt)>0.01)continue;const dd=Math.abs(daysBetween(x.date,r.date));if(dd>2)continue;const a=firstWord(x.merchant),b=firstWord(r.merchant);if(dd<=1&&(a===b||!a||!b)){if(DUPUSED.has(x.id)){st="similar";continue}DUPUSED.add(x.id);return 'dup'}st='similar'}
   return st;
 }
 const imgAccept=()=>sampleCaps?.images?.mediaTypes?.join(',')||'image/*';
@@ -1181,20 +1182,23 @@ function rowFromAI(r,src,isCard){
     cat:m?catVal(m.category,m.sub):(ai?catVal(ai.category,ai.sub):catVal('Diğer','')),personId:hp||cardById(srcParse(src).cardId)?.holderId||ME,known:!!m,remember:!m,src,source:'Diğer'};
   row.dup=dupState(row);row.on=row.dup!=='dup';return row;
 }
-function dedupeChunks(chunks){const out=[];let prev=new Set();chunks.forEach((arr,ci)=>{const keys=new Set();arr.forEach(r=>{const k=[r.date,r2(Math.abs(trAmount(r.amount))),firstWord(r.merchant)].join('|');keys.add(k);if(ci>0&&prev.has(k))return;out.push(r)});prev=keys});return out}
+/* parçalar arası tekrar: sadece önceki parçanın SONU ile bu parçanın BAŞI aynıysa o kadar satırı at. Aynı gün aynı yerde aynı tutarda birden çok işlem (ör. 8× ANPA 1.179,60) korunur. */
+function dedupeChunks(chunks){const key=r=>[r.date,r2(Math.abs(trAmount(r.amount))),firstWord(r.merchant)].join('|');const out=[];let prev=[];
+  chunks.forEach((arr,ci)=>{const ks=arr.map(key);let L=0;if(ci>0){for(let n=Math.min(prev.length,ks.length);n>0;n--){if(ks.slice(0,n).every((k,i)=>k===prev[prev.length-n+i])){L=n;break}}}
+    arr.forEach((r,i)=>{if(i>=L)out.push(r)});prev=ks});return out}
 function formSS(){return head('Ekran görüntüsünden ekle')+`<form data-form="ss"><div class="f"><span class="lbl2">Hangi kart ya da hesap?</span>${chipPick('src',srcChoices(),defaultSrc())}</div><label class="f">Görüntü(ler)<input id="ssFiles" name="files" type="file" accept="${esc(imgAccept())}" multiple required></label><p class="small muted" style="margin:0">Liste uzunsa kaydırıp birkaç görüntü al ya da tam sayfa PDF yükle. Daha önce eklediklerini iki kez eklemem.</p>${imgOk()?'':noImgMsg}<button class="btn" type="submit" id="ssGo">Oku</button><div id="ssStatus" class="small muted"></div></form>`}
 async function runSS(fd){
   const files=[...document.getElementById('ssFiles').files];const src=fd.get('src')||'';const st=document.getElementById('ssStatus'),btn=document.getElementById('ssGo');
   if(!files.length||pdfGuard(files,st))return;if(!sampleFn){st.textContent='Görüntü okuma kullanılamıyor.';return}
   btn.disabled=true;st.innerHTML='<span class="spin"></span> Okunuyor…';
-  try{const res=await askImages(`Görüntü(ler) bir Türk bankasının mobil uygulamasındaki kart veya hesap hareketleri ekranı. Her harcamayı ve para girişini çıkar.\n${txRules()}\nGörüntüler numaralıdır. Her görüntü için, o görüntünün en üstteki satırları bir önceki numaralı görüntünün en alttaki satırlarıyla aynı mı (üst üste biniyor mu) belirt.
+  try{const res=await askImages(`Görüntü(ler) bir Türk bankasının mobil uygulamasındaki kart veya hesap hareketleri ekranı. Her harcamayı ve para girişini çıkar.\n${txRules()}\nGörüntüler numaralıdır. Aynı gün, aynı işyerinde, aynı tutarda birden çok satır olabilir (ör. aynı mağazada 8 ayrı 1.179,60 TL işlem): bunlar ayrı işlemlerdir, ekranda kaç satır varsa o kadar yaz, birleştirme. Sadece iki görüntü arasında üst üste binen (iki görüntüde de görünen aynı) satırları bir kez yaz. Her görüntü için, o görüntünün en üstteki satırları bir önceki numaralı görüntünün en alttaki satırlarıyla aynı mı (üst üste biniyor mu) belirt.
 Yalnızca şu JSON nesnesini döndür: {"rows":[${TX_SCHEMA}],"images":[{"n":görüntü numarası,"overlaps_previous":true ya da false,"rows_visible":o görüntüde görünen hareket satırı sayısı}]}. Hareket yoksa rows boş dizi.`,files,(i,n)=>{if(n>1)st.innerHTML=`<span class="spin"></span> Okunuyor (${i}/${n})…`},true);
     const gaps=files.length>1?gapWarnings(res):[];
-    RV={mode:'ss',gaps,rows:dedupeChunks(res.map(a=>Array.isArray(a)?a:(Array.isArray(a?.rows)?a.rows:[]))).filter(r=>r&&trAmount(r.amount)!==0).map(r=>rowFromAI(r,src,src.startsWith('c:')))};renderReview();
+    DUPUSED=new Set();RV={mode:'ss',gaps,rows:dedupeChunks(res.map(a=>Array.isArray(a)?a:(Array.isArray(a?.rows)?a.rows:[]))).filter(r=>r&&trAmount(r.amount)!==0).map(r=>rowFromAI(r,src,src.startsWith('c:')))};renderReview();
   }catch(e){btn.disabled=false;st.textContent=sampleErr(e)}
 }
 function formStmt(cardId){const c=cardById(cardId)||S.cards[0];return head('Ekstre yükle ve karşılaştır')+`<form data-form="stmt"><div class="f"><span class="lbl2">Hangi kart?</span>${chipPick('cardId',S.cards.map(x=>[x.id,x.name]),c?.id)}</div><label class="f">Ekstre ekran görüntüleri<input id="stFiles" name="files" type="file" accept="${esc(imgAccept())}" multiple required></label><div class="banner"><span>Ekstreyi <b>PDF</b> olarak ya da <b>ekran görüntüleriyle</b> yükleyebilirsin. Ekran görüntüsüyse kaydırarak birkaç tane al ve <b>sırayla birlikte</b> seç.</span></div>${imgOk()?'':noImgMsg}<button class="btn" type="submit" id="stGo">Oku ve karşılaştır</button><div id="stStatus" class="small muted"></div></form>`}
-async function runStmt(fd){
+async function runStmt(fd){DUPUSED=new Set();
   const files=[...document.getElementById('stFiles').files];const card=cardById(fd.get('cardId'));const st=document.getElementById('stStatus'),btn=document.getElementById('stGo');
   if(!files.length||!card||pdfGuard(files,st))return;if(!sampleFn){st.textContent='Görüntü okuma kullanılamıyor.';return}
   btn.disabled=true;st.innerHTML='<span class="spin"></span> Ekstre okunuyor…';
