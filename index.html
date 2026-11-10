@@ -558,9 +558,11 @@ const curRate=c=>c==='USD'?num(S.prices?.usd):c==='EUR'?num(S.prices?.eur):1;
 const debtTL=d=>debtLeft(d)*curRate(d.cur||'TRY');
 const debtAmtTL=d=>(d.amount||0)*curRate(d.cur||'TRY');
 const curFmt=(v,c)=>!c||c==='TRY'?TL(v):nfq.format(Math.round(v*100)/100)+' '+CURS[c][1];
+/* taksitle ödeyen kişinin o aya ait gelen parası: erken gelen ödeme planMonth ile ait olduğu aya yazılır */
+const planGot=(pl,mk)=>S.tx.filter(x=>x.type==='gelir'&&x.planId===pl.id&&(x.planMonth||x.date.slice(0,7))===mk).reduce((a,x)=>a+x.amount,0);
 function planStatus(pl){
   const inc=S.tx.filter(x=>x.type==='gelir'&&x.planId===pl.id);const got=(pl.already||0)+inc.reduce((a,x)=>a+x.amount,0);
-  const t=today();const d=parse(t);const gotThisMonth=inc.filter(x=>x.date.slice(0,7)===t.slice(0,7)).reduce((a,x)=>a+x.amount,0);
+  const t=today();const d=parse(t);const gotThisMonth=inc.filter(x=>(x.planMonth||x.date.slice(0,7))===t.slice(0,7)).reduce((a,x)=>a+x.amount,0);
   const remaining=Math.max(0,(pl.total||0)-got);
   let next=null;if(remaining>0)next=gotThisMonth>=(pl.installment||0)?dayIn(d.getFullYear(),d.getMonth()+1,pl.day||1):dayIn(d.getFullYear(),d.getMonth(),pl.day||1);
   return {got,remaining,next};
@@ -954,10 +956,10 @@ function monthPlan(mk){
   })});
   if(mk>=t.slice(0,7)){const a=mk===t.slice(0,7)?t:mk+'-01';const v=estSpend(src=>src.startsWith('a:'),mk===t.slice(0,7)?addDays(t,1):a,monthEnd(mk));if(v>0.5)outs.push({k:'estcash',id:mk,est:true,title:'Nakit/hesaptan harcamalar',date:a,amount:v,done:false,tag:'tahmini'})}
   S.plans.forEach(pl=>{const s=planStatus(pl);const[y,m]=mk.split('-').map(Number);const date=dayIn(y,m-1,pl.day||1);
-    const got=S.tx.filter(x=>x.type==='gelir'&&x.planId===pl.id&&x.date.slice(0,7)===mk).reduce((a,x)=>a+x.amount,0);
-    const ahead=Math.max(0,monthsBetween(t.slice(0,7),mk));const left=s.remaining+(got?got:0)-ahead*(pl.installment||0);
-    if(got>0)ins.push({k:'plan',id:pl.id,title:pl.who||pl.name,date,amount:got,done:true,tag:pl.name});
-    else if(left>0.5&&mk>=t.slice(0,7))ins.push({k:'plan',id:pl.id,title:pl.who||pl.name,date,amount:Math.min(pl.installment||left,left),done:false,tag:pl.name});
+    const got=planGot(pl,mk);
+    const ahead=Math.max(0,monthsBetween(t.slice(0,7),mk));const left=s.remaining+(got?got:0)-ahead*(pl.installment||0);const due=Math.min(pl.installment||left,left);
+    if(got>0)ins.push({k:'plan',id:pl.id,title:pl.who||pl.name,date,amount:got,done:true,tag:pl.name+(due-got>0.5?' · kısmi':'')});
+    if(due-got>0.5&&mk>=t.slice(0,7))ins.push({k:'plan',id:pl.id,title:pl.who||pl.name,date,amount:due-got,done:false,tag:pl.name,stag:got>0.5?`${TL(got)} geldi`:'',total:got>0.5?due:undefined});
   });
   /* kart payına sayılmayan fazla ödemeler: o kişiye geri verilecek / onun için kullanılacak para, giderlerde */
   excessList().forEach(e=>{const cur=t.slice(0,7);const disp=e.left>0.5&&e.date.slice(0,7)<cur?cur:e.date.slice(0,7);if(disp!==mk)return;
@@ -1102,11 +1104,11 @@ function planItemSheet(k,id){
   const mk=planMonth;
   if(k==='card'){const it=monthPlan(mk).outs.find(x=>x.k==='card'&&x.id===id&&!x.done);openSheet(formPayCard(id,it?it.amount:undefined,it));return}
   if(k==='personout'){excessSheet(id);return}
-  if(k==='sched'){const x=S.tx.find(t=>t.id===id);if(x){if(x.type==='gelir'||x.type==='tahsilat')openSheet(formTx(x));else schedPaySheet(x);return}}
-  if(k==='debt'){const d=S.debts.find(x=>x.id===id);if(d&&d.dir==='borc'&&!d.paid&&(!d.cur||d.cur==='TRY')){debtPaySheet(d);return}}
+  if(k==='sched'){const x=S.tx.find(t=>t.id===id);if(x){schedPaySheet(x);return}}
+  if(k==='debt'){const d=S.debts.find(x=>x.id===id);if(d&&!d.paid&&(!d.cur||d.cur==='TRY')){debtPaySheet(d);return}}
   if(k==='estcash'||k==='estcard'){planSheet(id);return}
-  if(k==='person'){personSheet(id);return}
-  if(k==='plan'){ledgerSheet();return}
+  if(k==='person'){const it=monthPlan(mk).ins.find(x=>x.k==='person'&&x.id===id&&!x.done);openSheet(formPay(id,it?it.amount:undefined));return}
+  if(k==='plan'){const pl=S.plans.find(p=>p.id===id);if(pl){planPaySheet(pl,mk);return}ledgerSheet();return}
   if(k==='debt'){openSheet(formDebt(S.debts.find(d=>d.id===id)));return}
   if(k==='income'){incomeSheet(mk,id);return}
   const r=S.recs.find(x=>x.id===id);if(!r)return;const o=recOcc(r,mk);
@@ -1133,16 +1135,24 @@ function payOutUI(o){const left=r2(Math.max(0,o.left));const g=o.gel;const paidW
       <button class="btn" type="submit">${o.verb||'Ödedim'}</button></form>`}
     ${o.hist&&o.hist.length?`<section class="sec" style="margin-top:12px"><h2>Bu ayki ${g?'girişler':'ödemeler'}</h2>${o.hist.map(x=>`<div class="sumline" style="align-items:center"><span>${fmtDY(x.date)}${x.acc?` · <span class="muted">${esc(x.acc)}</span>`:''}</span><span style="display:flex;gap:10px;align-items:center"><b>${TL(x.amount)}</b><button class="btn sm ghost" data-act="${x.act}" data-id="${esc(x.id)}"${x.i!=null?` data-i="${x.i}"`:''}>Sil</button></span></div>`).join('')}</section>`:''}
     ${o.extra||''}`}
-function schedPaySheet(x){
-  openSheet(payOutUI({title:esc(x.merchant||x.note||catLabel(x.category,x.sub)||'Ödeme'),left:x.amount,plan:x.amount,paid:0,sub:`${fmtDY(x.date)} için planlanmış${x.account?' · '+esc(x.account):''}`,
-    form:'paysched',hidden:{id:x.id},acc:x.account||'',date:today(),verb:'Ödedim',
+function schedPaySheet(x){const gel=x.type==='gelir'||x.type==='tahsilat';
+  openSheet(payOutUI({title:esc(x.merchant||x.source||x.note||(x.personId?personName(x.personId):'')||catLabel(x.category,x.sub)||(gel?'Gelir':'Ödeme')),left:x.amount,plan:x.amount,paid:0,gel,sub:`${fmtDY(x.date)} için ${gel?'bekleniyor':'planlanmış'}${x.account?' · '+esc(x.account):''}`,
+    form:'paysched',hidden:{id:x.id},acc:x.account||'',date:today(),verb:gel?'Geldi':'Ödedim',
     extra:`<button class="btn ghost" style="width:100%;margin-top:10px" data-act="edittx" data-id="${x.id}">Kaydı düzenle</button>`}));
 }
-function debtPaySheet(d){const left=debtLeft(d);const paid=(d.amount||0)-left;
-  openSheet(payOutUI({title:esc(d.who)+' · borç',left,plan:d.amount,paid,sub:`${d.dueDate?'Son gün '+fmtDY(d.dueDate):'Tarih yok'}${d.note?' · '+esc(d.note):''}`,
-    form:'paydebt',hidden:{id:d.id},acc:S.accounts[0]?.name||'',date:today(),verb:'Ödedim',
+function debtPaySheet(d){const left=debtLeft(d);const paid=(d.amount||0)-left;const gel=d.dir==='alacak';
+  openSheet(payOutUI({title:esc(d.who)+(gel?' · alacak':' · borç'),left,plan:d.amount,paid,gel,sub:`${d.dueDate?'Son gün '+fmtDY(d.dueDate):'Tarih yok'}${d.note?' · '+esc(d.note):''}`,
+    form:'paydebt',hidden:{id:d.id},acc:S.accounts[0]?.name||'',date:today(),verb:gel?'Geldi':'Ödedim',
     hist:(d.payments||[]).map((p,i)=>({date:p.date,amount:p.amount,acc:p.txId?S.tx.find(t=>t.id===p.txId)?.account:'',act:'debtpayundo',id:d.id,i})),
-    extra:`<button class="btn ghost" style="width:100%;margin-top:10px" data-act="editdebt" data-id="${d.id}">Borcu düzenle</button>`}));
+    extra:`<button class="btn ghost" style="width:100%;margin-top:10px" data-act="editdebt" data-id="${d.id}">${gel?'Alacağı':'Borcu'} düzenle</button>`}));
+}
+function planPaySheet(pl,mk){const s=planStatus(pl);const got=planGot(pl,mk);const ahead=Math.max(0,monthsBetween(today().slice(0,7),mk));
+  const due=Math.max(0,Math.min(pl.installment||s.remaining,s.remaining+got-ahead*(pl.installment||0)));const left=Math.max(0,Math.min(due-got,s.remaining));
+  const[y,m]=mk.split('-').map(Number);
+  openSheet(payOutUI({title:esc(pl.who||pl.name)+' · '+monthLabel(mk),left,plan:due,paid:got,gel:true,done:left<=0.5&&got>0.5,sub:`${esc(pl.name)} · ${fmtDY(dayIn(y,m-1,pl.day||1))} · toplam kalan ${TL(s.remaining)}`,
+    form:'payplan',hidden:{id:pl.id,mk},acc:pl.account||S.accounts[0]?.name||'',date:today(),verb:'Geldi',
+    hist:S.tx.filter(x=>x.type==='gelir'&&x.planId===pl.id&&(x.planMonth||x.date.slice(0,7))===mk).map(x=>({date:x.date,amount:x.amount,acc:x.account,act:'recundo',id:x.id})),
+    extra:`<button class="btn ghost" style="width:100%;margin-top:10px" data-act="ledger">Tüm taksitler</button>`}));
 }
 function incomeSheet(mk,src){
   mk=mk||today().slice(0,7);const items=S.tx.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk&&(!src||(x.source||'Diğer')===src));
@@ -1995,7 +2005,8 @@ function formAsset(a){a=a||{type:'gram'};return head('Varlık')+`<form data-form
     <div id="lentBox" ${a.lent?'':'hidden'}><label class="f">Kime verdim<input name="who" list="aWho" value="${esc(a.who||'')}"></label><datalist id="aWho">${[...new Set(S.assets.map(x=>x.who).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist><div class="two"><label class="f">Verdiğim tarih<input type="date" name="since" value="${a.since||''}"></label><label class="f">Geri vereceği tarih<input type="date" name="dueDate" value="${a.dueDate||''}"></label></div></div>
     <label class="f">Not<input id="aNote" name="note" value="${esc(a.note||'')}"></label><button class="btn" type="submit">Kaydet</button>${a.id?`<button class="btn danger" type="button" data-act="deldoc" data-id="${a.id}">Sil</button>`:''}</form>`}
 function formPrices(){const P=S.prices||{};return head('Fiyatları güncelle')+`<form data-form="prices"><div class="two">${PRICED.map(k=>[k,ASSET_TYPES[k]]).map(([k,l])=>`<label class="f">${l} (₺)<input id="pr_${k}" name="${k}" type="number" step="0.01" value="${P[k]??''}"></label>`).join('')}</div><button class="btn" type="submit">Kaydet</button></form>`}
-function formPay(pid){const L=personLedger(pid);return head(`${esc(personName(pid))} ödedi`)+`<form data-form="pay"><input type="hidden" name="personId" value="${pid}"><div class="two"><label class="f">Tutar (₺)<input id="payAmt" name="amount" type="number" step="0.01" required value="${L.bal>0?r2(L.bal):''}"></label><label class="f">Tarih<input id="payDate" name="date" type="date" value="${today()}"></label></div><label class="f">Hangi hesaba geldi<select id="payAcc" name="account">${accOpts(S.accounts[0]?.name||'')}</select></label><button class="btn" type="submit">Kaydet</button></form>`}
+function formPay(pid,pre){const L=personLedger(pid);const opts=[];if(pre>0.5)opts.push(['Bu ayki payı',pre]);if(L.bal>0.5&&!opts.some(([,v])=>Math.abs(v-L.bal)<1))opts.push(['Toplam borcu',L.bal]);const def=opts.length?opts[0][1]:'';
+  return head(`${esc(personName(pid))} ödedi`)+`<form data-form="pay"><input type="hidden" name="personId" value="${pid}">${opts.length?`<div class="payopts">${opts.map(([l,v],i)=>`<button type="button" data-act="payamt" data-v="${r2(v)}" class="${i?'':'on'}"><span>${l}</span><b>${TL2(v)}</b></button>`).join('')}<button type="button" data-act="payamt" data-v=""><span>Bir kısmı</span><b>tutarı yaz</b></button></div>`:''}<div class="two"><label class="f">Tutar (₺)<input id="payAmt" name="amount" type="number" step="any" inputmode="decimal" required value="${def!==''?r2(def):''}"></label><label class="f">Tarih<input id="payDate" name="date" type="date" value="${today()}"></label></div><label class="f">Hangi hesaba geldi<select id="payAcc" name="account">${accOpts(S.accounts[0]?.name||'')}</select></label><p class="small muted" style="margin:0 0 8px">Bir kısmını yazarsan kalanı tabloda bekler.</p><button class="btn" type="submit">Kaydet</button></form>${pre!=null?`<button class="btn ghost" style="width:100%;margin-top:10px" data-act="person" data-id="${pid}">Kişi ayrıntısı</button>`:''}`}
 function formOpening(pid){const p=S.persons.find(x=>x.id===pid);return head(`${esc(p.name)} · açılış bakiyesi`)+`<form data-form="opening"><input type="hidden" name="id" value="${pid}"><p class="small muted" style="margin:0">Bugünkü gerçek borcunu yaz; bundan sonraki harcama ve ödemeleri ben eklerim.</p><div class="two"><label class="f">Sana borcu (₺)<input id="opAmt" name="opening" type="number" step="0.01" value="${p.opening||0}"></label><label class="f">Tarih<input id="opDate" name="since" type="date" value="${p.since||START()}"></label></div><button class="btn" type="submit">Kaydet</button></form>`}
 function settingsSheet(){
   const merch=Object.entries(S.merch).sort((a,b)=>a[0].localeCompare(b[0]));
@@ -2519,11 +2530,14 @@ document.addEventListener('submit',async e=>{
     case 'paysched':{const x=S.tx.find(t=>t.id===g('id'));if(!x)return;const amt=Math.abs(num(g('amount')));if(!(amt>0))return;const d=g('date')||today();const acc=g('account')||'';
       if(amt>=x.amount-0.5)await saveTx([{...x,date:d,account:acc,ts:Date.now()}]);
       else await saveTx([{...x,id:newId(),amount:r2(amt),date:d,account:acc,ts:Date.now()},{...x,amount:r2(x.amount-amt)}]);
-      closeSheet();toast(amt>=x.amount-0.5?'Ödendi':`${TL(amt)} ödendi · kalan ${TL(x.amount-amt)} ${fmtD(x.date)} tarihinde bekliyor`);break}
+      {const gw=x.type==='gelir'||x.type==='tahsilat'?'geldi':'ödendi';closeSheet();toast(amt>=x.amount-0.5?gw[0].toUpperCase()+gw.slice(1):`${TL(amt)} ${gw} · kalan ${TL(x.amount-amt)} ${fmtD(x.date)} tarihinde bekliyor`)}break}
     case 'paydebt':{const dd=S.debts.find(x=>x.id===g('id'));if(!dd)return;const amt=Math.abs(num(g('amount')));if(!(amt>0))return;const d=g('date')||today();const left=debtLeft(dd);
-      const tx={id:newId(),type:'odeme',amount:r2(amt),date:d,account:g('account')||'',merchant:`${dd.who} borç ödemesi`,debtId:dd.id,ts:Date.now(),via:'manuel'};await saveTx([tx]);
+      const gel=dd.dir==='alacak';const tx={id:newId(),type:gel?'tahsilat':'odeme',amount:r2(amt),date:d,account:g('account')||'',merchant:gel?`${dd.who} ödedi`:`${dd.who} borç ödemesi`,debtId:dd.id,ts:Date.now(),via:'manuel'};await saveTx([tx]);
       const full=amt>=left-0.5;await put({...dd,payments:[...(dd.payments||[]),{date:d,amount:r2(amt),txId:tx.id}],...(full?{paid:true,closedAt:d}:{})});
-      closeSheet();toast(full?'Borç kapandı':`${TL(amt)} ödendi · kalan ${TL(left-amt)}`);break}
+      closeSheet();toast(full?(gel?'Alacak kapandı':'Borç kapandı'):`${TL(amt)} ${gel?'geldi':'ödendi'} · kalan ${TL(left-amt)}`);break}
+    case 'payplan':{const pl=S.plans.find(p=>p.id===g('id'));if(!pl)return;const amt=Math.abs(num(g('amount')));if(!(amt>0))return;const mk=g('mk');
+      await saveTx([{id:newId(),type:'gelir',amount:r2(amt),date:g('date')||today(),merchant:pl.name,source:'Araba taksiti',planId:pl.id,planMonth:mk,account:g('account')||'',ts:Date.now(),via:'manuel'}]);
+      closeSheet();toast(`${TL(amt)} geldi olarak kaydedildi`);break}
     case 'recdone':{const r=S.recs.find(x=>x.id===g('id'));const mk=g('mk');await saveTx([{id:newId(),type:r.dir==='gelir'?'gelir':'odeme',amount:Math.abs(num(g('amount'))),date:g('date')||today(),account:g('account')||'',merchant:r.name,source:r.dir==='gelir'?(incomeSrc().includes(r.name)?r.name:'Diğer'):undefined,recId:r.id,recMonth:mk,ts:Date.now(),via:'manuel'}]);closeSheet();toast('İşaretlendi');break}
     case 'asset':{const lent=fd.has('lent');const ow=String(g('owner')||'').trim();await put({id:g('id')||undefined,k:'asset',type:g('type'),qty:num(g('qty')),note:g('note')||'',value:g('type')==='esya'?num(g('value'))||0:undefined,name:g('type')==='esya'?String(g('name')||'').trim():undefined,owner:ow&&ow!=='Kendim'?ow:'',buyDate:g('buyDate')||'',costTL:num(g('costTL'))||0,usdRate:num(g('usdRate'))||0,eurRate:num(g('eurRate'))||0,lent,who:lent?String(g('who')||'').trim():'',since:lent?g('since')||'':'',dueDate:lent?g('dueDate')||'':''});closeSheet();setTimeout(assetsSheet,250);break}
     case 'prices':{const P=S.prices||{};const cur={};PRICED.forEach(k=>{const v=num(g(k));cur[k]=v>0?v:(P[k]||undefined)});const hist={...(P.history||{})};hist[today()]=clean(cur);await db.doc('market/prices').set(clean({...cur,updatedAt:new Date().toISOString(),source:'Elle girildi',history:hist}));closeSheet();toast('Fiyatlar güncellendi');break}

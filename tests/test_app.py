@@ -181,6 +181,37 @@ def main():
         check("kart: kısmi ödeme sonrası tablodaki tutar azalır", after < before - 1, (before, after))
         check("öde ekranları hatasız", not errors, errors[:3])
 
+        print("Gelirler: erken ya da bir kısmı geldi")
+        inc = json.loads(json.dumps(SAMPLE))
+        inc["recs"] = [{"id": "g1", "name": "Maaş", "amount": 80000, "day": 15, "dir": "gelir", "account": "Banka", "ts": 1}]
+        inc["debts"] = [{"id": "d2", "who": "Arkadaş", "dir": "alacak", "amount": 4000, "dueDate": "2026-11-20", "ts": 1}]
+        inc["plans"] = [{"id": "pl1", "name": "Araba", "who": "Alıcı", "total": 30000, "installment": 10000, "day": 5, "account": "Banka", "ts": 1}]
+        inc["months"]["m-2026-11"]["s2"] = {"type": "gelir", "amount": 6000, "date": "2026-11-27", "account": "Banka", "source": "Diğer", "merchant": "Kira geliri", "ts": 9}
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'g.json'))", inc); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        b0 = page.evaluate("accBalance(S.accounts[0])")
+        open_item("rec", "g1")
+        check("sabit gelir: düğme 'Geldi'", page.inner_text("#sheetBody button[type=submit]").strip() == "Geldi")
+        submit(50000)
+        g = page.evaluate("(()=>{const o=recOcc(S.recs[0],'2026-11');return [o.amount,o.done]})()")
+        check("sabit gelir: 50.000 gelince 30.000 bekler", g == [30000, False], g)
+        page.evaluate("planMonth='2026-12'"); open_item("rec", "g1"); submit(80000); page.evaluate("planMonth='2026-11'")
+        early = page.evaluate("(()=>{const o=recOcc(S.recs[0],'2026-12');const t=S.tx.find(x=>x.recMonth==='2026-12');return [o.done,t.date]})()")
+        check("sabit gelir: Aralık maaşı erken (bugün) geldi, Aralık'ta kapanır", early == [True, "2026-11-10"], early)
+        check("sabit gelir: gelenler hesaba eklenir", abs(page.evaluate("accBalance(S.accounts[0])") - (b0 + 130000)) < 0.01)
+        open_item("sched", "s2"); submit(2000)
+        sg = page.evaluate("S.tx.filter(t=>t.merchant==='Kira geliri').map(t=>[t.amount,t.date]).sort()")
+        check("ileri tarihli gelir: 2.000 bugün geldi, 4.000 bekler", sg == [[2000, "2026-11-10"], [4000, "2026-11-27"]], sg)
+        open_item("debt", "d2"); submit(1500)
+        check("alacak: 1.500 gelince 2.500 kalır", page.evaluate("debtLeft(S.debts[0])") == 2500)
+        open_item("plan", "pl1"); submit(4000)
+        pp = page.evaluate("monthPlan('2026-11').ins.filter(x=>x.k==='plan').map(x=>[x.amount,x.done]).sort()")
+        check("taksitli alacak: 4.000 gelince 6.000 bekler", sorted(pp) == [[4000, True], [6000, False]], pp)
+        page.evaluate("planMonth='2026-12'"); open_item("plan", "pl1"); submit(10000); page.evaluate("planMonth='2026-11'")
+        dec = page.evaluate("monthPlan('2026-12').ins.filter(x=>x.k==='plan'&&!x.done).length")
+        check("taksitli alacak: Aralık taksiti erken geldi, Aralık'ta bekleyen kalmaz", dec == 0, dec)
+        check("gelir ekranları hatasız", not errors, errors[:3])
+
         print("Güvenlik")
         check("içerik güvenlik politikası ihlali yok", not csp, csp[:2])
         check("sayfa hatası yok", not errors, errors[:3])
