@@ -674,6 +674,17 @@ def main():
         check("yeni kayıt geçmiş ayın raporunu değiştirmez", page.evaluate("mineTotal('2026-10')") == oct0)
         page.evaluate("tab='ana';render()")
 
+        print("Kart harcamalarım = analizdeki kart kısmı")
+        r = page.evaluate("""(()=>{const mk=today().slice(0,7);const a={},b={};
+          spendItems(S.cards.map(c=>c.id),'month').filter(p=>p.personId===ME).forEach(p=>{const k=p.category||'Diğer';a[k]=(a[k]||0)+p.pamount});
+          Object.entries(mineCats(mk)).forEach(([c,o])=>o.items.forEach(p=>{if(p.cardId)b[c]=(b[c]||0)+p.pamount}));return {a,b}})()""")
+        check("ana sayfa kart harcaması kategorileri analizle birebir aynı", r["a"] == r["b"], r)
+        page.evaluate("tab='ana';render()"); page.wait_for_timeout(200)
+        check("ana sayfada 'analizle aynı' yazıyor", "analizle aynı" in page.evaluate("document.getElementById('view').textContent"))
+        page.evaluate("spendSheet('all','month')"); page.wait_for_timeout(200)
+        check("kart harcamaları ekranında Bu ay / Bu ekstre dönemi / Son ekstre", all(s in page.evaluate("document.getElementById('sheetBody').textContent") for s in ("Bu ay", "Bu ekstre dönemi", "Son ekstre", "Analiz ekranıyla aynı")))
+        page.evaluate("closeAll()")
+
         print("Güvenlik")
         check("içerik güvenlik politikası ihlali yok", not csp, csp[:2])
         check("sayfa hatası yok", not errors, errors[:3])

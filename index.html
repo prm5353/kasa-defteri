@@ -1335,6 +1335,11 @@ function incomeSheet(mk,src){
 /* ===== KART HARCAMA GRAFİKLERİ ===== */
 const PAL=['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)','var(--c7)','var(--c8)'];
 function spendItems(cardIds,which){
+  /* 'month': bu takvim ayı, analizle aynı kurallar (harcama sayılmayanlar hariç); kişilerin payları da eklenir */
+  if(which==='month'){const mk=today().slice(0,7);const cn=id=>cardById(id)?.name||'Kart';const ids=new Set(cardIds);
+    const mine=Object.values(mineCats(mk)).flatMap(o=>o.items).filter(p=>p.cardId&&ids.has(p.cardId));
+    const oth=livePortions().filter(p=>p.cardId&&ids.has(p.cardId)&&p.personId!==ME&&p.pdate.slice(0,7)===mk);
+    return [...mine,...oth].map(p=>({...p,cardName:cn(p.cardId)}))}
   const out=[];S.cards.filter(c=>cardIds.includes(c.id)).forEach(c=>{const st=cardState(c);if(!st)return;const s=which==='last'?st.last:st.open;s.items.forEach(p=>out.push({...p,cardName:c.name}))});return out;
 }
 function donut(rows,total,size=150){
@@ -1342,27 +1347,30 @@ function donut(rows,total,size=150){
   rows.forEach((x,i)=>{const f=total>0?Math.max(0,x.v)/total:0;if(f<=0)return;const len=f*C;segs+=`<circle r="${r}" cx="${size/2}" cy="${size/2}" fill="none" stroke="${PAL[i]||'var(--muted)'}" stroke-width="22" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 ${size/2} ${size/2})"><title>${esc(x.k)} ${TL(x.v)}</title></circle>`;off+=len});
   return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="Kategori dağılımı" style="flex:none"><circle r="${r}" cx="${size/2}" cy="${size/2}" fill="none" stroke="var(--chip)" stroke-width="22"/>${segs}<text x="50%" y="47%" text-anchor="middle" style="font:700 15px var(--f-body);fill:var(--ink)">${TL(total)}</text><text x="50%" y="60%" text-anchor="middle" style="font:500 10px var(--f-body);fill:var(--muted)">benim</text></svg>`;
 }
-let spendScope='all',spendWhich='open';
+let spendScope='all',spendWhich='month';
 function spendSheet(scope,which){
   if(scope)spendScope=scope;if(which)spendWhich=which;
   const myCards=S.cards.filter(c=>c.holderId===''||!c.holderId);
   const ids=spendScope==='all'?S.cards.map(c=>c.id):[spendScope];
   const items=spendItems(ids,spendWhich);const mine=items.filter(p=>p.personId===ME);
   const by={};mine.forEach(p=>{const k=p.category||'Diğer';by[k]=(by[k]||0)+p.pamount});
-  let rows=Object.entries(by).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v);if(rows.length>8){const rest=rows.slice(7);rows=rows.slice(0,7).concat([{k:'Diğerleri',v:rest.reduce((a,x)=>a+x.v,0)}])}
+  let rows=Object.entries(by).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v);if(rows.length>8){const rest=rows.slice(7);rows=rows.slice(0,7).concat([{k:'Küçük kalemler',v:rest.reduce((a,x)=>a+x.v,0),rest:rest.map(x=>x.k)}])}
+  spendRest=rows.find(x=>x.rest)?.rest||[];
   const tot=mine.reduce((a,p)=>a+p.pamount,0);const oth={};items.filter(p=>p.personId!==ME).forEach(p=>oth[p.personId]=(oth[p.personId]||0)+p.pamount);
   const byCard={};mine.forEach(p=>byCard[p.cardName]=(byCard[p.cardName]||0)+p.pamount);const mxc=Math.max(1,...Object.values(byCard));
   openSheet(head('Kart harcamalarım')+`
-    <div class="seg" style="margin-bottom:8px">${[['open','Bu dönem'],['last','Son ekstre']].map(([k,l])=>`<button class="${spendWhich===k?'on':''}" data-act="spendw" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="seg" style="margin-bottom:8px">${[['month','Bu ay'],['open','Bu ekstre dönemi'],['last','Son ekstre']].map(([k,l])=>`<button class="${spendWhich===k?'on':''}" data-act="spendw" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="chips" style="margin-bottom:10px">${[['all','Tüm kartlar'],...myCards.map(c=>[c.id,c.name])].map(([k,l])=>`<button class="${spendScope===k?'on':''}" data-act="spends" data-v="${k}">${esc(l)}</button>`).join('')}</div>
-    <section class="sec"><div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">${donut(rows,tot)}<div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:4px">${rows.map((x,i)=>`<div class="cl tap" data-act="spendcat" data-c="${esc(x.k)}"><span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${PAL[i]};margin-right:6px"></i>${esc(x.k)}</span><b>${TL(x.v)} <span class="muted" style="font-weight:500">%${tot?Math.round(x.v/tot*100):0}</span></b></div>`).join('')||'<div class="small muted">Bu dönemde senin harcaman yok.</div>'}</div></div></section>
+    <p class="small muted" style="margin:0 0 8px">${spendNote()}</p><section class="sec"><div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">${donut(rows,tot)}<div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:4px">${rows.map((x,i)=>`<div class="cl tap" data-act="spendcat" data-c="${esc(x.k)}"><span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${PAL[i]};margin-right:6px"></i>${esc(x.k)}</span><b>${TL(x.v)} <span class="muted" style="font-weight:500">%${tot?Math.round(x.v/tot*100):0}</span></b></div>`).join('')||'<div class="small muted">Bu dönemde senin harcaman yok.</div>'}</div></div></section>
     ${spendScope==='all'&&Object.keys(byCard).length>1?`<section class="sec" style="margin-top:12px"><h2>Kartlara göre</h2>${Object.entries(byCard).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="catbar"><span>${esc(k)}</span><b>${TL(v)}</b><div class="bar"><i style="width:${v/mxc*100}%"></i></div></div>`).join('')}</section>`:''}
     <section class="sec" style="margin-top:12px"><h2>Kategoriler</h2>${rows.map((x,i)=>`<div class="catbar tap" data-act="spendcat" data-c="${esc(x.k)}"><span>${esc(x.k)}</span><b>${TL(x.v)}</b><div class="bar"><i style="width:${rows[0]?.v?x.v/rows[0].v*100:0}%;background:${PAL[i]}"></i></div></div>`).join('')||'<div class="empty">Yok</div>'}</section>
     ${Object.keys(oth).length?`<section class="sec" style="margin-top:12px"><h2>Kartımı kullananlar</h2><div class="small muted">Senin harcamana dahil değil</div>${Object.entries(oth).map(([p,v])=>`<div class="row tap" data-act="person" data-id="${p}"><div class="main"><div class="t">${esc(personName(p))}</div></div><div class="amt" style="color:var(--other)">${TL(v)}</div>${chev}</div>`).join('')}</section>`:''}`);
 }
+const spendNote=()=>spendWhich==='month'?`${monthLabel(today().slice(0,7))} 1'inden bugüne, kartla yaptığın harcamalar. Analiz ekranıyla aynı hesap; analizde bunlara ek olarak hesaptan/nakitten harcamaların da var.`:spendWhich==='open'?'Açık ekstre dönemi (son kesimden bugüne). Takvim ayından farklı olduğu için analizle tutmayabilir.':'Kesilmiş son ekstre.';
+let spendRest=[];
 function spendCatSheet(cat){
   const ids=spendScope==='all'?S.cards.map(c=>c.id):[spendScope];
-  const items=spendItems(ids,spendWhich).filter(p=>p.personId===ME&&(cat==='Diğerleri'||(p.category||'Diğer')===cat)).sort((a,b)=>b.pdate.localeCompare(a.pdate));
+  const items=spendItems(ids,spendWhich).filter(p=>p.personId===ME&&(cat==='Küçük kalemler'?spendRest.includes(p.category||'Diğer'):(p.category||'Diğer')===cat)).sort((a,b)=>b.pdate.localeCompare(a.pdate));
   openSheet(head(esc(cat))+`<section class="sec"><div class="total">${TL(items.reduce((a,p)=>a+p.pamount,0))}</div></section><section class="sec" style="margin-top:12px">${items.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')}</section><button class="btn ghost" style="width:100%;margin-top:12px" data-act="spendback">‹ Grafiğe dön</button>`);
 }
 /* başkalarının kart payları: her kart ve son ödeme tarihi ayrı; aldığım ödemeler en eski ekstreden düşülür */
@@ -1460,16 +1468,16 @@ async function laySave(t,C){const I={...(S.catIcons||{})};I.__layout={...(I.__la
 function viewHome(){
   const accs=S.accounts.map(a=>({a,b:accBalance(a)}));const cash=accs.reduce((s,x)=>s+x.b,0);
   const P=S.prices||{};const assetVal=S.assets.reduce((s,a)=>s+aVal(a,P),0);
-  const items=spendItems(S.cards.map(c=>c.id),'open');const mine=items.filter(p=>p.personId===ME);const tot=mine.reduce((a,p)=>a+p.pamount,0);
+  const items=spendItems(S.cards.map(c=>c.id),'month');const mine=items.filter(p=>p.personId===ME);const tot=mine.reduce((a,p)=>a+p.pamount,0);
   const by={};mine.forEach(p=>{const k=p.category||'Diğer';by[k]=(by[k]||0)+p.pamount});let rows=Object.entries(by).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,8);
-  const perCard=S.cards.map(c=>{const st=cardState(c);if(!st)return null;const m=st.open.by[ME]||0;const o=st.open.total-m;return {c,m,o,cut:st.open.cut}}).filter(Boolean);
+  const perCard=S.cards.map(c=>{const m=mine.filter(p=>p.cardId===c.id).reduce((a,p)=>a+p.pamount,0);const o=items.filter(p=>p.cardId===c.id&&p.personId!==ME).reduce((a,p)=>a+p.pamount,0);return {c,m,o}}).filter(x=>x.m>0.5||x.o>0.5);
   return `${welcome()}${alertsHtml()}${backupNag()}${setupSteps()}`+lay('ana',[
     ['cash','Nakit akışı tahmini',safeBox()],
     ['plan','Gelir-gider tablosu',`  ${planTable(planMonth)}`],
     ['owed','Bana ödenecek kart payları',`  ${owedSection()}`],
     ['held','Kişilerin hesabımdaki parası',`  ${heldSection()}`],
-    ['cardspend','Kart harcamalarım',`  <section class="sec tap" data-act="spendsheet"><h2>Kart harcamalarım<span class="sp"></span><span class="small muted">bu dönem</span>${chev}</h2>
-    <div style="display:flex;gap:12px;align-items:center">${donut(rows,tot,120)}<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${perCard.map(x=>`<div class="cl"><span>${esc(x.c.name)}</span><b>${TL(x.m)}${x.o>0.5?` <span style="color:var(--other);font-weight:500">+${TL(x.o)}</span>`:''}</b></div>`).join('')}<div class="small muted" style="margin-top:4px">Dokun: nereye harcadığını kart kart gör</div></div></div>
+    ['cardspend','Kart harcamalarım',`  <section class="sec tap" data-act="spendsheet"><h2>Kart harcamalarım<span class="sp"></span><span class="small muted">${monthLabel(today().slice(0,7))} · analizle aynı</span>${chev}</h2>
+    <div style="display:flex;gap:12px;align-items:center">${donut(rows,tot,120)}<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${perCard.map(x=>`<div class="cl"><span>${esc(x.c.name)}</span><b>${TL(x.m)}${x.o>0.5?` <span style="color:var(--other);font-weight:500">+${TL(x.o)}</span>`:''}</b></div>`).join('')}<div class="small muted" style="margin-top:4px">Dokun: kategoriler, ekstre dönemi</div></div></div>
   </section>`],
     ['param','Param (hesaplarım)',`  <section class="sec"><h2>Param<span class="sp"></span><span class="sum">${TL(cash)}</span></h2>
     ${accs.length?accRows(accs):'<div class="empty">Hesap yok.</div>'}
@@ -2098,7 +2106,7 @@ function catDetail(c,o){o=o||{};shReg('cat:'+c+'|'+(o.sub??''),()=>catDetail(c,o
   const fcs=k=>sub==null&&!ex&&k===cur?forecastCat(c,k):0;const ref=isCur&&fcs(mk)?fcs(mk):by.v;const ch=R?null:pctS(ref,avg);const tot=R?Object.values(mineCatsR(R)).reduce((a,o)=>a+o.v,0):mineTotal(mk);const title=sub!=null?`${esc(c)} › ${esc(sub||'Genel')}`:esc(c);
   const chip=ch==null||!avg?'':Math.abs(ch)<5?'<span class="vchip">ortalama civarı</span>':`<span class="vchip ${ch>0?'up':'down'}">${ch>0?'▲':'▼'} %${Math.abs(ch)} ${ch>0?'fazla':'az'}</span>`;
   let h=head(`${title} · ${R?'tarih aralığı':monthLabel(mk)}`)+`${ex?`<div class="banner warn" style="margin-bottom:10px"><span>Bu ${sub!=null?'alt başlık':'kategori'} <b>analize dahil değil</b>; harcama toplamına girmiyor. Burada sadece görmen için.</span></div>`:''}<section class="sec">${rgBox('an',`${monthLabel(mk)} · başka tarih aralığı seç`)}<div style="display:flex;gap:12px;align-items:center;margin-top:10px"><span class="anic big" style="color:${col}">${catIcon(c,sub||undefined)}</span><div><div class="total">${TL(by.v)}</div>
-    <div class="small muted">${!ex&&tot>0?`Harcamanın %${Math.round(by.v/tot*100)}'i · `:''}${items.length} kayıt</div></div></div>
+    <div class="small muted">${!ex&&tot>0?`Harcamanın %${Math.round(by.v/tot*100)}'i · `:''}${items.length} kayıt</div>${(()=>{const k=items.filter(p=>p.cardId).reduce((a,p)=>a+p.pamount,0);const n=by.v-k;return k>0.5&&n>0.5?`<div class="small muted">Kartlardan ${TL(k)} · hesaptan/nakitten ${TL(n)}</div>`:''})()}</div></div>
     <div class="vsub" style="margin-top:8px">${R?`${daysBetween(R.from,R.to)+1} gün`:`${isCur&&fcs(mk)&&by.v>0?`Bu hızla ay sonu <b>${TL(ref)}</b> · `:''}${avg?`6 ay ortalaması ${TL(avg)} `:''}${chip}`}</div>
     ${exSub?'<div class="small muted" style="margin-top:6px">Analize dahil olmayan alt başlıkları bu toplama girmiyor; aşağıda ayrıca görünür.</div>':''}</section>`;
   const V=last12(mk).map(k=>({k,v:catPart(k,c,sub).v,f:fcs(k)}));
