@@ -222,6 +222,8 @@ label.f input,label.f select,label.f textarea,.inp{border:1px solid var(--line);
 .vgg.big .vggr .l{grid-area:l;font-size:15px}.vgg.big .vggr b{grid-area:b;font-family:var(--f-display);font-size:24px}.vgg.big .vggr b.plus{color:var(--plus)}.vgg.big .vggr .c{grid-area:c;font-size:22px}
 .vgg.big .vggr .vbar{grid-area:bar;height:10px}.vgg.big .vggr .s{grid-area:s;font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .vkalan{display:flex;align-items:baseline;gap:8px;padding:4px 4px 0}.vkalan span{font-size:13px;color:var(--muted);font-weight:600}.vkalan b{font-family:var(--f-display);font-size:20px;color:var(--plus)}.vkalan b.neg{color:var(--crit)}.vkalan .muted{margin-left:auto;font-weight:400}
+.laybtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:6px 0 4px;padding:11px;border:1px dashed var(--line);border-radius:12px;background:none;color:var(--muted);font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}.laybtn svg{width:18px;height:18px}
+.layr{display:flex;align-items:center;gap:6px;padding:8px 0;border-top:1px solid var(--line)}.layr:first-of-type{border-top:0}.layr label{flex:1;display:flex;align-items:center;gap:10px;font-weight:600;min-width:0;cursor:pointer}.layr input{width:20px;height:20px;accent-color:var(--accent);flex:none}.layr.off label span{color:var(--muted);font-weight:500;text-decoration:line-through}
 .toastbtn{margin-left:12px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:0;cursor:pointer}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .spin{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -1337,26 +1339,41 @@ function owedSection(){const O=owedByDue();if(!O.length)return '';const tot=O.re
     ${O.map(o=>`<div class="owe tap" data-act="person" data-id="${o.pid}"><div class="sumline" style="font-weight:700"><span>${esc(personName(o.pid))}</span><b>${TL(o.left)}</b></div>
       ${o.lines.filter(l=>l.left>0.5).map(l=>`<div class="sumline small"><span class="muted">${esc(l.card.name)} · son ödeme ${fmtD(l.due)}${l.open?' · dönem açık':''}</span><b>${TL(l.left)}</b></div>`).join('')}
       ${o.got>0.5?`<div class="small muted">${TL(o.got)} ödedi, düşüldü</div>`:''}</div>`).join('')}</section>`}
+/* ===== sayfa düzeni: her sekmede bölümleri gizle/göster ve sırala (catIcons.__layout, yedeğe girer) ===== */
+const LAYOUT_NAMES={ana:'Ana Sayfa',kart:'Kartlar',analiz:'Analiz'};
+const LAYOUT_LAST={};
+const layCfg=t=>(S.catIcons?.__layout||{})[t]||{order:[],hide:[]};
+function layOrderOf(C,keys){return [...C.order.filter(k=>keys.includes(k)),...keys.filter(k=>!C.order.includes(k))]}
+function lay(t,parts){const C=layCfg(t);const keys=parts.map(p=>p[0]);const ord=layOrderOf(C,keys);LAYOUT_LAST[t]=parts.map(p=>[p[0],p[1]]);
+  const by=Object.fromEntries(parts.map(p=>[p[0],p]));const nh=C.hide.filter(k=>keys.includes(k)).length;
+  return ord.filter(k=>!C.hide.includes(k)).map(k=>by[k][2]||'').join('')+`<button class="laybtn" data-act="layout" data-t="${t}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="17" cy="6" r="2"/><circle cx="14" cy="18" r="2"/></svg>Sayfayı düzenle${nh?` · ${nh} bölüm gizli`:''}</button>`}
+function layOrder(t){return layOrderOf(layCfg(t),(LAYOUT_LAST[t]||[]).map(p=>p[0]))}
+function layoutSheet(t){shReg('lay:'+t,()=>layoutSheet(t));const C=layCfg(t);const parts=LAYOUT_LAST[t]||[];const ord=layOrder(t);const lab=Object.fromEntries(parts);
+  openSheet(head(`${LAYOUT_NAMES[t]||''} · sayfayı düzenle`)+`<section class="sec"><p class="small muted" style="margin:0 0 8px">Görmek istemediğin bölümün işaretini kaldır, sırasını oklarla değiştir. Kayıtların değişmez; istediğin zaman geri açarsın.</p>
+    ${ord.map((k,i)=>`<div class="layr${C.hide.includes(k)?' off':''}"><label><input type="checkbox" data-lay="${t}:${k}" ${C.hide.includes(k)?'':'checked'}><span>${esc(lab[k]||k)}</span></label><button class="x" data-act="laymv" data-t="${t}" data-k="${k}" data-d="-1" ${i===0?'disabled':''} aria-label="Yukarı">↑</button><button class="x" data-act="laymv" data-t="${t}" data-k="${k}" data-d="1" ${i===ord.length-1?'disabled':''} aria-label="Aşağı">↓</button></div>`).join('')}
+    <button class="btn ghost sm" style="width:100%;margin-top:10px" data-act="layreset" data-t="${t}">Varsayılana dön</button></section>`)}
+async function laySave(t,C){const I={...(S.catIcons||{})};I.__layout={...(I.__layout||{}),[t]:C};await saveCatAll(catTree(),I);render()}
 function viewHome(){
   const accs=S.accounts.map(a=>({a,b:accBalance(a)}));const cash=accs.reduce((s,x)=>s+x.b,0);
   const P=S.prices||{};const assetVal=S.assets.reduce((s,a)=>s+aVal(a,P),0);
   const items=spendItems(S.cards.map(c=>c.id),'open');const mine=items.filter(p=>p.personId===ME);const tot=mine.reduce((a,p)=>a+p.pamount,0);
   const by={};mine.forEach(p=>{const k=p.category||'Diğer';by[k]=(by[k]||0)+p.pamount});let rows=Object.entries(by).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v).slice(0,8);
   const perCard=S.cards.map(c=>{const st=cardState(c);if(!st)return null;const m=st.open.by[ME]||0;const o=st.open.total-m;return {c,m,o,cut:st.open.cut}}).filter(Boolean);
-  return `${welcome()}${alertsHtml()}${safeBox()}${backupNag()}${setupSteps()}
-  ${planTable(planMonth)}
-  ${owedSection()}
-  ${heldSection()}
-  <section class="sec tap" data-act="spendsheet"><h2>Kart harcamalarım<span class="sp"></span><span class="small muted">bu dönem</span>${chev}</h2>
+  return `${welcome()}${alertsHtml()}${safeBox()}${backupNag()}${setupSteps()}`+lay('ana',[
+    ['plan','Gelir-gider tablosu',`  ${planTable(planMonth)}`],
+    ['owed','Bana ödenecek kart payları',`  ${owedSection()}`],
+    ['held','Kişilerin hesabımdaki parası',`  ${heldSection()}`],
+    ['cardspend','Kart harcamalarım',`  <section class="sec tap" data-act="spendsheet"><h2>Kart harcamalarım<span class="sp"></span><span class="small muted">bu dönem</span>${chev}</h2>
     <div style="display:flex;gap:12px;align-items:center">${donut(rows,tot,120)}<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${perCard.map(x=>`<div class="cl"><span>${esc(x.c.name)}</span><b>${TL(x.m)}${x.o>0.5?` <span style="color:var(--other);font-weight:500">+${TL(x.o)}</span>`:''}</b></div>`).join('')}<div class="small muted" style="margin-top:4px">Dokun: nereye harcadığını kart kart gör</div></div></div>
-  </section>
-  <section class="sec"><h2>Param<span class="sp"></span><span class="sum">${TL(cash)}</span></h2>
+  </section>`],
+    ['param','Param (hesaplarım)',`  <section class="sec"><h2>Param<span class="sp"></span><span class="sum">${TL(cash)}</span></h2>
     ${accs.length?accRows(accs):'<div class="empty">Hesap yok.</div>'}
     <div class="btnrow" style="margin-top:8px">${accs.length>1?'<button class="btn sm" data-act="transfer">⇄ Hesaplar arası transfer</button>':''}<button class="btn sm ghost" data-act="newacc">+ Hesap ekle</button></div>
-  </section>
-  ${nwSec()}
-  <section class="sec tap" data-act="assets"><h2>Birikimim<span class="sp"></span><span class="sum" style="color:var(--gold)">${TL(assetVal)}</span>${chev}</h2><div class="small muted">${S.assets.length?assetGroups(S.assets.map(a=>({...a,val:aVal(a,P)}))).map(g=>`${esc(g.name)} ${TL(g.val)}`).join(' · '):'Altın, dolar, euro birikimini ekle'}</div></section>
-  <section class="sec tap" data-act="ledger"><h2>Alacak ve borç defteri<span class="sp"></span>${chev}</h2><div class="small muted">Kişiler ve diğer alacak-borçlar</div></section>`;
+  </section>`],
+    ['nw','Net varlık',`  ${nwSec()}`],
+    ['assets','Birikimim',`  <section class="sec tap" data-act="assets"><h2>Birikimim<span class="sp"></span><span class="sum" style="color:var(--gold)">${TL(assetVal)}</span>${chev}</h2><div class="small muted">${S.assets.length?assetGroups(S.assets.map(a=>({...a,val:aVal(a,P)}))).map(g=>`${esc(g.name)} ${TL(g.val)}`).join(' · '):'Altın, dolar, euro birikimini ekle'}</div></section>`],
+    ['ledger','Alacak ve borç defteri',`  <section class="sec tap" data-act="ledger"><h2>Alacak ve borç defteri<span class="sp"></span>${chev}</h2><div class="small muted">Kişiler ve diğer alacak-borçlar</div></section>`]
+  ]);
 }
 
 function accAmt(a,b){return a.balanceAt||isCashAcc(a)?TL(b):`${TL(b)}<small>bakiye girilmedi</small>`}
@@ -1409,13 +1426,13 @@ function viewCards(){
         ${LI&&LI.limit?`<div class="bar" style="height:5px;margin-top:6px"><i style="width:${pct}%"></i></div>`:''}</div>
       ${cardReorder?`<div class="ord"><button class="x" data-act="cardup" data-id="${c.id}" ${i===0?'disabled':''} aria-label="Yukarı">↑</button><button class="x" data-act="carddown" data-id="${c.id}" ${i===states.length-1?'disabled':''} aria-label="Aşağı">↓</button></div>`:`<div class="amt"><span class="mine">${TL(m.now)}</span><small>${Math.abs(m.now-st.T.debt)>1?`benim · toplam ${TL(st.T.debt)}`:'benim borcum'}</small></div>${chev}`}
     </div>`}).join('');
-  return `<section class="sec"><div class="eyebrow">Tüm kartlarda benim borcum</div><div class="total">${TL(myNow)}</div>${myFut>0.5?`<div class="small muted">+ henüz düşmemiş taksitlerim ${TL(myFut)}</div>`:''}
+  return lay('kart',[['sum','Tüm kartlarda borcum',`<section class="sec"><div class="eyebrow">Tüm kartlarda benim borcum</div><div class="total">${TL(myNow)}</div>${myFut>0.5?`<div class="small muted">+ henüz düşmemiş taksitlerim ${TL(myFut)}</div>`:''}
     <div class="kv" style="margin-top:10px"><span class="k">Kartların toplam borcu</span><b>${TL(now)}</b><span class="k">Başkalarının payı</span><b style="color:var(--other)">${TL(now-myNow)}</b>${fut>0.5?`<span class="k">Henüz düşmemiş taksitler</span><b>${TL(fut)}</b>`:''}<span class="k">Toplam limit</span><b>${TL(lim)}</b><span class="k">Kullanılabilir</span><b style="color:var(--plus)">${TL(lim-debt)}</b></div>
-    ${lim?`<div class="bar" style="margin-top:8px"><i style="width:${Math.min(100,debt/lim*100)}%"></i></div>`:''}</section>
-  <section class="sec"><h2>Kartlarım<span class="sp"></span><button class="linkbtn" data-act="reorder">${cardReorder?'Bitti':'Sırala'}</button></h2>
+    ${lim?`<div class="bar" style="margin-top:8px"><i style="width:${Math.min(100,debt/lim*100)}%"></i></div>`:''}</section>`],
+    ['list','Kartlarım',`  <section class="sec"><h2>Kartlarım<span class="sp"></span><button class="linkbtn" data-act="reorder">${cardReorder?'Bitti':'Sırala'}</button></h2>
     ${cardReorder?'<div class="small muted" style="margin-bottom:6px">En üstteki kart, harcama eklerken otomatik seçili gelir.</div>':''}
     ${rows||'<div class="empty">Kart yok.</div>'}</section>
-  <button class="btn" data-act="newcard">+ Kart ekle</button>`;
+  <button class="btn" data-act="newcard">+ Kart ekle</button>`]]);
 }
 let cardRange={};
 function cardBlock(c,st){
@@ -1697,20 +1714,21 @@ function viewAnaliz(){
     ${inclLine()}
     <button class="vcmpbtn" data-act="cmp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 20V10M12 20V4M17 20v-7"/></svg>İki ayı karşılaştır ›</button>
   </section>`;
-  if(future||(!tot&&!inc))return h+`<section class="sec"><div class="empty">${future?'Bu ay henüz gelmedi.':'Bu ay için harcama kaydı yok.'}</div></section>`+vizMore(mk);
+  if(future||(!tot&&!inc))return h+`<section class="sec"><div class="empty">${future?'Bu ay henüz gelmedi.':'Bu ay için harcama kaydı yok.'}</div></section>`+lay('analiz',vizMore(mk));
+  const P=[];
   /* 2) içgörüler */
-  const ins=vizInsights(mk,by,avgBy,tot,avg,isCur,inc);if(ins.length)h+=`<section class="sec"><h2>Öne çıkanlar</h2><ul class="vins">${ins.map(x=>`<li><span class="vdot ${x.k}"></span><span>${x.t}</span></li>`).join('')}</ul></section>`;
+  const ins=vizInsights(mk,by,avgBy,tot,avg,isCur,inc);P.push(['ins','Öne çıkanlar',ins.length?`<section class="sec"><h2>Öne çıkanlar</h2><ul class="vins">${ins.map(x=>`<li><span class="vdot ${x.k}"></span><span>${x.t}</span></li>`).join('')}</ul></section>`:'']);
   /* 4) ay içi gidiş */
-  if(hasHist.length)h+=`<section class="sec"><h2>Ay içinde nasıl gitti</h2>${vizPace(mk,hasHist,isCur,fc)}</section>`;
+  P.push(['pace','Ay içinde nasıl gitti',hasHist.length?`<section class="sec"><h2>Ay içinde nasıl gitti</h2>${vizPace(mk,hasHist,isCur,fc)}</section>`:'']);
   /* 5) son 12 ay */
-  h+=`<section class="sec"><h2>Son 12 ay</h2>${vizYear(mk)}</section>`;
-  h+=`<section class="sec"><h2>Gelir, harcama ve birikim</h2>${vizFlow(mk)}</section>`;
+  P.push(['year','Son 12 ay',`<section class="sec"><h2>Son 12 ay</h2>${vizYear(mk)}</section>`]);
+  P.push(['flow','Gelir, harcama ve birikim',`<section class="sec"><h2>Gelir, harcama ve birikim</h2>${vizFlow(mk)}</section>`]);
   /* 6) ortalamaya göre */
-  if(hasHist.length)h+=`<section class="sec"><h2>Ortalamaya göre</h2>${vizDiverge(mk,by,avgBy,isCur)}</section>`;
+  P.push(['div','Ortalamaya göre',hasHist.length?`<section class="sec"><h2>Ortalamaya göre</h2>${vizDiverge(mk,by,avgBy,isCur)}</section>`:'']);
   /* 7) işyerleri */
-  h+=`<section class="sec"><h2>En çok harcadığın yerler</h2>${vizShops(by,tot)}</section>`;
-  h+=excludedSec(mk);
-  return h+vizMore(mk);
+  P.push(['shops','En çok harcadığın yerler',`<section class="sec"><h2>En çok harcadığın yerler</h2>${vizShops(by,tot)}</section>`]);
+  P.push(['excl','Hesaba katmadıkların',excludedSec(mk)]);
+  return h+lay('analiz',[...P,...vizMore(mk)]);
 }
 
 function vizInsights(mk,by,avgBy,tot,avg,isCur,inc){const out=[];const val=c=>isCur?forecastCat(c,mk):(by[c]?.v||0);
@@ -2008,9 +2026,8 @@ function vizMore(mk){const N=nonSpendMonth(mk);const oth=othersMonth(mk);const t
   if(niV>0.5)parts.push(`<div class="sumline"><span>Gelir sayılmayanlar <span class="small muted">· ${NI.map(([k])=>esc(k)).join(', ')}</span></span><b style="color:var(--plus)">${TL(niV)}</b></div><div class="small muted" style="margin-bottom:8px">Varlık satışından gelen para: hesabına girdi ama gelir ve birikim hesabına girmiyor.</div>`);
   if(Object.keys(oth).length)parts.push(`<div class="eyebrow" style="margin-top:6px">Kartımı kullananlar · senin harcamana dahil değil</div>${Object.entries(oth).map(([p,v])=>`<div class="row tap" data-act="person" data-id="${p}"><div class="main"><div class="t">${esc(personName(p))}</div></div><div class="amt" style="color:var(--other)">${TL(v)}</div>${chev}</div>`).join('')}`);
   const SA=subscriptions();const sMon=SA.reduce((a,x)=>a+x.amt,0);
-  return `${t}${parts.length?`<details class="sec vmore"><summary><h2>Gelir sayılmayanlar ve kartımı kullananlar</h2></summary>${parts.join('')}</details>`:''}
-    <details class="sec vmore"><summary><h2>Abonelikler${SA.length?` <span class="small muted" style="font-weight:500;margin-left:6px">${SA.length} · ${TL(sMon)}/ay</span>`:''}</h2></summary>${sub.replace(/^<section class="sec">|<\/section>$/g,'')}</details>
-    <button class="btn ghost" style="width:100%;margin-top:4px" data-act="analiz">Tarih aralığıyla ayrıntılı analiz</button>`}
+  return [['tic','Ticari',t],['other','Gelir sayılmayanlar ve kartımı kullananlar',parts.length?`<details class="sec vmore"><summary><h2>Gelir sayılmayanlar ve kartımı kullananlar</h2></summary>${parts.join('')}</details>`:''],['subs','Abonelikler',`<details class="sec vmore"><summary><h2>Abonelikler${SA.length?` <span class="small muted" style="font-weight:500;margin-left:6px">${SA.length} · ${TL(sMon)}/ay</span>`:''}</h2></summary>${sub.replace(/^<section class="sec">|<\/section>$/g,'')}</details>
+`],['adv','Ayrıntılı analiz düğmesi',`<button class="btn ghost" style="width:100%;margin-top:4px" data-act="analiz">Tarih aralığıyla ayrıntılı analiz</button>`]]}
 
 /* grafik bilgi kutusu: fareyle üstüne gelince ya da parmakla dokununca/kaydırınca */
 (function(){let tipEl=null;const show=(el,ev)=>{if(!tipEl){tipEl=document.createElement('div');tipEl.className='vtip';document.body.append(tipEl)}
@@ -2768,6 +2785,9 @@ document.addEventListener('click',async e=>{
     case 'catmonth':viewMonth=el.dataset.mk;render();catDetail(CATD.c||el.dataset.c,{sub:CATD.sub});break;
     case 'exdet':catDetail(el.dataset.c,{sub:el.dataset.s});break;
     case 'cmp':cmpSheet();break;
+    case 'layout':layoutSheet(el.dataset.t);break;
+    case 'laymv':{const t=el.dataset.t,k=el.dataset.k,d=+el.dataset.d;const o=layOrder(t);const i=o.indexOf(k),j=i+d;if(j<0||j>=o.length)break;[o[i],o[j]]=[o[j],o[i]];await laySave(t,{...layCfg(t),order:o});layoutSheet(t);break}
+    case 'layreset':{const t=el.dataset.t;const I={...(S.catIcons||{})};const L={...(I.__layout||{})};delete L[t];I.__layout=L;await saveCatAll(catTree(),I);render();layoutSheet(t);break}
     case 'rgtog':{const k=el.dataset.k;RGOPEN[k]=!RGOPEN[k];rgRefresh(k);break}
     case 'rgpre':{const k=el.dataset.k;RG[k]={from:el.dataset.a,to:el.dataset.b};rgRefresh(k);break}
     case 'rgclr':{const k=el.dataset.k;RG[k]=null;RGOPEN[k]=false;rgRefresh(k);break}
@@ -2838,6 +2858,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
   if(e.target.dataset&&(e.target.dataset.incl!=null||e.target.dataset.incli!=null)){inclToggle(e.target);return}
+  if(e.target.dataset&&e.target.dataset.lay){const[t,k]=e.target.dataset.lay.split(':');const C=layCfg(t);const hide=new Set(C.hide);if(e.target.checked)hide.delete(k);else hide.add(k);laySave(t,{...C,order:layOrder(t),hide:[...hide]}).then(()=>layoutSheet(t));return}
   if(e.target.dataset&&e.target.dataset.rg){const[k,part]=e.target.dataset.rg.split(':');const td=today();RG[k]=RG[k]||{from:td.slice(0,8)+'01',to:td};RG[k][part]=e.target.value;if(RG[k].from>RG[k].to)[RG[k].from,RG[k].to]=[RG[k].to,RG[k].from];rgRefresh(k);return}
   if(e.target.dataset&&e.target.dataset.tcr){TCR=TCR||{};TCR[e.target.dataset.tcr]=e.target.value;ticariSheet();return}
   if(e.target.dataset&&e.target.dataset.cmp){if(e.target.dataset.cmp==='a')cmpA=e.target.value;else cmpB=e.target.value;cmpSheet();return}
