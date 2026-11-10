@@ -51,7 +51,18 @@ def serve():
     threading.Thread(target=s.serve_forever, daemon=True).start()
     return s
 
+def static_checks():
+    import re
+    from collections import Counter
+    src = open(os.path.join(ROOT, "index.html"), encoding="utf-8").read()
+    js = "\n".join(re.findall(r"<script[^>]*>(.*?)</script>", src, re.S))
+    names = re.findall(r"^\s*(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(", js, re.M)
+    dup = [n for n, c in Counter(names).items() if c > 1]
+    print("Kod denetimi")
+    check("aynı adla iki fonksiyon yok", not dup, dup)
+
 def main():
+    static_checks()
     srv = serve(); url = f"http://127.0.0.1:{srv.server_address[1]}/index.html"
     with sync_playwright() as p:
         b = p.chromium.launch()
