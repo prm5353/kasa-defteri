@@ -1547,32 +1547,40 @@ function ticariOf(mk){const T=ticariItems(mk);const g=T.filter(p=>!p.asset).redu
 let TCR=null;
 function tcMonths(){const cur=today().slice(0,7);let first=cur;[...S.arch,...S.tx].forEach(x=>{if((x.type==='gider'&&isTic(x.category))||(x.type==='gelir'&&isTic(x.source))){const m=x.date.slice(0,7);if(m<first)first=m}});
   const L=[];for(let k=cur;k>=first;k=shiftMonth(k,-1))L.push(k);return L}
-function ticariSheet(){shReg('tc',ticariSheet);const ms=tcMonths();const cur=today().slice(0,7);if(!TCR)TCR={from:shiftMonth(cur,-11),to:cur};
-  if(!ms.includes(TCR.from))TCR.from=ms[ms.length-1];if(!ms.includes(TCR.to))TCR.to=ms[0];if(TCR.from>TCR.to)[TCR.from,TCR.to]=[TCR.to,TCR.from];
-  const ks=[];for(let k=TCR.from;k<=TCR.to;k=shiftMonth(k,1))ks.push(k);const R=ks.map(k=>({k,...ticariOf(k)}));
-  const sI=R.reduce((a,r)=>a+r.i,0),sG=R.reduce((a,r)=>a+r.g,0),sA=R.reduce((a,r)=>a+r.a,0),sP=sI-sG;const nAr=R.reduce((a,r)=>a+r.items.filter(x=>x.arch).length+r.incs.filter(x=>x.arch).length,0);
-  const y=+cur.slice(0,4);const pre=[['Son 6 ay',shiftMonth(cur,-5),cur],['Son 12 ay',shiftMonth(cur,-11),cur],['Bu yıl',y+'-01',cur],['Geçen yıl',(y-1)+'-01',(y-1)+'-12'],['Tümü',ms[ms.length-1],cur]];
-  const sel=(n,v)=>`<select class="inp" data-tcr="${n}" aria-label="${n==='from'?'Başlangıç':'Bitiş'}">${ms.map(k=>`<option value="${k}"${k===v?' selected':''}>${monthLabel(k)}</option>`).join('')}</select>`;
-  /* aylık gelir/gider sütunları + kâr */
-  const W=340,L=4,Rt=40,T=10,H1=150,B=20,n=Math.max(1,R.length);const bw=(W-L-Rt)/n;const mx=Math.max(1,...R.map(r=>Math.max(r.i,r.g)))*1.08;const yy=v=>T+(H1-T-B)*(1-v/mx);const lab=n<=12?1:n<=24?2:3;
+/* gün gün tarih aralığı; dönem kısaysa grafik günlük, orta uzunsa haftalık, uzunsa aylık */
+function tcRange(from,to){const ks=[];for(let k=from.slice(0,7);k<=to.slice(0,7);k=shiftMonth(k,1))ks.push(k);const inR=d=>d>=from&&d<=to;
+  const G=[],I=[];ks.forEach(k=>{const t=ticariOf(k);t.items.forEach(p=>{if(inR(p.pdate))G.push(p)});t.incs.forEach(x=>{if(inR(x.date))I.push(x)})});return {G,I}}
+function ticariSheet(){shReg('tc',ticariSheet);const ms=tcMonths();const td=today(),cur=td.slice(0,7);
+  if(!TCR||TCR.from.length<10)TCR={from:addMonths(td,-12).slice(0,8)+'01',to:td};if(TCR.from>TCR.to)[TCR.from,TCR.to]=[TCR.to,TCR.from];
+  const {from,to}=TCR;const {G,I}=tcRange(from,to);const days=daysBetween(from,to)+1;
+  const sI=I.reduce((a,x)=>a+x.amount,0),sG=G.filter(p=>!p.asset).reduce((a,p)=>a+p.pamount,0),sA=G.filter(p=>p.asset).reduce((a,p)=>a+p.pamount,0),sP=sI-sG;
+  const nAr=G.filter(x=>x.arch).length+I.filter(x=>x.arch).length;
+  const unit=days<=45?'gün':days<=150?'hafta':'ay';
+  const bkey=d=>unit==='gün'?d:unit==='hafta'?addDays(d,-((parse(d).getDay()+6)%7)):d.slice(0,7);
+  const B=[];for(let d=from;d<=to;d=addDays(d,1)){const k=bkey(d);if(!B.length||B[B.length-1].k!==k)B.push({k,i:0,g:0})}
+  const bi=Object.fromEntries(B.map((b,ix)=>[b.k,ix]));G.forEach(p=>{if(!p.asset){const b=B[bi[bkey(p.pdate)]];if(b)b.g+=p.pamount}});I.forEach(x=>{const b=B[bi[bkey(x.date)]];if(b)b.i+=x.amount});B.forEach(b=>b.p=b.i-b.g);
+  const blab=b=>unit==='ay'?`${AYK[+b.k.slice(5)-1]}${b.k.slice(5)==='01'||B.length<=12?'':''}`:fmtD(b.k);
+  const btip=b=>unit==='ay'?monthLabel(b.k):unit==='hafta'?`${fmtD(b.k)} haftası`:fmtDY(b.k);
+  const y=+cur.slice(0,4);const mEnd=k=>{const[yy,mm]=k.split('-').map(Number);return dayIn(yy,mm-1,31)};
+  const pre=[['Bu ay',cur+'-01',td],['Geçen ay',shiftMonth(cur,-1)+'-01',mEnd(shiftMonth(cur,-1))],['Son 3 ay',shiftMonth(cur,-2)+'-01',td],['Son 12 ay',shiftMonth(cur,-11)+'-01',td],['Bu yıl',y+'-01-01',td],['Geçen yıl',(y-1)+'-01-01',(y-1)+'-12-31'],['Tümü',ms[ms.length-1]+'-01',td]];
+  const W=340,L=4,Rt=40,T=10,H1=150,Bt=20,n=Math.max(1,B.length);const bw=(W-L-Rt)/n;const mx=Math.max(1,...B.map(r=>Math.max(r.i,r.g)))*1.08;const yy=v=>T+(H1-T-Bt)*(1-v/mx);const every=Math.max(1,Math.ceil(n/8));
   let s=`<svg class="vyear" viewBox="0 0 ${W} ${H1}" role="img" aria-label="Ticari gelir ve gider">`;[0.5,1].forEach(f=>{const v=mx/1.08*f;s+=`<line x1="${L}" x2="${W-Rt}" y1="${yy(v)}" y2="${yy(v)}" class="vgrid"/><text x="${W-Rt+4}" y="${yy(v)+3}" class="vax">${TLk(v)}</text>`});
   s+=`<line x1="${L}" x2="${W-Rt}" y1="${yy(0)}" y2="${yy(0)}" class="vbase"/>`;
-  R.forEach((r,j)=>{const x0=L+bw*j;const w=Math.max(1.5,(bw-3)/2);const a=x0+(bw-2*w-1)/2;
+  B.forEach((r,j)=>{const x0=L+bw*j;const w=Math.max(1.2,(bw-2)/2);const a=x0+(bw-2*w-1)/2;
     if(r.i>0)s+=`<path d="${vbarPath(a,yy(r.i),w,yy(0)-yy(r.i),w>4)}" style="fill:var(--v3)"/>`;if(r.g>0)s+=`<path d="${vbarPath(a+w+1,yy(r.g),w,yy(0)-yy(r.g),w>4)}" style="fill:var(--v2)"/>`;
-    if(j%lab===0)s+=`<text x="${x0+bw/2}" y="${H1-5}" text-anchor="middle" class="vax">${AYK[+r.k.slice(5)-1]}${n>12&&r.k.slice(5)==='01'?"'"+r.k.slice(2,4):''}</text>`;
-    s+=`<rect x="${x0}" y="${T}" width="${bw}" height="${H1-T}" fill="transparent" ${vizTip(`${monthLabel(r.k)} · gelir ${TL(r.i)} · gider ${TL(r.g)} · ${r.p>=0?'kâr':'zarar'} ${TL(Math.abs(r.p))}`)}/>`});s+='</svg>';
-  const pos=Math.max(0,...R.map(r=>r.p)),neg=Math.max(0,...R.map(r=>-r.p)),H2=90,av=H2-12,tot=Math.max(1,pos+neg),M=6+av*(pos/tot||0.5);
-  let s2=`<svg class="vyear" viewBox="0 0 ${W} ${H2}" role="img" aria-label="Aylık kâr"><line x1="${L}" x2="${W-Rt}" y1="${M}" y2="${M}" class="vbase"/><text x="${W-Rt+4}" y="${M+3}" class="vax">0</text>`;
-  R.forEach((r,j)=>{const x0=L+bw*j+1,w=Math.max(1.5,bw-2),hh=Math.abs(r.p)/tot*av;if(hh>0.5)s2+=r.p>=0?`<path d="${vbarPath(x0,M-hh,w,hh,w>4)}" style="fill:var(--vdown)"/>`:`<path d="${vbarPathDown(x0,M,w,hh)}" style="fill:var(--vup)"/>`;
-    s2+=`<rect x="${L+bw*j}" y="0" width="${bw}" height="${H2}" fill="transparent" ${vizTip(`${monthLabel(r.k)} · ${r.p>=0?'kâr':'zarar'} ${TL(Math.abs(r.p))}`)}/>`});s2+='</svg>';
-  openSheet(head('Ticari · dönem')+`<section class="sec"><div class="chips" style="margin:0 0 8px">${pre.map(([l,a,b])=>`<button class="${TCR.from===a&&TCR.to===b?'on':''}" data-act="tcpre" data-a="${a}" data-b="${b}">${l}</button>`).join('')}</div>
-      <div class="vcmpsel"><div>${sel('from',TCR.from)}</div><div>${sel('to',TCR.to)}</div></div>
+    if(j%every===0)s+=`<text x="${x0+bw/2}" y="${H1-5}" text-anchor="middle" class="vax">${blab(r)}</text>`;
+    s+=`<rect x="${x0}" y="${T}" width="${bw}" height="${H1-T}" fill="transparent" ${vizTip(`${btip(r)} · gelir ${TL(r.i)} · gider ${TL(r.g)} · ${r.p>=0?'kâr':'zarar'} ${TL(Math.abs(r.p))}`)}/>`});s+='</svg>';
+  const recs=[...I.map(x=>({...x,pdate:x.date,pamount:x.amount})),...G].sort((a,b)=>b.pdate.localeCompare(a.pdate));
+  openSheet(head('Ticari · dönem')+`<section class="sec"><div class="chips" style="margin:0 0 8px">${pre.map(([l,a,b])=>`<button class="${from===a&&to===b?'on':''}" data-act="tcpre" data-a="${a}" data-b="${b}">${l}</button>`).join('')}</div>
+      <div class="two"><label class="f">Başlangıç<input type="date" data-tcr="from" value="${from}" max="${td}"></label><label class="f">Bitiş<input type="date" data-tcr="to" value="${to}"></label></div>
+      <div class="small muted">${fmtDY(from)} – ${fmtDY(to)} · ${days} gün</div>
       <div class="vstat3" style="margin-top:12px"><div><span>Ticari gelir</span><b style="color:var(--plus)">${TLk(sI)}</b></div><div><span>Ticari gider</span><b>${TLk(sG)}</b></div><div><span>${sP>=0?'Kâr':'Zarar'}</span><b class="${sP<0?'neg':''}">${TLk(sP)}</b></div></div>
-      <div class="small muted">${R.length} ay · aylık ortalama kâr ${TL(sP/Math.max(1,R.length))}${sA>0.5?` · ayrıca ${TL(sA)} ticari varlık alımı (kârdan düşmedi)`:''}</div></section>
-    <section class="sec" style="margin-top:12px"><h2>Aylık gelir ve gider</h2>${s}<div class="vkey"><span><i class="sq" style="background:var(--v3);opacity:1"></i>Gelir</span><span><i class="sq" style="background:var(--v2);opacity:1"></i>Gider</span></div>
-      <div class="eyebrow" style="margin:12px 0 2px">Aylık kâr</div>${s2}<div class="vkey"><span><i class="sq down"></i>Kâr</span><span><i class="sq up"></i>Zarar</span></div></section>
-    <section class="sec" style="margin-top:12px"><h2>Ay ay</h2><div class="tctab"><span></span><b>Gelir</b><b>Gider</b><b>Kâr</b>${[...R].reverse().map(r=>`<span>${AYK[+r.k.slice(5)-1]} ${r.k.slice(2,4)}</span><span>${TLk(r.i)}</span><span>${TLk(r.g)}</span><span class="${r.p<0?'neg':'pos'}">${TLk(r.p)}</span>`).join('')}</div>
-      <p class="small muted" style="margin:8px 0 0">Money Pro arşivi ve uygulamadaki kayıtlar birlikte sayılır. İkisinde de olan (±3 gün, aynı tutar) kayıt bir kez sayılır.${nAr?` Bu dönemde ${nAr} kayıt arşivden geliyor.`:''}</p></section>`)}
+      <div class="sumline small"><span>Gelen</span><b style="color:var(--plus)">${TL(sI)}</b></div><div class="sumline small"><span>Giden</span><b>${TL(sG)}</b></div><div class="sumline small"><span>${sP>=0?'Kâr':'Zarar'}</span><b class="${sP<0?'neg':''}">${TL(sP)}</b></div>
+      ${sA>0.5?`<div class="small muted">Ayrıca ${TL(sA)} ticari varlık alımı (kârdan düşmedi)</div>`:''}</section>
+    <section class="sec" style="margin-top:12px"><h2>${unit==='gün'?'Gün gün':unit==='hafta'?'Hafta hafta':'Ay ay'} gelir ve gider</h2>${s}<div class="vkey"><span><i class="sq" style="background:var(--v3);opacity:1"></i>Gelir</span><span><i class="sq" style="background:var(--v2);opacity:1"></i>Gider</span></div>
+      ${unit!=='gün'?`<div class="tctab" style="margin-top:12px"><span></span><b>Gelir</b><b>Gider</b><b>Kâr</b>${[...B].reverse().map(r=>`<span>${unit==='ay'?`${AYK[+r.k.slice(5)-1]} ${r.k.slice(2,4)}`:fmtD(r.k)}</span><span>${TLk(r.i)}</span><span>${TLk(r.g)}</span><span class="${r.p<0?'neg':'pos'}">${TLk(r.p)}</span>`).join('')}</div>`:''}</section>
+    <details class="sec vmore" style="margin-top:12px"${recs.length&&recs.length<=15?' open':''}><summary><h2>Kayıtlar (${recs.length})</h2></summary>${recs.map(p=>txRow({...p,amount:p.pamount,_date:true,_portion:p.asset?'varlık':''})).join('')||'<div class="empty">Bu aralıkta ticari kayıt yok.</div>'}</details>
+    <p class="small muted" style="margin:8px 0 0">Money Pro arşivi ve uygulamadaki kayıtlar birlikte sayılır; ikisinde de olan (±3 gün, aynı tutar) kayıt bir kez sayılır.${nAr?` Bu aralıkta ${nAr} kayıt arşivden.`:''}</p>`)}
 function ticariSec(mk){const ks=[5,4,3,2,1,0].map(i=>shiftMonth(mk,-i));
   /* ticari varlık alımı: Ticari Gider altında "analize dahil değil" işaretlenen alt başlıklar (ör. cihaz). Gider değil, kârdan düşmez */
   const R=ks.map(k=>({mk:k,...ticariOf(k)}));if(!R.some(r=>r.g||r.i||r.a))return '';const c=R[5];const mx=Math.max(1,...R.map(r=>Math.abs(r.p)));
