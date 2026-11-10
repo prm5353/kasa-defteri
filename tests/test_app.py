@@ -243,7 +243,7 @@ def main():
         page.evaluate("(async()=>{const I={...S.catIcons};I.__non=(I.__non||[]).filter(k=>k!=='Ticari Gider');await saveCatAll(catTree(),I);await catRename('Ticari Gider','','Ticari Giderler')})()"); page.wait_for_timeout(500)
         check("kategori adı değişse de (Ticari Giderler) bulunur", page.evaluate("ticariOf('2026-11').g") == 10000, page.evaluate("ticariOf('2026-11').g"))
         page.evaluate("goTab('analiz')"); page.wait_for_timeout(300)
-        check("ticari bölümde bu ayın kayıtları listelenir", page.evaluate("[...document.querySelectorAll('#view details')].some(d=>d.textContent.includes('Bu ayki ticari kayıtlar (4)'))"))
+        check("ticari bölümde bu ayın kayıtları listelenir", page.evaluate("[...document.querySelectorAll('#view details')].some(d=>d.textContent.includes('Bu ayki ticari kayıtlar (5)'))"))
         vk = page.evaluate("[...document.querySelectorAll('details.vmore')].find(d=>d.innerText.includes('Varlık, kredi'))?.innerText||''")
         check("'Varlık, kredi ve toplama girmeyenler'de Ticari yok", "Ticari" not in vk, vk[:200])
         check("Analiz ve Hareketler hatasız", not errors, errors[:3])
@@ -374,6 +374,29 @@ def main():
         check("aramada 'araç' yazınca kategori grafiği düğmesi çıkar", page.evaluate("document.querySelectorAll('#gResults .gcat').length") >= 1)
         check("arama Money Pro arşivini de tarar", page.evaluate("gsArch") is True)
         page.evaluate("closeSheet()")
+
+        print("Ticari: arşiv + uygulama birlikte, çift sayılmaz, dönem seçimi")
+        tc = json.loads(json.dumps(SAMPLE))
+        tc["archive"] = {"a-2026-10": {
+            "z1": {"type": "gider", "amount": 3000, "date": "2026-10-04", "personId": "me", "category": "Ticari Gider", "sub": "Sarf Malzeme", "merchant": "Depo", "account": "Kart", "ts": 1},
+            "z2": {"type": "gider", "amount": 2000, "date": "2026-10-06", "personId": "me", "category": "Ticari Gider", "sub": "", "merchant": "Kira", "account": "Kart", "ts": 2},
+            "z3": {"type": "gelir", "amount": 20000, "date": "2026-10-10", "source": "Ticari Gelir", "account": "Banka", "ts": 3}},
+          "a-2025-12": {"z4": {"type": "gelir", "amount": 15000, "date": "2025-12-10", "source": "Ticari Gelir", "account": "Banka", "ts": 4},
+            "z5": {"type": "gider", "amount": 4000, "date": "2025-12-11", "personId": "me", "category": "Ticari Gider", "sub": "", "merchant": "Malzeme", "account": "Kart", "ts": 5}}}
+        tc["months"]["m-2026-10"] = {"y1": {"type": "gider", "amount": 3000, "date": "2026-10-05", "account": "Banka", "personId": "me", "category": "Ticari Gider", "sub": "Sarf Malzeme", "merchant": "Depo", "ts": 1},
+            "y2": {"type": "gider", "amount": 700, "date": "2026-10-20", "account": "Banka", "personId": "me", "category": "Market", "sub": "", "merchant": "Migros", "ts": 2}}
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tc.json'))", tc); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        t10 = page.evaluate("(()=>{const t=ticariOf('2026-10');return [t.g,t.i]})()")
+        check("Ekim: arşivdeki 3.000 uygulamadakiyle aynı sayılır, 2.000 ve 20.000 arşivden eklenir", t10 == [5000, 20000], t10)
+        page.evaluate("TCR=null;ticariSheet()"); page.wait_for_timeout(300)
+        page.locator("#sheetBody [data-act=tcpre]", has_text="Son 12 ay").click(); page.wait_for_timeout(300)
+        txt = page.inner_text("#sheetBody")
+        check("dönem ekranı: son 12 ay kâr 15 + 11 = 26 bin", "26 bin" in txt, txt[:300])
+        page.select_option("#sheetBody select[data-tcr=from]", "2026-10"); page.wait_for_timeout(300)
+        check("başlangıç ayı seçilince yalnız o dönem (15 bin)", "15 bin" in page.inner_text("#sheetBody .vstat3"))
+        page.evaluate("closeSheet()")
+        check("ticari ekranı hatasız", not errors, errors[:3])
 
         print("Güvenlik")
         check("içerik güvenlik politikası ihlali yok", not csp, csp[:2])
