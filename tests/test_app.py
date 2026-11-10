@@ -359,6 +359,22 @@ def main():
         check("tablo tek sütun, satırlarda gün rozeti", page.evaluate("document.querySelectorAll('.plan .pl2 .pday').length") > 3)
         check("tablo hatasız", not errors, errors[:3])
 
+        print("Hesaba katılmayanlar görünür")
+        import ornek_veri
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'o.json'))", ornek_veri.build()); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        page.evaluate("(async()=>{const I={...S.catIcons};I.__non=['Araçlarım|Yakıt'];await saveCatAll(catTree(),I)})()"); page.wait_for_timeout(300)
+        page.evaluate("viewMonth='2026-10';goTab('analiz')"); page.wait_for_timeout(300)
+        check("Analiz'de 'Hesaba katmadıkların' bölümü var", "Hesaba katmadıkların" in page.inner_text("#view"))
+        yv = page.evaluate("mineCats('2026-10',true).Araçlarım.subs.Yakıt")
+        page.locator("#view [data-act=exdet]").first.click(); page.wait_for_timeout(300)
+        check("dokununca hariç alt başlığın ayrıntısı açılır, tutar doğru", page.evaluate("document.querySelector('#sheetBody .total').textContent") == page.evaluate(f"TL({yv})") and "analize dahil değil" in page.inner_text("#sheetBody"))
+        check("hariç alt başlıkta 12 aylık grafik", page.evaluate("document.querySelectorAll('#sheetBody [data-act=catmonth]').length") == 12)
+        page.evaluate("closeSheet();gsQuery='araç';gsFilter='all';searchSheet()"); page.wait_for_timeout(300)
+        check("aramada 'araç' yazınca kategori grafiği düğmesi çıkar", page.evaluate("document.querySelectorAll('#gResults .gcat').length") >= 1)
+        check("arama Money Pro arşivini de tarar", page.evaluate("gsArch") is True)
+        page.evaluate("closeSheet()")
+
         print("Güvenlik")
         check("içerik güvenlik politikası ihlali yok", not csp, csp[:2])
         check("sayfa hatası yok", not errors, errors[:3])
