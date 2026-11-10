@@ -1274,7 +1274,8 @@ function searchRow(x){
 /* bankadaki dönem içi tutarla karşılaştırma */
 function formBankCmp(cardId){const c=cardById(cardId);const st=cardState(c);const bc=c.bankCheck&&c.bankCheck.cut===st.open.cut?c.bankCheck:null;
   return head(`${esc(c.name)} · bankayla karşılaştır`)+`<form data-form="bankcmp"><input type="hidden" name="id" value="${c.id}"><p class="small muted" style="margin:0">Banka uygulamasında kartın <b>dönem içi harcama / dönem borcu</b> tutarını yaz. Uygulamadaki ${TL2(st.open.total)} ile karşılaştırırım.</p><label class="f">Bankadaki tutar (₺)<input id="bcAmt" name="amount" type="number" step="0.01" inputmode="decimal" value="${bc?bc.amount:''}" required></label><button class="btn" type="submit">Karşılaştır</button></form>`}
-function bankCmpLine(c,open){const bc=c.bankCheck&&c.bankCheck.cut===open.cut?c.bankCheck:null;if(!bc)return `<button class="linkbtn" data-act="bankcmp" data-id="${c.id}" style="text-align:left">Bankadaki tutarla karşılaştır</button>`;
+function bankCmpLine(c,open){return bankCmpLine0(c,open)+`<button class="linkbtn" data-act="stmtcmp" data-id="${c.id}" data-per="open" style="text-align:left;display:block;margin-top:4px">Banka hareketleriyle satır satır karşılaştır (ekran görüntüsü) ›</button>`}
+function bankCmpLine0(c,open){const bc=c.bankCheck&&c.bankCheck.cut===open.cut?c.bankCheck:null;if(!bc)return `<button class="linkbtn" data-act="bankcmp" data-id="${c.id}" style="text-align:left">Bankadaki tutarla karşılaştır</button>`;
   const d=r2(bc.amount-open.total);return `<div class="small tap" data-act="bankcmp" data-id="${c.id}">${Math.abs(d)<1?'<span class="chip ok">Banka ile tutuyor</span>':`<span class="chip warn">Bankada ${TL2(bc.amount)} · fark ${TL2(Math.abs(d))} ${d>0?'eksik':'fazla'}</span>`} <span class="muted">${fmtD(bc.at)}</span></div>${Math.abs(d)>=1&&d>0?'<div class="small muted">Eksik harcama var: aynı ekran görüntülerini tekrar yükle; eklenmiş olanlar atlanır, sadece eksikler çıkar.</div>':''}`}
 function planItemSheet(k,id){
   const mk=planMonth;
@@ -2648,24 +2649,25 @@ Yalnızca şu JSON nesnesini döndür: {"rows":[${TX_SCHEMA}],"images":[{"n":gö
     DUPUSED=new Set();RV={mode:'ss',gaps,rows:dedupeChunks(res.map(a=>Array.isArray(a)?a:(Array.isArray(a?.rows)?a.rows:[]))).filter(r=>r&&trAmount(r.amount)!==0).map(r=>rowFromAI(r,src,src.startsWith('c:')))};renderReview();
   }catch(e){btn.disabled=false;st.textContent=sampleErr(e)}
 }
-function formStmt(cardId){const c=cardById(cardId)||S.cards[0];return head('Ekstre yükle ve karşılaştır')+`<form data-form="stmt"><div class="f"><span class="lbl2">Hangi kart?</span>${chipPick('cardId',S.cards.map(x=>[x.id,x.name]),c?.id)}</div><label class="f">Ekstre ekran görüntüleri<input id="stFiles" name="files" type="file" accept="${esc(imgAccept())}" multiple required></label><div class="banner"><span>Ekstreyi <b>PDF</b> olarak ya da <b>ekran görüntüleriyle</b> yükleyebilirsin. Ekran görüntüsüyse kaydırarak birkaç tane al ve <b>sırayla birlikte</b> seç.</span></div>${imgOk()?'':noImgMsg}<button class="btn" type="submit" id="stGo">Oku ve karşılaştır</button><div id="stStatus" class="small muted"></div></form>`}
+function formStmt(cardId,per){const c=cardById(cardId)||S.cards[0];return head('Bankayla satır satır karşılaştır')+`<form data-form="stmt"><div class="f"><span class="lbl2">Hangi kart?</span>${chipPick('cardId',S.cards.map(x=>[x.id,x.name]),c?.id)}</div><div class="f"><span class="lbl2">Hangi liste?</span>${chipPick('per',[['open','Dönem içi (kesilmemiş)'],['last','Kesilmiş ekstre']],per||'open')}</div><p class="small muted" style="margin:0 0 8px">Banka uygulamasında <b>Dönem İçi</b> ya da <b>Ekstre</b> sekmesindeki hareketlerin ekran görüntülerini sırayla seç. Bankada olup uygulamada olmayanları ve uygulamada olup bankada olmayanları ayrı ayrı gösteririm; eksikleri tek dokunuşla eklersin.</p><label class="f">Ekran görüntüleri ya da PDF<input id="stFiles" name="files" type="file" accept="${esc(imgAccept())}" multiple required></label><div class="banner"><span>Ekstreyi <b>PDF</b> olarak ya da <b>ekran görüntüleriyle</b> yükleyebilirsin. Ekran görüntüsüyse kaydırarak birkaç tane al ve <b>sırayla birlikte</b> seç.</span></div>${imgOk()?'':noImgMsg}<button class="btn" type="submit" id="stGo">Oku ve karşılaştır</button><div id="stStatus" class="small muted"></div></form>`}
 async function runStmt(fd){DUPUSED=new Set();
   const files=[...document.getElementById('stFiles').files];const card=cardById(fd.get('cardId'));const st=document.getElementById('stStatus'),btn=document.getElementById('stGo');
   if(!files.length||!card||pdfGuard(files,st))return;if(!sampleFn){st.textContent='Görüntü okuma kullanılamıyor.';return}
   btn.disabled=true;st.innerHTML='<span class="spin"></span> Ekstre okunuyor…';
   try{
-    const res=await askImages(`Görüntüler bir Türk bankasının kredi kartı ekstresinin sırayla ekran görüntüleri. Dönemdeki tüm harcama ve iade satırlarını çıkar.\n${txRules()}\nEkstredeki taksit satırlarında ("2/6", "6/5.taksit") tutar o ayın taksitidir; toplam tutar parantez içinde yazıyorsa total_amount alanına yaz.\nYalnızca şu JSON nesnesini döndür:\n{"period_start":"YYYY-MM-DD|null","period_end":"hesap kesim tarihi|null","due_date":"son ödeme tarihi|null","next_cut":"bir sonraki kesim tarihi|null","next_due":"bir sonraki son ödeme|null","limit":"kart limiti sayı|null","total":"dönem borcu sayı|null","rows":[${TX_SCHEMA}]}`,files,(i,n)=>{if(n>1)st.innerHTML=`<span class="spin"></span> Okunuyor (${i}/${n})…`});
+    const res=await askImages(`${fd.get('per')==='open'?'Görüntüler kartın henüz kesilmemiş DÖNEM İÇİ hareketleri (ekstre değil). "Toplam TL Harcama" ya da dönem içi harcama toplamı yazıyorsa total alanına yaz; tarih alanlarını null bırak. "Provizyonda" yazan işlemleri de satır olarak yaz.\n':''}Görüntüler bir Türk bankasının kredi kartı ekstresinin sırayla ekran görüntüleri. Dönemdeki tüm harcama ve iade satırlarını çıkar.\n${txRules()}\nEkstredeki taksit satırlarında ("2/6", "6/5.taksit") tutar o ayın taksitidir; toplam tutar parantez içinde yazıyorsa total_amount alanına yaz.\nYalnızca şu JSON nesnesini döndür:\n{"period_start":"YYYY-MM-DD|null","period_end":"hesap kesim tarihi|null","due_date":"son ödeme tarihi|null","next_cut":"bir sonraki kesim tarihi|null","next_due":"bir sonraki son ödeme|null","limit":"kart limiti sayı|null","total":"dönem borcu sayı|null","rows":[${TX_SCHEMA}]}`,files,(i,n)=>{if(n>1)st.innerHTML=`<span class="spin"></span> Okunuyor (${i}/${n})…`});
     const meta={};res.forEach(o=>{if(o&&typeof o==='object')['period_start','period_end','due_date','next_cut','next_due','limit','total'].forEach(k=>{if(meta[k]==null&&o[k]!=null&&o[k]!=='null')meta[k]=o[k]})});
     const rows=dedupeChunks(res.map(o=>Array.isArray(o?.rows)?o.rows:[])).filter(r=>r&&trAmount(r.amount)!==0);
     const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')?s:null;
-    const end=iso(meta.period_end)||(hasDays(card)?lastCut(card):today());const start=iso(meta.period_start)||addDays(addMonths(end,-1),1);
+    const open=fd.get('per')==='open';
+    const end=open?today():(iso(meta.period_end)||(hasDays(card)?lastCut(card):today()));const start=open?(hasDays(card)?addDays(lastCut(card),1):addDays(addMonths(end,-1),1)):(iso(meta.period_start)||addDays(addMonths(end,-1),1));
     const cands=(()=>{const g={},out=[];livePortions().filter(p=>p.cardId===card.id&&p.pdate>=addDays(start,-5)&&p.pdate<=addDays(end,3)).forEach(p=>{if(p.groupId){const k=p.groupId+'#'+p.pi;if(!g[k]){g[k]={...p,pamount:0,used:false};out.push(g[k])}g[k].pamount+=p.pamount}else out.push({...p,used:false})});return out})();
     const matched=[],missing=[];const src='c:'+card.id;
     rows.forEach(r=>{const shown=Math.abs(trAmount(r.amount)),sign=r.income?-1:1,n=Math.max(1,Math.round(num(r.installments)||1));const dt=iso(r.date)||end;let best=null,bs=1e9;
       cands.forEach(c=>{if(c.used||Math.abs(c.pamount-sign*shown)>0.02)return;const dd=Math.abs(daysBetween(c.pdate,dt));if(dd>(n>1?400:4))return;const sc=dd+(firstWord(c.merchant)===firstWord(r.merchant)?0:3);if(sc<bs){bs=sc;best=c}});
       if(best){best.used=true;matched.push({r,c:best})}else{const row=rowFromAI({...r,date:dt},src,true);if(n>1&&row.instDone)row.nextDate=end;row.on=true;row.dup=null;missing.push(row)}});
     const extras=cands.filter(c=>!c.used&&c.pdate>=start&&c.pdate<=end);
-    RV={mode:'stmt',rows:missing,card,start,end,due:iso(meta.due_date),nextCut:iso(meta.next_cut),nextDue:iso(meta.next_due),limit:trAmount(meta.limit)||null,bankTotal:meta.total!=null?trAmount(meta.total):null,matched,extras,appTotal:cands.filter(c=>c.pdate>=start&&c.pdate<=end).reduce((a,c)=>a+c.pamount,0)};
+    RV={mode:'stmt',open,rows:missing,card,start,end,due:open?null:iso(meta.due_date),nextCut:open?null:iso(meta.next_cut),nextDue:open?null:iso(meta.next_due),limit:trAmount(meta.limit)||null,bankTotal:meta.total!=null?trAmount(meta.total):null,matched,extras,appTotal:cands.filter(c=>c.pdate>=start&&c.pdate<=end).reduce((a,c)=>a+c.pamount,0)};
     renderReview();
   }catch(e){btn.disabled=false;st.textContent=sampleErr(e)}
 }
@@ -2685,21 +2687,21 @@ function renderReview(){
   const body=document.getElementById('sheetBody');if(!RV)return;const rows=RV.rows;const n=rows.filter(r=>r.on).length;let h;
   if(RV.mode==='stmt'){
     const add=rows.filter(r=>r.on).reduce((a,r)=>a+(r.kind==='iade'?-1:1)*(r.inst>1?r.amount/r.inst:r.amount),0);const after=RV.appTotal+add;
-    h=head(`${esc(RV.card.name)} ekstresi`)+`<section class="sec"><div class="eyebrow">${fmtD(RV.start)} – ${fmtDY(RV.end)}${RV.due?' · son ödeme '+fmtD(RV.due):''}</div>
-      <div class="sumline"><span>Banka ekstre toplamı</span><b>${RV.bankTotal!=null?TL2(RV.bankTotal):'okunamadı'}</b></div><div class="sumline"><span>Uygulamada</span><b>${TL2(RV.appTotal)}</b></div><div class="sumline"><span>Eksikler eklenince</span><b>${TL2(after)}</b></div>
+    h=head(`${esc(RV.card.name)} ${RV.open?'dönem içi':'ekstresi'}`)+`<section class="sec"><div class="eyebrow">${fmtD(RV.start)} – ${fmtDY(RV.end)}${RV.due?' · son ödeme '+fmtD(RV.due):''}</div>
+      <div class="sumline"><span>${RV.open?'Bankada dönem içi harcama':'Banka ekstre toplamı'}</span><b>${RV.bankTotal!=null?TL2(RV.bankTotal):'okunamadı'}</b></div><div class="sumline"><span>Uygulamada</span><b>${TL2(RV.appTotal)}</b></div><div class="sumline"><span>Eksikler eklenince</span><b>${TL2(after)}</b></div>
       ${RV.bankTotal!=null&&Math.abs(RV.bankTotal-after)<1?'<span class="chip ok">Banka ile tutacak</span>':''}<div class="small muted">${RV.matched.length} eşleşti · ${rows.length} eksik · ${RV.extras.length} fazla</div></section>
-      <h3 style="font-size:16px;margin:14px 0 8px">Ekstrede var, uygulamada yok (${rows.length})</h3>`;
+      <h3 style="font-size:16px;margin:14px 0 8px">Bankada var, uygulamada yok (${rows.length})</h3>`;
   }else h=head(`${rows.length} hareket bulundu`)+(RV.gaps&&RV.gaps.length?`<div class="banner" style="margin-bottom:10px"><span>⚠ ${RV.gaps.map(n=>`${n-1}. ile ${n}.`).join(', ')} görüntü arasında üst üste binen satır yok; arada atlanmış harcama olabilir. O aralığın ekran görüntüsünü ekleyip hepsini tekrar yükle, eklediklerini iki kez eklemem.</span></div>`:'');
   h+=`<div class="stack">${rows.map(rvRow).join('')}</div>`;
-  if(RV.mode==='stmt')h+=`<h3 style="font-size:16px;margin:16px 0 8px">Uygulamada var, ekstrede yok (${RV.extras.length})</h3>`+(RV.extras.map(c=>`<div class="row"><div class="main"><div class="t">${esc(c.merchant||'Harcama')}</div><div class="s">${fmtDY(c.pdate)} · ${esc(personName(c.personId))}</div></div><div class="amt">${TL2(c.pamount)}</div>${c.pn===1?`<div style="display:flex;flex-direction:column;gap:4px"><button class="btn sm ghost" data-act="rvnext" data-id="${c.id}">Sonraki döneme</button><button class="btn sm danger" data-act="rvdel" data-id="${c.id}">Sil</button></div>`:''}</div>`).join('')||'<p class="small muted">Yok.</p>');
-  h+=`<button class="btn" style="width:100%;margin-top:14px" data-act="saverv">${RV.mode==='stmt'?(n?`${n} eksiği ekle, ekstreyi kaydet`:'Ekstreyi kaydet'):`${n} kaydı ekle`}</button>`;
+  if(RV.mode==='stmt')h+=`<h3 style="font-size:16px;margin:16px 0 8px">Uygulamada var, bankada yok (${RV.extras.length})</h3>${RV.extras.length?'<div class="small muted" style="margin:-4px 0 6px">Yanlış ya da iki kez girilmişse sil; sonraki döneme aitse taşı. Kişilerin payıysa bankada aynı işlemin tutarı farklı görünebilir.</div>':''}`+(RV.extras.map(c=>`<div class="row"><div class="main"><div class="t">${esc(c.merchant||'Harcama')}</div><div class="s">${fmtDY(c.pdate)} · ${esc(personName(c.personId))}</div></div><div class="amt">${TL2(c.pamount)}</div>${c.pn===1?`<div style="display:flex;flex-direction:column;gap:4px"><button class="btn sm ghost" data-act="rvnext" data-id="${c.id}">Sonraki döneme</button><button class="btn sm danger" data-act="rvdel" data-id="${c.id}">Sil</button></div>`:''}</div>`).join('')||'<p class="small muted">Yok.</p>');
+  h+=`<button class="btn" style="width:100%;margin-top:14px" data-act="saverv">${RV.mode==='stmt'?(n?`${n} eksiği ekle${RV.open?'':', ekstreyi kaydet'}`:(RV.open?'Tamam':'Ekstreyi kaydet')):`${n} kaydı ekle`}</button>`;
   body.innerHTML=h;
 }
 async function saveReview(){
   const rows=RV.rows.filter(r=>r.on);const ts=Date.now();let learned=false;
   const list=rows.flatMap((r,i)=>{const ps=srcParse(r.src);const c=parseCat(r.cat)||{category:'Diğer',sub:''};
     if(r.kind==='gelir')return {id:newId(),type:'gelir',amount:r.amount,date:r.date,merchant:r.merchant,source:r.source,...ps,via:RV.mode,ts:ts+i};
-    const pin=RV.mode==='stmt'&&(r.inst||1)===1?{stmtCut:RV.end}:{};
+    const pin=RV.mode==='stmt'&&!RV.open&&(r.inst||1)===1?{stmtCut:RV.end}:{};
     const mine=r.personId===ME;
     if(mine&&r.remember&&!r.known){const key=normKey(r.merchant);if(key){S.merch[key]={category:c.category,sub:c.sub};learned=true}}
     const base={type:'gider',date:r.date,merchant:r.merchant,...ps,inst:r.inst||1,nextDate:r.nextDate,instDone:r.instDone,via:RV.mode,ts:ts+i,...pin};
@@ -2710,7 +2712,8 @@ async function saveReview(){
   const info=RV;
   try{
     if(list.length)await saveTx(list);if(learned)await saveMerch();
-    if(info.mode==='stmt'){const card=info.card;const upd={...card};let ch=false;
+    if(info.mode==='stmt'&&info.open){const card=cardById(info.card.id);const st=cardState(card);if(info.bankTotal!=null&&st&&!st.noDays)await put({...card,bankCheck:{cut:st.open.cut,amount:info.bankTotal,at:today()}})}
+    else if(info.mode==='stmt'){const card=info.card;const upd={...card};let ch=false;
       if(info.limit&&!card.limit){upd.limit=info.limit;ch=true}
       const cuts={...(card.cuts||{})};if(info.end&&info.due){cuts[info.end]=info.due;ch=true}if(info.nextCut&&info.nextDue){cuts[info.nextCut]=info.nextDue;ch=true}upd.cuts=cuts;
       if(info.nextCut&&info.nextDue){upd.cutDay=parse(info.nextCut).getDate();upd.dueDay=parse(info.nextDue).getDate();ch=true}
@@ -2980,7 +2983,7 @@ document.addEventListener('click',async e=>{
     case 'delcard':{const n=linkedCard(id);if(armed(el,n?`${n} kayıt bu karta bağlı; kart borcundan düşer. Tekrar dokun`:undefined)){closeSheet();await delUndoable(id,'Kart silindi')}break}
     case 'paystmt':openSheet(formPayStmt(el.dataset.card,el.dataset.cut));break;
     case 'stmtperson':stmtPersonSheet(el.dataset.card,el.dataset.cut,el.dataset.p);break;
-    case 'stmtcmp':if(!S.cards.length){toast('Önce kart ekle');break}openSheet(formStmt(id));break;
+    case 'stmtcmp':if(!S.cards.length){toast('Önce kart ekle');break}openSheet(formStmt(id,el.dataset.per));break;
     case 'ss':RV=null;openSheet(formSS());break;
     case 'saverv':el.disabled=true;await saveReview();break;
     case 'rvnext':{const nc=RV.nextCut||cutFor(RV.card,addDays(RV.end,1));const ids=new Set();const x=S.tx.find(t=>t.id===id);if(x?.groupId)S.tx.filter(t=>t.groupId===x.groupId).forEach(t=>ids.add(t.id));else ids.add(id);await saveTx(S.tx.filter(t=>ids.has(t.id)).map(t=>({...t,stmtCut:nc})));RV.extras=RV.extras.filter(c=>c.id!==id);keepScroll(renderReview);toast('Sonraki döneme taşındı');break}

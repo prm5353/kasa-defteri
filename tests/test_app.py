@@ -738,6 +738,28 @@ def main():
         check("önerilerle doldurup kaydetmek çalışır", page.evaluate("S.budgets.length") > 0)
         page.evaluate("closeAll()")
 
+        print("Kart: bankanın dönem içi listesiyle satır satır karşılaştırma")
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'sc.json'))", SAMPLE); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        page.evaluate("""sampleFn=()=>{};askImages=async()=>[{total:'3440',rows:[
+          {date:'2026-11-05',merchant:'MARKET A',amount:'1000',category:'Market'},
+          {date:'2026-11-06',merchant:'MAGAZA B',amount:'600'},
+          {date:'2026-11-07',merchant:'TEKNOLOJI C',amount:'1000',installments:3,installment_no:1,total_amount:'3000'},
+          {date:'2026-11-10',merchant:'SHELL',amount:'840',category:'Araç'}]}]""")
+        page.evaluate("openSheet(formStmt('c1','open'))"); page.wait_for_timeout(200)
+        import base64, tempfile
+        png = os.path.join(tempfile.gettempdir(), "kd_dummy.png"); open(png, "wb").write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))
+        page.set_input_files("#stFiles", png)
+        page.click("#stGo"); page.wait_for_timeout(600)
+        sb = page.evaluate("document.getElementById('sheetBody').textContent")
+        check("dönem içi karşılaştırma: eşleşen 3, eksik 1 (Shell), fazla 0", "3 eşleşti · 1 eksik · 0 fazla" in sb and "SHELL" in sb.upper() and "Bankada var, uygulamada yok (1)" in sb, sb[:500])
+        page.click("#sheetBody [data-act=saverv]"); page.wait_for_timeout(700)
+        c = page.evaluate("(()=>{const c=cardById('c1');return {bc:c.bankCheck,open:cardState(c).open.total,pinned:S.tx.filter(t=>t.stmtCut).length,cuts:c.cuts||null}})()")
+        check("eksik eklendi, banka toplamı kaydedildi, dönem içinde ekstreye sabitleme ve kart günü değişmedi", abs(c["open"] - 3440) < 0.5 and c["bc"] and c["bc"]["amount"] == 3440 and c["pinned"] == 0 and not c["cuts"], c)
+        page.evaluate("closeAll();openSheet(head('k')+cardBlock(cardById('c1'),cardState(cardById('c1'))))"); page.wait_for_timeout(200)
+        check("kart ekranında 'Banka ile tutuyor'", "Banka ile tutuyor" in page.evaluate("document.getElementById('sheetBody').textContent"))
+        page.evaluate("closeAll()")
+
         print("Tutarlılık: aynı rakam her ekranda aynı")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tt.json'))", SAMPLE); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
