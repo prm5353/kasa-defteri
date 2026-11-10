@@ -210,6 +210,7 @@ label.f input,label.f select,label.f textarea,.inp{border:1px solid var(--line);
 .vexr{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}.vexr .main{flex:1;min-width:0}.vexr .t{font-weight:600;line-height:1.25}.vexr .s{font-size:12px;color:var(--muted)}.vexr b{white-space:nowrap;font-size:14px}.vspark{width:94px;height:24px;flex:none}
 .gcats{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.gcat{display:flex;align-items:center;gap:8px;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;font-weight:600;text-align:left;cursor:pointer}.gcat em{font-style:normal;font-size:11.5px;color:var(--warn);font-weight:700}.gcat b{margin-left:auto;color:var(--accent);font-size:13px}
 .tctab{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:6px 10px;font-size:13.5px}.tctab>b,.tctab>span:not(:nth-child(4n+1)){text-align:right}.tctab>b{font-size:12px;color:var(--muted)}.tctab>span:nth-child(4n+1){color:var(--muted)}.tctab .neg{color:var(--crit);font-weight:700}.tctab .pos{font-weight:700}
+#sheetBody h3 .x.back{margin:0 8px 0 0;font-size:22px;line-height:1;order:-1}
 .toastbtn{margin-left:12px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:0;cursor:pointer}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .spin{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -1115,7 +1116,7 @@ function planTableFlow(mk,F){
 function cashSheet(){const accs=S.accounts.map(a=>({a,b:accBalance(a)}));
   openSheet(head('Hesaplarımdaki para')+`<section class="sec"><div class="total">${TL(cashNow())}</div><div class="small muted">Sadece bakiyesini girdiğin hesaplar sayılır. Bakiyeyi güncellemek için hesaba dokun.</div></section><section class="sec" style="margin-top:12px">${accRows(accs)}</section>`)}
 let gsQuery='',gsFilter='all',gsArch=true;
-function searchSheet(){
+function searchSheet(){shReg('search',searchSheet);
   openSheet(head('Ara')+`<input class="inp" id="gSearch" type="search" placeholder="İşyeri, kişi, banka, kategori, not, tutar…" value="${esc(gsQuery)}" aria-label="Ara" autofocus>
     <div class="chips" style="margin-top:8px">${[['all','Tümü'],['gider','Gider'],['gelir','Gelir'],['kisi','Kişiler'],['transfer','Transfer']].map(([k,l])=>`<button class="${gsFilter===k?'on':''}" data-act="gsf" data-v="${k}">${l}</button>`).join('')}</div>
     <label class="check" style="margin-top:8px"><input type="checkbox" id="gsArch" ${gsArch?'checked':''}> Money Pro arşivinde de ara</label>
@@ -1494,7 +1495,7 @@ function yearSheet(y){anInit();const D=yearData(y),P=yearData(y-1);const sum=l=>
     <section class="sec" style="margin-top:12px"><h2>Aylar</h2><div style="display:flex;gap:3px;align-items:flex-end;height:110px">${months.map(m=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;justify-content:flex-end"><div style="display:flex;gap:1px;align-items:flex-end;width:100%;height:90px"><div style="flex:1;background:var(--plus);opacity:.7;border-radius:3px 3px 0 0;height:${m.i/mx*90}px"></div><div style="flex:1;background:var(--crit);border-radius:3px 3px 0 0;height:${m.v/mx*90}px"></div></div><span style="font-size:9.5px" class="muted">${monthLabel(m.k).slice(0,3)}</span></div>`).join('')}</div><div class="small muted">Yeşil gelir, kırmızı gider</div></section>
     <section class="sec" style="margin-top:12px"><h2>En çok harcadığın 10 kategori</h2>${cats.map(g=>`<div class="anrow"><span class="anic">${catIcon(g.k,'')}</span><div class="main"><div class="sumline" style="padding:0"><span style="font-weight:600">${esc(g.k)}</span><b>${TL(g.v)}</b></div><div class="small muted">%${gT>0?(g.v/gT*100).toFixed(1).replace('.',','):0}${pc[g.k]?` · ${y-1}: ${TL(pc[g.k])} ${ch(g.v,pc[g.k])}`:''}</div></div></div>`).join('')||'<div class="empty">Kayıt yok.</div>'}</section>
     <section class="sec" style="margin-top:12px"><h2>En çok harcadığın 10 yer</h2>${mer.map((g,i)=>`<div class="sumline"><span>${i+1}. ${esc(g.name)} <span class="muted small">· ${g.n} kez</span></span><b>${TL(g.v)}</b></div>`).join('')||'<div class="empty">Kayıt yok.</div>'}</section>`)}
-function analizSheet(){anInit();const D=anData();const gT=D.G.reduce((a,x)=>a+x.amt,0),iT=D.I.reduce((a,x)=>a+x.amt,0);const P=AN.path;
+function analizSheet(){shReg('an',analizSheet);anInit();const D=anData();const gT=D.G.reduce((a,x)=>a+x.amt,0),iT=D.I.reduce((a,x)=>a+x.amt,0);const P=AN.path;
   const crumbs=[['Özet',0],...P.map((p,i)=>[p==='G'?'Gider':p==='I'?'Gelir':p,i+1])];
   const presets=[['bu','Bu ay'],['gecen','Geçen ay'],['3','Son 3 ay'],['6','Son 6 ay'],['yil','Bu yıl'],['gyil','Geçen yıl']];
   const exN=AN.exG.length+AN.exS.length+AN.exI.length;
@@ -1546,7 +1547,7 @@ function ticariOf(mk){const T=ticariItems(mk);const g=T.filter(p=>!p.asset).redu
 let TCR=null;
 function tcMonths(){const cur=today().slice(0,7);let first=cur;[...S.arch,...S.tx].forEach(x=>{if((x.type==='gider'&&isTic(x.category))||(x.type==='gelir'&&isTic(x.source))){const m=x.date.slice(0,7);if(m<first)first=m}});
   const L=[];for(let k=cur;k>=first;k=shiftMonth(k,-1))L.push(k);return L}
-function ticariSheet(){const ms=tcMonths();const cur=today().slice(0,7);if(!TCR)TCR={from:shiftMonth(cur,-11),to:cur};
+function ticariSheet(){shReg('tc',ticariSheet);const ms=tcMonths();const cur=today().slice(0,7);if(!TCR)TCR={from:shiftMonth(cur,-11),to:cur};
   if(!ms.includes(TCR.from))TCR.from=ms[ms.length-1];if(!ms.includes(TCR.to))TCR.to=ms[0];if(TCR.from>TCR.to)[TCR.from,TCR.to]=[TCR.to,TCR.from];
   const ks=[];for(let k=TCR.from;k<=TCR.to;k=shiftMonth(k,1))ks.push(k);const R=ks.map(k=>({k,...ticariOf(k)}));
   const sI=R.reduce((a,r)=>a+r.i,0),sG=R.reduce((a,r)=>a+r.g,0),sA=R.reduce((a,r)=>a+r.a,0),sP=sI-sG;const nAr=R.reduce((a,r)=>a+r.items.filter(x=>x.arch).length+r.incs.filter(x=>x.arch).length,0);
@@ -1615,7 +1616,7 @@ const subTitle=x=>x.note?esc(x.note):esc(x.name);
 const subSubtitle=x=>x.note?`${esc(x.name)} · `:'';
 /* düzenleme ekranı */
 let subsQ='';
-function subsEditSheet(){const A=subscriptions();const E=subsEdit();
+function subsEditSheet(){shReg('subs',subsEditSheet);const A=subscriptions();const E=subsEdit();
   const M={};subsPayments().forEach(x=>{const k=normKey(x.m);if(!k)return;const o=M[k]=M[k]||{k,name:x.m,n:0,months:new Set(),last:0,ld:''};o.n++;o.months.add(x.d.slice(0,7));if(x.d>=o.ld){o.ld=x.d;o.last=x.a;o.name=x.m}});
   const q=asciiUp(subsQ.trim());const cand=Object.values(M).filter(o=>!q||asciiUp(o.name).includes(q)||o.k.includes(q)).sort((a,b)=>b.months.size-a.months.size||b.n-a.n).slice(0,q?30:10);
   const row=x=>`<div class="subr"><div class="main"><div class="t">${subTitle(x)}</div><div class="s">${subSubtitle(x)}${x.amt?TL2(x.amt):'tutar yok'}${x.none?' · son 6 ayda ödeme yok':` · ${x.months} ay`}${x.manual?' · senin eklediğin':''}</div></div>
@@ -1741,7 +1742,7 @@ function vizDonut(by,tot,avgBy,COL,isCur,mk){
 }
 
 /* ===== analize dahil olanlar: kategori ve alt kategori seçimi, gelir türleri ===== */
-function inclSheet(){const t=catTree();const L=new Set(S.catIcons?.__non||[]);const NI=new Set(nonIncome());
+function inclSheet(){shReg('incl',inclSheet);const t=catTree();const L=new Set(S.catIcons?.__non||[]);const NI=new Set(nonIncome());
   /* son 12 ayda kategori/alt kategori toplamları (hariç olanlar dahil) */
   const sum={};const add=(c,sb,v)=>{c=c||'Diğer';sum[c]=(sum[c]||0)+v;if(sb)sum[c+'|'+sb]=(sum[c+'|'+sb]||0)+v};const from=shiftMonth(today().slice(0,7),-11)+'-01';
   const ks=new Set();for(let i=0;i<12;i++)ks.add(shiftMonth(today().slice(0,7),-i));
@@ -1862,7 +1863,7 @@ function vbarPathDown(x,y,w,h){const r=Math.min(4,h,w/2);return `M${x} ${y}V${y+
 /* kategori ayrıntısı. o.sub: yalnız o alt başlık; analize dahil olmasa da (hariç tutulan) kayıtlar gösterilir */
 let CATD={c:null,sub:null};
 function catPart(k,c,sub){const all=nonSpend(c,sub)||(sub==null&&nonSpend(c));const b=mineCats(k,all)[c];if(!b)return {v:0,items:[]};if(sub==null)return b;const items=b.items.filter(p=>(p.sub||'')===sub);return {v:items.reduce((a,p)=>a+p.pamount,0),items}}
-function catDetail(c,o){o=o||{};const sub=o.sub!=null&&o.sub!==''?o.sub:null;CATD={c,sub};const mk=viewMonth,cur=today().slice(0,7),isCur=mk===cur;const by=catPart(mk,c,sub);
+function catDetail(c,o){o=o||{};shReg('cat:'+c+'|'+(o.sub??''),()=>catDetail(c,o));const sub=o.sub!=null&&o.sub!==''?o.sub:null;CATD={c,sub};const mk=viewMonth,cur=today().slice(0,7),isCur=mk===cur;const by=catPart(mk,c,sub);
   const ex=sub!=null?nonSpend(c,sub):nonSpend(c);const exSub=sub==null&&!ex&&(S.catIcons?.__non||[]).some(k=>k.startsWith(c+'|'));
   const col=vizColors()[c]||'var(--accent)';const items=[...by.items].sort((a,b)=>b.pdate.localeCompare(a.pdate));
   const prev=[1,2,3,4,5,6].map(i=>catPart(shiftMonth(mk,-i),c,sub).v).filter(v=>v>0);const avg=prev.length?prev.reduce((a,v)=>a+v,0)/prev.length:0;
@@ -1892,7 +1893,7 @@ function excludedSec(mk){const L=S.catIcons?.__non||[];if(!L.length)return '';co
     <button class="btn ghost sm" style="width:100%;margin-top:8px" data-act="incl">Neyin dahil olacağını değiştir</button></section>`}
 /* ===== iki ayı karşılaştır ===== */
 let cmpA=null,cmpB=null;
-function cmpSheet(){const cur=today().slice(0,7);const ms=[];for(let i=0;i<36;i++){const k=shiftMonth(cur,-i);if(mineTotal(k)>0||incomeTotal(k)>0)ms.push(k)}
+function cmpSheet(){shReg('cmp',cmpSheet);const cur=today().slice(0,7);const ms=[];for(let i=0;i<36;i++){const k=shiftMonth(cur,-i);if(mineTotal(k)>0||incomeTotal(k)>0)ms.push(k)}
   if(ms.length<2){openSheet(head('İki ayı karşılaştır')+'<div class="empty">Karşılaştırmak için en az iki aylık kayıt gerekiyor.</div>');return}
   if(!cmpA||!ms.includes(cmpA))cmpA=ms.includes(viewMonth)?viewMonth:ms[0];if(!cmpB||!ms.includes(cmpB)||cmpB===cmpA)cmpB=ms.find(k=>k<cmpA)||ms.find(k=>k!==cmpA);
   const A=mineCats(cmpA),B=mineCats(cmpB);const tA=mineTotal(cmpA),tB=mineTotal(cmpB);const iA=incP(cmpA),iB=incP(cmpB);
@@ -2088,7 +2089,7 @@ function ledgerSheet(){
         ${bo.length?`<div class="sumline"><span style="font-weight:700">Toplam borçlarım</span><b style="color:var(--crit)">${TL(B)}</b></div>${byCur(bo)?`<div class="small muted" style="text-align:right">içinde ${byCur(bo)}</div>`:''}<div class="sumline"><span>Net</span><b style="color:${A-B>=0?'var(--plus)':'var(--crit)'}">${A-B>=0?'+':'−'}${TL(Math.abs(A-B))}</b></div>`:''}</div>`})()}${closed.length?`<details style="margin-top:8px"><summary>Kapananlar (${closed.length})</summary>${closed.map(dr).join('')}</details>`:''}</section>
     <section class="sec" style="margin-top:12px"><h2>Taksitle gelen ödemeler<span class="sp"></span><button class="linkbtn" data-act="newplan">+ Ekle</button></h2>${S.plans.map(pl=>{const s=planStatus(pl);return `<div class="row"><div class="main tap" data-act="editplan" data-id="${pl.id}"><div class="t">${esc(pl.name)} · ${esc(pl.who||'')}</div><div class="s">${TL(s.got)} alındı · kalan ${TL(s.remaining)}${s.next?' · sıradaki '+fmtD(s.next):''}</div></div>${s.remaining>0?`<button class="btn sm" data-act="plangot" data-id="${pl.id}">Geldi</button>`:''}</div>`}).join('')||'<div class="empty">Arabanın taksitlerini buraya ekle.</div>'}</section>`);
 }
-function personSheet(pid){
+function personSheet(pid){shReg('person:'+pid,()=>personSheet(pid));
   const p=S.persons.find(x=>x.id===pid);if(!p)return;const L=personLedger(pid);
   openSheet(head(esc(p.name))+`<section class="sec"><div class="eyebrow">${holderCard(pid)?'Ek kart · '+esc(holderCard(pid).name):'Kartımı kullanıyor'}</div><div class="total">${Math.abs(L.bal)<0.5?'Borcu yok':L.bal>0?TL(L.bal)+' borçlu':TL(-L.bal)+' fazla ödedi'}</div>
     <div class="btnrow" style="margin-top:10px"><button class="btn sm" data-act="payp" data-id="${pid}">Ödeme aldım</button><button class="btn sm ghost" data-act="copyp" data-id="${pid}">Döküm</button><button class="btn sm ghost" data-act="openp" data-id="${pid}">Açılış bakiyesi</button></div></section>
@@ -2537,8 +2538,19 @@ async function saveFis(){
 }
 
 /* ===================== OLAYLAR ===================== */
-function openSheet(html){document.getElementById('sheetBody').innerHTML=html;document.getElementById('sheet').hidden=false;syncTxForm()}
-function closeSheet(){document.getElementById('sheet').hidden=true;RV=null;RC=null}
+/* ekran geçmişi: arama, kategori ayrıntısı gibi ekranlardan başka bir ekran açılınca "‹" ile geri dönülür.
+   Bu ekranlar açılmadan önce shReg ile kendini nasıl yeniden açacağını bildirir. closeSheet (kaydettikten sonra) bir önceki ekrana döner; ✕ hepsini kapatır */
+let SHSTACK=[],SHCUR=null,SHNEXT=null;
+const shReg=(k,fn)=>{SHNEXT={k,fn}};
+function openSheet(html){const sh=document.getElementById('sheet'),body=document.getElementById('sheetBody');const re=SHNEXT;SHNEXT=null;
+  if(sh.hidden){SHSTACK=[];SHCUR=null}
+  else if(SHCUR&&(!re||re.k!==SHCUR.k)){SHSTACK.push({...SHCUR,top:body.scrollTop});if(SHSTACK.length>12)SHSTACK.shift()}
+  SHCUR=re;body.innerHTML=html;
+  if(SHSTACK.length){const h3=body.querySelector('h3');if(h3)h3.insertAdjacentHTML('afterbegin','<button class="x back" data-act="sheetback" aria-label="Geri">‹</button>')}
+  sh.hidden=false;syncTxForm()}
+function sheetBack(){const p=SHSTACK.pop();if(!p){closeAll();return}SHCUR=null;p.fn();const body=document.getElementById('sheetBody');requestAnimationFrame(()=>{body.scrollTop=p.top||0})}
+function closeAll(){SHSTACK=[];SHCUR=null;SHNEXT=null;document.getElementById('sheet').hidden=true;RV=null;RC=null}
+function closeSheet(){if(SHSTACK.length&&!document.getElementById('sheet').hidden){sheetBack();return}closeAll()}
 let toastT;function toast(m,ms,undo){const t=document.getElementById('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);ms=undo?Math.max(ms||0,7000):(ms||3200);
   if(undo){const b=document.createElement('button');b.type='button';b.className='toastbtn';b.textContent='Geri al';
     b.onclick=async ev=>{ev.stopPropagation();b.disabled=true;clearTimeout(toastT);t.hidden=true;try{await undo();toast('Geri alındı')}catch(e){toast('Geri alınamadı')}};t.append(b)}
@@ -2551,14 +2563,14 @@ const linkedAcc=name=>S.tx.filter(t=>t.account===name||t.toAccount===name).lengt
 const armedSet=new WeakSet();
 function armed(btn,label){if(armedSet.has(btn))return true;armedSet.add(btn);const o=btn.textContent;btn.textContent=label||'Emin misin? Tekrar dokun';setTimeout(()=>{armedSet.delete(btn);if(btn.isConnected)btn.textContent=o},3500);return false}
 function keepScroll(fn){const c=document.querySelector('.sheet .card');const y=c?c.scrollTop:0;fn();if(c)c.scrollTop=y}
-function goTab(t){tab=t;ls.set('kd3_tab',t);closeSheet();render();window.scrollTo(0,0)}
+function goTab(t){tab=t;ls.set('kd3_tab',t);closeAll();render();window.scrollTo(0,0)}
 
 document.addEventListener('click',async e=>{
   if(e.target.closest('[data-noprop]'))return;
   const tb=e.target.closest('[data-tab]');if(tb){goTab(tb.dataset.tab);return}
   const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act,id=el.dataset.id;
   try{switch(a){
-    case 'close':closeSheet();break;
+    case 'close':closeAll();break;
     case 'add':openSheet(menuAdd());break;
     case 'settings':settingsSheet();break;
     case 'delacc':{const ac=S.accounts.find(x=>x.id===id);const n=ac?linkedAcc(ac.name):0;if(armed(el,n?`${n} kayıt bu hesapta; kayıtlar kalır, hesap silinir. Tekrar dokun`:'Hesap silinir. Tekrar dokun')){closeSheet();await delUndoable(id,'Hesap silindi')}break}
@@ -2678,6 +2690,7 @@ document.addEventListener('click',async e=>{
     case 'catmonth':viewMonth=el.dataset.mk;render();catDetail(CATD.c||el.dataset.c,{sub:CATD.sub});break;
     case 'exdet':catDetail(el.dataset.c,{sub:el.dataset.s});break;
     case 'cmp':cmpSheet();break;
+    case 'sheetback':sheetBack();break;
     case 'tcsheet':ticariSheet();break;
     case 'tcpre':TCR={from:el.dataset.a,to:el.dataset.b};ticariSheet();break;
     case 'subsedit':subsQ='';subsEditSheet();break;
