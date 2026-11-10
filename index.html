@@ -710,7 +710,7 @@ function clean(o){const r={};Object.entries(o).forEach(([k,v])=>{if(v!==undefine
 async function put(obj){if(!base){toast('Kaydedilemedi: oturum bağlı değil');throw new Error('nodb')}const id=obj.id||newId();const {id:_,...rest}=obj;await serial(id,()=>base.doc(id).set(clean(rest)));return id}
 async function del(id){if(base)await serial(id,()=>base.doc(id).delete())}
 function flat(store){const a=[];Object.values(store).forEach(items=>Object.entries(items||{}).forEach(([id,t])=>a.push({...t,id})));a.sort((x,y)=>y.date.localeCompare(x.date)||(y.ts||0)-(x.ts||0));return a}
-function derive(){S.tx=flat(S.months);S.arch=flat(S.amonths).map(archMap);S.receipts=flat(S.rmonths);_ep=null;_ps=null;_hc=null;_sh=null;
+function derive(){_tix=null;S.tx=flat(S.months);S.arch=flat(S.amonths).map(archMap);S.receipts=flat(S.rmonths);_ep=null;_ps=null;_hc=null;_sh=null;
   const mn=t=>S.tx.filter(x=>x.type===t).reduce((a,x)=>x.date<a?x.date:a,START());S.cutG=mn('gider');S.cutI=mn('gelir')}
 async function saveTx(list,removeIds){
   if(!base){toast('Kaydedilemedi: oturum bağlı değil');throw new Error('nodb')}
@@ -1647,8 +1647,14 @@ function inclLine(){const L=S.catIcons?.__non||[];const NI=nonIncome();const n=L
   return `<button class="vincl" data-act="incl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>${n?`Hariç: ${esc(names.slice(0,3).join(', '))}${names.length>3?` +${names.length-3}`:''}`:'Tüm kategoriler dahil'}</span><b>Değiştir ›</b></button>`}
 
 /* Money Pro arşivi değiştirilmez; kategori taşınınca/adı değişince arşiv okunurken yeni ada eşlenir (catIcons.__alias) */
-function archMap(t){if(t.type!=='gider')return t;const A=S.catIcons?.__alias;if(!A)return t;let c=t.category||'',s=t.sub||'';
-  for(let i=0;i<6;i++){const x=A[c+'|'+s]||(A[c]&&{c:A[c].c,s:A[c].s===undefined?s:A[c].s});if(!x)break;if(x.c===c&&x.s===s)break;c=x.c;s=x.s||''}
+let _tix=null;
+/* kategori ağacından: hangi alt başlık hangi ana başlıkların altında */
+function treeIndex(){const t=catTree();const own={};Object.entries(t).forEach(([m,subs])=>(subs||[]).forEach(s=>(own[s]=own[s]||[]).push(m)));return {t,own}}
+function archMap(t){if(t.type!=='gider')return t;const A=S.catIcons?.__alias;let c=t.category||'',s=t.sub||'';
+  if(A)for(let i=0;i<6;i++){const x=A[c+'|'+s]||(A[c]&&{c:A[c].c,s:A[c].s===undefined?s:A[c].s});if(!x)break;if(x.c===c&&x.s===s)break;c=x.c;s=x.s||''}
+  /* eşleme kaydı olmayan eski taşımalar: alt başlık artık eski ana başlığın altında yoksa ağaçta bulunduğu yere konur */
+  const X=_tix||(_tix=treeIndex());
+  if(s&&!(X.t[c]||[]).includes(s)&&(CAT_TREE[c]||[]).includes(s)){const o=(X.own[s]||[]).filter(m=>m!==c);if(o.length===1){c=o[0]}else if(!o.length&&X.t[s]){c=s;s=''}}
   return c===t.category&&s===(t.sub||'')?t:{...t,category:c,sub:s}}
 function aliasAdd(I,fromC,fromS,toC,toS){const A={...(I.__alias||{})};if(fromS)A[fromC+'|'+fromS]={c:toC,s:toS||''};else A[fromC]={c:toC,...(toS!==undefined?{s:toS}:{})};I.__alias=A}
 

@@ -183,6 +183,14 @@ def main():
         sh = page.evaluate(f"mineCats('{smk}').Kişisel.subs.Spor")
         page.evaluate("catMove('Kişisel','Spor','Sağlık')"); page.wait_for_timeout(400)
         check("alt kategori taşınınca arşiv de yeni yerinde", abs((page.evaluate(f"mineCats('{smk}').Sağlık?.subs?.Spor||0")) - sh) < 1 and not page.evaluate(f"mineCats('{smk}').Kişisel?.subs?.Spor"), (smk, sh))
+        # eşleme kaydı olmadan (eski sürümde) taşınmış alt başlıklar: ağaçtan bulunur
+        hd = page.evaluate("(()=>{let v=0;for(let i=1;i<13;i++){v+=mineCats(shiftMonth('2026-11',-i)).Alışveriş?.subs?.Hediye||0}return v})()")
+        page.evaluate("""(async()=>{const t=catTree();t['Alışveriş']=t['Alışveriş'].filter(x=>x!=='Hediye');t['Diğer']=[...(t['Diğer']||[]),'Hediye'];const I={...S.catIcons};delete I.__alias;await saveCatAll(t,I)})()"""); page.wait_for_timeout(400)
+        hd2 = page.evaluate("(()=>{let v=0,o=0;for(let i=1;i<13;i++){const m=mineCats(shiftMonth('2026-11',-i));v+=m['Diğer']?.subs?.Hediye||0;o+=m.Alışveriş?.subs?.Hediye||0}return [v,o]})()")
+        check("eski sürümde taşınan Hediye arşivde de Diğer altında", hd > 0 and abs(hd2[0] - hd) < 1 and hd2[1] == 0, (hd, hd2))
+        page.evaluate("""(async()=>{const t=catTree();t['Araçlarım']=t['Araçlarım'].filter(x=>x!=='Yakıt');t['Yakıt']=[];const I={...S.catIcons};delete I.__alias;await saveCatAll(t,I)})()"""); page.wait_for_timeout(400)
+        check("ana başlık yapılan alt başlık (Yakıt) arşivde kendi başına", page.evaluate("(mineCats('2026-10').Yakıt?.v||0)>0&&!mineCats('2026-10').Araçlarım?.subs?.Yakıt"))
+        check("ağaçta hiç olmamış alt başlık yerinde kalır", page.evaluate("archMap({type:'gider',category:'Sağlık',sub:'Eczane'}).category") == "Sağlık")
         check("Analiz ve Hareketler hatasız", not errors, errors[:3])
 
         print("Ana Sayfa tablosundan öde: tamamı ya da bir kısmı")
