@@ -241,7 +241,7 @@ def main():
         check("araç satışı taksiti gelire girmez (analiz)", page.evaluate("incP('2026-11')") == 50000, page.evaluate("incP('2026-11')"))
         page.evaluate("planMonth='2026-11';goTab('ana')"); page.wait_for_timeout(300)
         grp = page.evaluate("[...document.querySelectorAll('.pgrp.asset')].map(g=>g.innerText)")
-        check("tabloda konut kredisi 'Varlık ve kredi' grubunda", any("Konut kredisi" in g and "VARLIK VE KREDİ" in g.upper() for g in grp), grp)
+        check("tabloda konut kredisi 'Varlık ve kredi' grubunda", any("Konut kredisi" in g and "VARLIK / KREDİ" in g.upper() for g in grp), grp)
         check("kira sabit giderlerde kalır", not any("Kira" in g for g in grp))
         check("kalan hesabı değişmez (kredi yine nakit çıkışı)", page.evaluate("monthPlan('2026-11').outs.some(x=>x.title==='Konut kredisi'&&x.asset)"))
         check("varlık ekranları hatasız", not errors, errors[:3])
