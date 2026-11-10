@@ -7,7 +7,7 @@ Uygulamayı yerel bir sunucudan açar, tarihi 10 Kasım 2026 12:00'ye sabitler,
 örnek bir yedek yükler ve kart/kişi hesaplarının, yedek-geri yükleme akışının,
 silip geri almanın beklendiği gibi çalıştığını denetler. Kişisel veri kullanılmaz.
 """
-import json, os, sys, threading, http.server, functools, socketserver
+import os, json, os, sys, threading, http.server, functools, socketserver
 from datetime import datetime, timezone, timedelta
 from playwright.sync_api import sync_playwright
 
@@ -684,6 +684,30 @@ def main():
         page.evaluate("spendSheet('all','month')"); page.wait_for_timeout(200)
         check("kart harcamaları ekranında Bu ay / Bu ekstre dönemi / Son ekstre", all(s in page.evaluate("document.getElementById('sheetBody').textContent") for s in ("Bu ay", "Bu ekstre dönemi", "Son ekstre", "Analiz ekranıyla aynı")))
         page.evaluate("closeAll()")
+
+        print("Tutarlılık: aynı rakam her ekranda aynı")
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tt.json'))", SAMPLE); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        page.evaluate(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zengin_veri.js')).read()); page.wait_for_timeout(900)
+        R = page.evaluate("""(()=>{const mk=today().slice(0,7);const c=S.cards[0];const st=cardState(c);const m=myCard(c,st);const P=monthPlan(mk);
+          const owedC=owedByDue().reduce((a,o)=>a+o.left,0);const N=netWorth();const K=kpiMonth(mk);
+          return {debt:st.T.debt,planCard:P.outs.filter(x=>x.k==='card'&&!x.done).reduce((a,x)=>a+x.amount,0),next:nextPay(c,st).amt,my:m.now,oth:m.others,owed:owedC,
+            planOwed:P.ins.filter(x=>x.k==='person'&&!x.done).reduce((a,x)=>a+x.amount,0),nwCards:N.cards-st.futTotal,nwOwed:N.owed-2000,cash:cashNow(),nwCash:N.cash,flowStart:cashFlow(mk).start,
+            kInc:K.inc,inc:incA(mk),kCons:K.cons,cons:mineTotal(mk),kCard:K.cardSp,home:spendItems(S.cards.map(c=>c.id),'month').filter(p=>p.personId===ME).reduce((a,p)=>a+p.pamount,0)}})()""")
+        eq = lambda a, b: abs(R[a] - R[b]) < 0.5
+        check("kart: plandaki ödeme = kartlar ekranındaki borç = sıradaki ödeme (ticari dahil, ödenen düşülmüş)", eq("debt", "planCard") and eq("debt", "next"), R)
+        check("kart: başkalarının payı = alacak; benim = borç − alacak", eq("oth", "owed") and abs(R["my"] - max(0, R["debt"] - R["oth"])) < 0.5, R)
+        check("kart borcu: kartlar ekranı = net varlık (gelecek taksitler ayrı)", eq("debt", "nwCards"), R)
+        check("alacak: plan Gelen = 'Bana ödenecek' = net varlıktaki alacak", eq("owed", "planOwed") and eq("owed", "nwOwed"), R)
+        check("para: hesaplarım = plan başlangıcı = net varlık", eq("cash", "nwCash") and eq("cash", "flowStart"), R)
+        check("analiz: göstergeler = Gelir/Gider kutuları", eq("kInc", "inc") and eq("kCons", "cons"), R)
+        check("kart harcamam: ana sayfa = göstergeler", eq("kCard", "home"), R)
+        page.evaluate("tab='ana';render()"); page.wait_for_timeout(200)
+        check("Giden toplamında karta yapılan kısmi ödeme 'ödenen' sayılır", "ödenen 10.000" in page.evaluate("document.querySelector('.plan').textContent"))
+        page.evaluate("tab='analiz';viewMonth=today().slice(0,7);render();gdetSheet('gider')"); page.wait_for_timeout(300)
+        sb = page.evaluate("document.getElementById('sheetBody').textContent")
+        check("halkada küçük kategoriler 'Küçük kalemler' (Diğer ile karışmaz)", "Diğerleri" not in sb)
+        page.evaluate("closeAll();tab='ana';render()")
 
         print("Güvenlik")
         check("içerik güvenlik politikası ihlali yok", not csp, csp[:2])
