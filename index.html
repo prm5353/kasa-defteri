@@ -197,6 +197,16 @@ label.f input,label.f select,label.f textarea,.inp{border:1px solid var(--line);
 .icx{background:var(--chip);border:0;border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;color:var(--muted);cursor:pointer}
 .icsubs{display:none;padding-bottom:6px}.ic.open .icsubs{display:block}.ic.open .icx{color:var(--accent)}
 .subr{display:flex;align-items:center;gap:6px;padding:9px 0;border-top:1px solid var(--line)}.subr .main{flex:1;min-width:0}.subr .t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.subr .s{font-size:12.5px;color:var(--muted)}.subr .btn{flex:none;margin:0}
+.psum{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}.psum.two{grid-template-columns:1fr 1fr}
+.psum>div{background:var(--bg);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:1px;min-width:0}.psum span{font-size:11.5px;color:var(--muted);white-space:nowrap}.psum b{font-family:var(--f-display);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.psum i{font-style:normal;font-size:11px;color:var(--muted)}.psum .plus,.psh.plus{color:var(--plus)}
+.psec{margin-top:14px}.psh{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--f-display);font-weight:700;font-size:17px;padding-bottom:2px}.psh b{font-size:15px}.pempty{padding:8px 2px}
+.plan .pl2{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 2px;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.plan .pl2:last-child{border-bottom:0}.pday{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--chip);border-radius:9px;height:40px;line-height:1}.pday b{font-size:16px;font-family:var(--f-display)}.pday span{font-size:10px;color:var(--muted);margin-top:2px}
+.pday.late{background:color-mix(in srgb,var(--crit) 15%,transparent);color:var(--crit)}.pday.now{background:var(--accent);color:var(--surface)}.pday.now span{color:inherit;opacity:.85}
+.plan .pl2 .n{font-weight:600;font-size:15px;white-space:normal;overflow:visible;line-height:1.25}.plan .pl2 .r2{font-size:12px;color:var(--muted);margin-top:2px}
+.pa{display:flex;flex-direction:column;align-items:flex-end}.pa b{font-size:15px;white-space:nowrap}.pa span{font-size:11px;color:var(--muted);white-space:nowrap}
+.rl{font-weight:700;color:var(--ink)}.rl.late{color:var(--crit)}.rl.now{color:var(--accent)}
+.plan .pgrp .ph{margin-top:6px}.plan .pgrp.muted{opacity:.65}.plan .pgrp.asset .ph em,.plan .pgrp .ph em{display:inline;margin-left:4px;font-style:normal;font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted)}
 .toastbtn{margin-left:12px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:0;cursor:pointer}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .spin{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -993,7 +1003,7 @@ function monthPlan(mk){
   });
   /* kart payına sayılmayan fazla ödemeler: o kişiye geri verilecek / onun için kullanılacak para, giderlerde */
   excessList().forEach(e=>{const cur=t.slice(0,7);const disp=e.left>0.5&&e.date.slice(0,7)<cur?cur:e.date.slice(0,7);if(disp!==mk)return;
-    outs.push({k:'personout',id:e.id,title:personName(e.pid),date:e.left>0.5&&e.date<t?t:e.date,amount:e.left>0.5?e.left:e.ex,done:e.left<=0.5,tag:e.left<=0.5?'fazla ödeme · verildi':`fazla ödeme (${fmtD(e.date)})${e.ex-e.left>0.5?` · ${TL(e.ex-e.left)} verildi`:''}`})});
+    outs.push({k:'personout',id:e.id,title:personName(e.pid),date:e.left>0.5&&e.due?e.due:e.left>0.5&&e.date<t?t:e.date,amount:e.left>0.5?e.left:e.ex,done:e.left<=0.5,tag:e.left<=0.5?'fazla ödeme · verildi':`fazla ödeme (${fmtD(e.date)})${e.ex-e.left>0.5?` · ${TL(e.ex-e.left)} verildi`:''}`})});
   S.debts.filter(d=>d.dueDate&&d.dueDate.slice(0,7)===mk&&(!d.paid||d.closedAt?.slice(0,7)===mk)).forEach(d=>(d.dir==='alacak'?ins:outs).push({k:'debt',id:d.id,title:d.who,date:d.dueDate,amount:d.paid?debtAmtTL(d):debtTL(d),done:!!d.paid,stag:!d.paid&&(d.payments||[]).length&&(!d.cur||d.cur==='TRY')?`${TL(d.amount-debtLeft(d))} ödendi`:'',total:!d.paid&&(d.payments||[]).length&&(!d.cur||d.cur==='TRY')?d.amount:undefined,tag:[d.cur&&d.cur!=='TRY'?curFmt(d.paid?d.amount:debtLeft(d),d.cur):'',d.note||''].filter(Boolean).join(' · ')}));
   const free={};S.tx.filter(x=>x.type==='gelir'&&!x.recId&&!x.planId&&x.date.slice(0,7)===mk).forEach(x=>{const k=x.source||'Diğer';const o=free[k]=free[k]||{amount:0,n:0,date:x.date};o.amount+=x.amount;o.n++;if(x.date>o.date)o.date=x.date});
   Object.entries(free).forEach(([k,o])=>ins.push({k:'income',id:k,title:k,date:o.date,amount:o.amount,done:true,tag:o.n>1?`${o.n} kayıt`:''}));
@@ -1042,8 +1052,13 @@ function cashFlow(mk){
   return {P,start,end:bal,short,withBal:S.accounts.some(a=>a.balanceAt)};
 }
 /* aylık tablo satırı: ad ve tutar, altında sadece tarih ve kısa not; ayrıntı dokununca */
-function planRow(x){const note=x.stag||(x.k==='card'&&x.tag&&x.tag.includes('dönem açık')?'dönem açık':'')||(x.k==='rec'&&x.tag?x.tag:'');
-  return `<div class="pl2 tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="r1"><span class="n">${esc(x.title)}</span><b>${x.est?'~':''}${TL(x.amount)}</b></div>${x.total!=null&&x.total-x.amount>0.5?`<div class="r3">toplam ${TL(x.total)}</div>`:''}<div class="r2">${fmtD(x.date)}${note?' · '+esc(note):''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' ✓':''}</div></div>`}
+/* tablo satırı: solda gün rozeti, ortada ad ve durum, sağda tutar */
+function relDay(d,done){if(done)return '';const n=daysBetween(today(),d);return n<0?'<span class="rl late">gecikti</span>':n===0?'<span class="rl now">bugün</span>':n===1?'<span class="rl">yarın</span>':n<=7?`<span class="rl">${n} gün sonra</span>`:''}
+function planRow(x){const note=x.stag||(x.k==='card'&&x.tag&&x.tag.includes('dönem açık')?'dönem açık':'')||((x.k==='rec'||x.k==='personout'||x.k==='plan')&&x.tag?x.tag:'');const dd=parse(x.date);
+  const late=!x.done&&!x.muted&&!x.est&&x.date<today();const isNow=!x.done&&x.date===today();
+  return `<div class="pl2 tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pday${late?' late':isNow?' now':''}"><b>${dd.getDate()}</b><span>${AYK[dd.getMonth()]}</span></div>
+    <div class="pm"><div class="n">${esc(x.title)}</div><div class="r2">${[relDay(x.date,x.done||x.muted||x.est),note?esc(note):'',x.short?`<b style="color:var(--crit)">${TL(x.short)} eksik</b>`:'',x.done?'✓ tamam':''].filter(Boolean).join(' · ')}</div></div>
+    <div class="pa"><b>${x.est?'~':''}${TL(x.amount)}</b>${x.total!=null&&x.total-x.amount>0.5?`<span>/ ${TL(x.total)}</span>`:''}</div></div>`}
 const grp=(title,items,cls)=>items.length?`<div class="pgrp ${cls||''}"><div class="ph"><span>${title}</span><span>${TL(items.reduce((a,x)=>a+x.amount,0))}</span></div>${items.sort((a,b)=>a.date.localeCompare(b.date)).map(planRow).join('')}</div>`:'';
 function planLine(x){
   return `<div class="pl tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pr"><span class="pn">${esc(x.title)}</span><b>${TL(x.amount)}</b></div><div class="pd">${fmtD(x.date)}${x.tag?` · ${esc(x.tag)}`:''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' · ✓':''}${x.mine!=null&&Math.abs(x.mine-x.amount)>1?` · benim ${TL(x.mine)}`:''}${x.goal?' · hedef':''}${x.asset?' · varlık/kredi':''}</div></div>`;
@@ -1053,16 +1068,13 @@ function planTable(mk){
   const P=monthPlan(mk);const doneIn=P.ins.filter(x=>x.done).reduce((a,x)=>a+x.amount,0),doneOut=P.outs.filter(x=>x.done).reduce((a,x)=>a+x.amount,0);
   const goals=P.outs.filter(x=>x.goal);
   return `<section class="sec plan">${monthBar(mk,'pprev','pnext')}
-    <div class="cols" style="margin-top:10px">
-      <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>${P.ins.map(planLine).join('')||'<div class="small muted">Gelir yok</div>'}
-        <button class="addl" data-act="addticari">+ Ticari gelir</button><button class="addl" data-act="newrec" data-dir="gelir">+ Sabit gelir</button></div>
-      <div class="col"><div class="eyebrow">Giderler</div>${P.outs.map(planLine).join('')||'<div class="small muted">Gider yok</div>'}
-        <button class="addl" data-act="newrec" data-dir="gider">+ Sabit gider</button>${goals.length?'':'<button class="addl" data-act="newrec" data-dir="hedef">+ Birikim hedefi</button>'}</div>
-    </div>
-    <div class="cols tot"><div><span>Toplam</span><b style="color:var(--plus)">${TL(P.inT)}</b></div><div><span>Toplam</span><b>${TL(P.outT)}</b></div></div>
+    <div class="psum two"><div><span>Gelir</span><b class="plus">${TL(P.inT)}</b></div><div><span>Gider</span><b>${TL(P.outT)}</b></div></div>
     <div class="kalan"><span>KALAN</span><b style="color:${P.left>=0?'var(--plus)':'var(--crit)'}">${TL(P.left)}</b></div>
     ${goals.length?`<div class="small muted" style="text-align:center">Birikim hedefin (${TL(P.goalT)}) giderlere dahil. Hedef olmasaydı kalan ${TL(P.left+P.goalT)}.</div>`:''}
-    <div class="small muted" style="text-align:center;margin-top:4px">Gerçekleşen: gelen ${TL(doneIn)} · ödenen ${TL(doneOut)}</div>
+    <div class="psec"><div class="psh plus">Gelirler</div>${grp('Gelir',P.ins.filter(x=>!x.asset))}${grp('Varlık satışı <em>gelir sayılmaz</em>',P.ins.filter(x=>x.asset),'asset')}${P.ins.length?'':'<div class="small muted pempty">Gelir yok</div>'}</div>
+    <div class="psec"><div class="psh">Giderler</div>${grp('Gider',P.outs.filter(x=>!x.asset))}${grp('Varlık / kredi <em>harcama sayılmaz</em>',P.outs.filter(x=>x.asset),'asset')}${P.outs.length?'':'<div class="small muted pempty">Gider yok</div>'}</div>
+    <div class="small muted" style="text-align:center;margin-top:8px">Gerçekleşen: gelen ${TL(doneIn)} · ödenen ${TL(doneOut)}</div>
+    <div class="chips padd"><button data-act="newrec" data-dir="gelir">+ Sabit gelir</button><button data-act="addticari">+ Ticari gelir</button><button data-act="newrec" data-dir="gider">+ Sabit gider</button>${goals.length?'':'<button data-act="newrec" data-dir="hedef">+ Birikim hedefi</button>'}</div>
   </section>`;
 }
 function planTableFlow(mk,F){
@@ -1077,20 +1089,21 @@ function planTableFlow(mk,F){
   /* aynı gün aynı kartın kesin ve tahmini kısmı tek uyarı */
   const SH={};F.short.forEach(s=>{const k=s.d+'|'+s.x.title;const o=SH[k]=SH[k]||{d:s.d,title:s.x.title,miss:0,est:0,cert:0};o.miss+=s.miss;if(s.x.est)o.est+=s.miss;else o.cert+=s.miss});
   const warn=F.short.length?`<div class="banner crit" style="margin-top:10px;flex-direction:column;align-items:stretch;gap:4px"><b>⚠ Para bulman gereken ödemeler</b>${Object.values(SH).map(o=>`<div class="sumline small"><span>${fmtD(o.d)} · ${esc(o.title)}${o.est>0.5&&o.cert>0.5?` <span class="muted">(kesin ${TL(o.cert)} + tahmini ${TL(o.est)})</span>`:o.est>0.5?' <span class="muted">(tahmini)</span>':''}</span><b style="color:var(--crit)">${TL(o.miss)} eksik</b></div>`).join('')}<div class="small muted">O güne kadar hesaplarındaki para ve gelecek gelirler bu ödemeleri karşılamıyor.</div></div>`:'';
+  const pinT=pin0.reduce((a,x)=>a+x.amount,0);const left=inT-outT;
   return `<section class="sec plan">${monthBar(mk,'pprev','pnext')}${warn}
-    <div class="cols" style="margin-top:10px">
-      <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>
-        <div class="pgrp"><div class="pl2 ${cur?'tap':''}" ${cur?'data-act="cashsheet"':''}><div class="r1"><span class="n">${cur?'Hesaplarımda':'Devreden'}</span><b style="color:${F.start<0?'var(--crit)':'var(--plus)'}">${TL(F.start)}</b></div><div class="r2">${cur?(F.withBal?'bugün':'<span style="color:var(--warn)">bakiyeleri gir</span>'):'tahmini'}${held>0.5?` · ${TL(held)} kişilerin`:''}</div></div></div>
-        ${grp('Gelecek',pin)}${grp('Varlık satışı <em>gelir sayılmaz</em>',pinA,'asset')}
-        ${pinfo.length?grp('Kişiler öder',pinfo.map(x=>({...x,muted:true})),'muted'):''}</div>
-      <div class="col"><div class="eyebrow">Giderler</div>
-        ${grp('Kredi kartları',cards)}${grp('Yatırım hedefi',goals)}${grp('Gönderilecek',send)}${grp('Sabit giderler',fixed)}${grp('Varlık / kredi <em>harcama sayılmaz</em>',assets,'asset')}
-        ${!kesin.length?'<div class="small muted" style="padding:6px 2px">Bekleyen gider yok</div>':''}
-        ${est.length?grp('Tahmini harcama',est,'estg'):''}</div>
-    </div>
-    <div class="ptot"><div><span>Gelir</span><b style="color:var(--plus)">${TL(inT)}</b></div><div><span>Gider</span><b>${TL(outT)}</b></div>${estT>0.5?`<div><span>Tahmini</span><b style="color:var(--warn)">~${TL(estT)}</b></div>`:''}</div>
-    <div class="kalan"><span>KALAN</span><b style="color:${inT-outT>=0?'var(--plus)':'var(--crit)'}">${TL(inT-outT)}</b></div>
-    ${estT>0.5?`<div class="small muted" style="text-align:center;margin-top:-4px">Tahmini harcamalarla ay sonu <b style="color:${F.end>=0?'var(--plus)':'var(--crit)'}">~${TL(F.end)}</b></div>`:''}
+    <div class="psum"><div class="${cur?'tap':''}" ${cur?'data-act="cashsheet"':''}><span>${cur?'Hesaplarımda':'Devreden'}${cur?' ›':''}</span><b style="color:${F.start<0?'var(--crit)':'inherit'}">${TL(F.start)}</b><i>${cur?(F.withBal?'bugün':'<span style="color:var(--warn)">bakiyeleri gir</span>'):'tahmini'}</i></div>
+      <div><span>+ Gelecek</span><b class="plus">${TL(pinT)}</b><i>${pin0.length} kalem</i></div><div><span>− Ödenecek</span><b>${TL(outT)}</b><i>${kesin.length} kalem</i></div></div>
+    <div class="kalan"><span>AY SONU KALAN</span><b style="color:${left>=0?'var(--plus)':'var(--crit)'}">${TL(left)}</b></div>
+    ${estT>0.5?`<div class="small muted" style="text-align:right;margin-top:-4px">Tahmini harcamalar (~${TL(estT)}) düşülünce <b style="color:${F.end>=0?'var(--plus)':'var(--crit)'}">~${TL(F.end)}</b></div>`:''}
+    ${held>0.5?`<div class="small muted" style="text-align:right">Hesaplarındaki ${TL(held)} kişilerin parası (karta ödenecek)</div>`:''}
+    <div class="psec"><div class="psh plus"><span>Gelecek gelirler</span><b>${TL(pinT)}</b></div>
+      ${grp('Gelir',pin)}${grp('Varlık satışı <em>gelir sayılmaz</em>',pinA,'asset')}${pin0.length?'':'<div class="small muted pempty">Bu ay beklenen gelir yok</div>'}
+      ${pinfo.length?grp('Kişiler öder <em>kartına, hesaba girmez</em>',pinfo.map(x=>({...x,muted:true})),'muted'):''}</div>
+    <div class="psec"><div class="psh"><span>Ödenecekler</span><b>${TL(outT)}</b></div>
+      ${grp('Kredi kartları',cards)}${grp('Yatırım hedefi',goals)}${grp('Gönderilecek',send)}${grp('Sabit giderler',fixed)}${grp('Varlık / kredi <em>harcama sayılmaz</em>',assets,'asset')}
+      ${!kesin.length?'<div class="small muted pempty">Bekleyen ödeme yok</div>':''}
+      ${est.length?grp('Tahmini harcama <em>kalan günler için</em>',est,'estg'):''}</div>
+    <p class="small muted" style="margin:8px 0 0">Bir kaleme dokun: tamamını ya da bir kısmını öde/geldi işaretle, tarihini düzenle.</p>
     ${done.length?`<details class="pdone"><summary>Bu ay gerçekleşenler (${done.length})</summary>${done.sort((a,b)=>a.date.localeCompare(b.date)).map(planRow).join('')}</details>`:''}
     <div class="chips padd"><button data-act="newrec" data-dir="gelir">+ Sabit gelir</button><button data-act="addticari">+ Ticari gelir</button><button data-act="newrec" data-dir="gider">+ Sabit gider</button><button data-act="newtx" data-type="gider">+ İleri tarihli ödeme</button>${P.outs.some(x=>x.goal)?'':'<button data-act="newrec" data-dir="hedef">+ Yatırım hedefi</button>'}<button data-act="plansheet">Harcama planı</button><button data-act="projsheet">Nakit akışı</button></div>
   </section>`;
@@ -1271,13 +1284,20 @@ function feeAsk(t){PENDFEE=t;openSheet(head('Transfer ücreti')+`<section class=
   <form data-form="fee"><label class="f">Kesilen ücret (₺) <span class="small muted">· EFT/FAST ücreti ve BSMV toplamı</span><input name="fee" type="number" step="0.01" inputmode="decimal" autofocus></label><button class="btn" type="submit" style="width:100%">Ücreti kaydet</button></form>
   <button class="btn ghost" style="width:100%;margin-top:8px" data-act="nofee">Ücret kesilmedi</button><p class="small muted" style="margin-top:8px">Ücret, Banka › Komisyon harcaması olarak ${esc(t.account||'Nakit')} hesabından düşer.</p></section>`)}
 async function saveFee(t,fee){if(!(fee>0))return;await saveTx([{id:newId(),type:'gider',amount:fee,date:t.date,account:t.account||'',personId:ME,category:'Banka',sub:'Komisyon',merchant:`Transfer ücreti · ${t.account||'Nakit'} → ${t.toAccount||'Nakit'}`,feeOf:t.id,inst:1,ts:Date.now()+1,via:'manuel'}])}
-function excessList(){return S.tx.filter(x=>x.type==='tahsilat'&&x.cardAlloc!=null&&x.amount-x.cardAlloc>0.5).map(x=>{const ex=x.amount-x.cardAlloc;const back=S.tx.filter(v=>v.excessOf===x.id).reduce((a,v)=>a+v.amount,0);return {id:x.id,pid:x.personId,date:x.date,ex,left:Math.max(0,ex-back)}})}
-function excessSheet(id){const e=excessList().find(x=>x.id===id);if(!e)return;const x=S.tx.find(t=>t.id===id);
-  openSheet(head(esc(personName(e.pid))+' · fazla ödeme')+`<section class="sec"><div class="total">${TL(e.left)}</div><div class="small muted">${fmtDY(e.date)} tarihli ${TL(x.amount)} ödemenin kart payına sayılmayan ${TL(e.ex)}'si${e.ex-e.left>0.5?` · ${TL(e.ex-e.left)} verildi`:''}</div></section>
-    ${e.left>0.5?`<form data-form="excessback" style="margin-top:12px"><input type="hidden" name="id" value="${id}"><label class="f">Tutar<input name="amount" type="number" step="0.01" value="${Math.round(e.left*100)/100}"></label>
-      <label class="f">Hangi hesaptan<select name="account">${accOpts(x.account||'')}</select></label><label class="f">Tarih<input type="date" name="date" value="${today()}"></label>
-      <button class="btn" type="submit" style="width:100%">Verdim / onun için kullandım</button></form>
-      <button class="btn ghost" style="width:100%;margin-top:8px" data-act="excessapply" data-id="${id}">Vazgeçtim, sonraki kart payından düş</button>`:''}`)}
+function excessList(){return S.tx.filter(x=>x.type==='tahsilat'&&x.cardAlloc!=null&&x.amount-x.cardAlloc>0.5).map(x=>{const ex=x.amount-x.cardAlloc;const back=S.tx.filter(v=>v.excessOf===x.id).reduce((a,v)=>a+v.amount,0);return {id:x.id,pid:x.personId,date:x.date,due:x.excessDue||'',ex,left:Math.max(0,ex-back)}})}
+function excessSheet(id){const e=excessList().find(x=>x.id===id);if(!e)return;const x=S.tx.find(t=>t.id===id);const left=r2(e.left);
+  const back=S.tx.filter(v=>v.excessOf===id);
+  openSheet(head(esc(personName(e.pid))+' · fazla ödeme')+`<section class="sec"><div class="eyebrow">${left>0.5?'Ona vereceğin':'Hepsi verildi'}</div><div class="total">${TL(left>0.5?left:e.ex)}</div>
+    <div class="small muted">${fmtDY(e.date)} tarihli ${TL(x.amount)} ödemesinin kart payına sayılmayan kısmı${e.ex-e.left>0.5?` · ${TL(e.ex-e.left)} verildi`:''}</div></section>
+    ${left>0.5?`<section class="sec" style="margin-top:12px"><h2>Ne zaman vereceksin</h2><form data-form="excessdue" class="two" style="align-items:end"><input type="hidden" name="id" value="${id}"><label class="f">Tarih<input type="date" name="due" value="${e.due||today()}"></label><button class="btn" type="submit">Tarihi kaydet</button></form>
+      <p class="small muted" style="margin:6px 0 0">Ana Sayfa tablosunda bu tarihte görünür.</p></section>
+    <section class="sec" style="margin-top:12px"><h2>Geri verdim</h2><form data-form="excessback"><input type="hidden" name="id" value="${id}">
+      <div class="payopts"><button type="button" data-act="payamt" data-v="${left}" class="on"><span>Tamamı</span><b>${TL2(left)}</b></button><button type="button" data-act="payamt" data-v=""><span>Bir kısmı</span><b>tutarı yaz</b></button></div>
+      <div class="two"><label class="f">Verdiğin tutar (₺)<input name="amount" type="number" step="any" inputmode="decimal" value="${left}" required></label><label class="f">Verdiğin gün<input type="date" name="date" value="${today()}"></label></div>
+      ${accChips(x.account||S.accounts[0]?.name||'')}
+      <button class="btn" type="submit" style="width:100%">Verdim</button></form>
+      <button class="btn ghost" style="width:100%;margin-top:8px" data-act="excessapply" data-id="${id}">Vermeyeceğim, sonraki kart payından düşülsün</button></section>`:''}
+    ${back.length?`<section class="sec" style="margin-top:12px"><h2>Verdiklerin</h2>${back.map(v=>`<div class="sumline" style="align-items:center"><span>${fmtDY(v.date)}${v.account?` · <span class="muted">${esc(v.account)}</span>`:''}</span><span style="display:flex;gap:10px;align-items:center"><b>${TL(v.amount)}</b><button class="btn sm ghost" data-act="recundo" data-id="${esc(v.id)}">Sil</button></span></div>`).join('')}<p class="small muted" style="margin:6px 0 0">Yanlışlıkla kaydettiysen Sil'e iki kez dokun; tutar yeniden "vereceğin" olur.</p></section>`:''}`)}
 function payAsk(){const P=PENDPAY;const ex=P.t.amount-P.first;const nx=P.next[0];
   openSheet(head('Fazla ödeme')+`<section class="sec"><p style="margin:0 0 8px">${esc(personName(P.t.personId))} <b>${TL(P.t.amount)}</b> gönderdi. ${esc(P.line.card.name)} · ${fmtD(P.line.due)} payı <b>${TL(P.first)}</b>, yani <b>${TL(ex)} fazla</b>.</p>
     <p class="small muted" style="margin:0 0 12px">${nx?`Fazlası bir sonraki payından (${esc(nx.card.name)} · ${fmtD(nx.due)} · ${TL(nx.left)}) düşülsün mü?`:'Şu an başka açık payı yok. Fazlası ileride doğacak payından düşülsün mü?'}</p>
@@ -2819,6 +2839,7 @@ document.addEventListener('submit',async e=>{
     case 'bankcmp':{const c=cardById(g('id'));const st=cardState(c);await put({...c,bankCheck:{cut:st.open.cut,amount:num(g('amount')),at:today()}});closeSheet();break}
     case 'apikey':{ls.set('kd_apikey',String(g('key')||'').trim());toast('Anahtar kaydedildi');break}
     case 'prodedit':{const p=S.prod.map[g('pid')];p.name=g('name').trim()||p.name;p.group=g('group');await saveProd();_ps=null;closeSheet();render();break}
+    case 'excessdue':{const x=S.tx.find(t=>t.id===g('id'));if(!x)return;await saveTx([{...x,excessDue:g('due')||undefined}]);closeSheet();toast('Tarih kaydedildi');break}
     case 'excessback':{const x=S.tx.find(t=>t.id===g('id'));const v=num(g('amount'));if(!(v>0)){toast('Tutar gir');return}
       await saveTx([{id:newId(),type:'verdim',personId:x.personId,amount:v,date:g('date')||today(),account:g('account')||'',merchant:'Fazla ödemesini geri verdim',excessOf:x.id,ts:Date.now(),via:'manuel'}]);closeSheet();toast('Kaydedildi');break}
     case 'transfer':{const from=g('from'),to=g('to');const amt=num(g('amount'));if(!(amt>0)){toast('Tutar gir');return}if(from===to){toast('Nereden ve nereye aynı olamaz');return}
