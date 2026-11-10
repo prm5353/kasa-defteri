@@ -724,6 +724,20 @@ def main():
         check("limiti silince bütçeden çıkar", page.evaluate("budOf('Market')") is None)
         page.evaluate("closeAll()")
 
+        print("Bütçe ekranı geçmiş verili (önerili) açılır")
+        import ornek_veri
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'ov.json'))", ornek_veri.build()); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(600)
+        page.evaluate("tab='ana';planMonth=today().slice(0,7);render()"); page.wait_for_timeout(200)
+        page.click(".plan .estg [data-act=plansheet]"); page.wait_for_timeout(400)
+        sb = page.evaluate("document.getElementById('sheetBody').textContent")
+        ph = page.evaluate("[...document.querySelectorAll('#sheetBody input[data-bc]')].map(i=>i.placeholder).filter(p=>p.startsWith('~')).length")
+        check("bütçe ekranı önerilerle hatasız açılır", "Bütçem" in sb and ph > 0 and "tamamlanamadı" not in page.evaluate("[...document.querySelectorAll('.toast,#toast')].map(t=>t.textContent).join('|')"), (ph, page.evaluate("[...document.querySelectorAll('.toast,#toast')].map(t=>t.textContent).join('|')")))
+        page.click("#sheetBody [data-act=budfill]"); page.wait_for_timeout(200)
+        page.click("#sheetBody form[data-form=budgets] button[type=submit]"); page.wait_for_timeout(700)
+        check("önerilerle doldurup kaydetmek çalışır", page.evaluate("S.budgets.length") > 0)
+        page.evaluate("closeAll()")
+
         print("Tutarlılık: aynı rakam her ekranda aynı")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tt.json'))", SAMPLE); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
