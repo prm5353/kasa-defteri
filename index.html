@@ -229,7 +229,17 @@ label.f input,label.f select,label.f textarea,.inp{border:1px solid var(--line);
 .pst{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:99px;background:var(--chip);color:var(--muted);vertical-align:1px}.pst.ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}.pst.late{background:color-mix(in srgb,var(--crit) 14%,transparent);color:var(--crit)}.pst.est{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}.pst.rcv{background:color-mix(in srgb,var(--other) 16%,transparent);color:var(--other)}.pst.wait{color:var(--plus)}
 .plan .pl2.est{opacity:.8}.plan .pl2.est .pday{background:none;border:1px dashed var(--line)}.pa b.plus{color:var(--plus)}
 .mbar{display:flex;align-items:center;justify-content:space-between;gap:8px}.mbar b{font-family:var(--f-display);font-size:18px}
-@media (min-width:700px){.pcols{display:grid;grid-template-columns:1fr 1fr;gap:18px}.pcols .psec{min-width:0}}
+/* gelen ve giden her ekranda yan yana; dar ekranda satırlar sıkışık düzene geçer */
+.pcols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}.pcols .psec{min-width:0}
+@media (max-width:699px){.pcols{gap:8px}.pcols .psec{margin-top:10px}.pcols .psec+.psec{border-left:1px solid var(--line);padding-left:8px}
+  .pcols .psh{font-size:15px;flex-wrap:wrap;gap:0 6px}.pcols .psh b{font-size:14px}.pcols .ptot2{font-size:10.5px;line-height:1.35}
+  .pcols .pgrp .ph{font-size:9.5px;letter-spacing:.03em;flex-wrap:wrap}.pcols .pgrp .ph em{display:block!important;margin-left:0!important;font-size:9.5px}
+  .plan .pcols .pl2{grid-template-columns:28px minmax(0,1fr);gap:6px;padding:7px 0;align-items:start}
+  .pcols .pday{height:32px;border-radius:7px}.pcols .pday b{font-size:13px}.pcols .pday span{font-size:8.5px}
+  .plan .pcols .pl2 .n{font-size:13px;word-break:break-word}
+  .plan .pcols .pl2 .r2{font-size:10.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.pcols .pst{font-size:9.5px;padding:0 5px}
+  .pcols .pa{grid-column:2;align-items:flex-start;flex-direction:row;flex-wrap:wrap;gap:0 4px}.pcols .pa b{font-size:14px}.pcols .pa span{font-size:10px}
+  .pcols .pempty{font-size:11.5px}}
 .cfmini{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:13px;color:var(--muted)}.cfmini b{color:var(--ink)}.cfmini .plus{color:var(--plus)}
 .projh{margin-top:10px;flex-wrap:wrap;overflow:visible}.projh button{font-size:12.5px;padding:5px 10px}
 .banner.info{background:color-mix(in srgb,var(--accent) 12%,transparent)}.alx{flex:none;border:0;background:none;color:var(--muted);font-size:20px;line-height:1;padding:0 4px;cursor:pointer}
