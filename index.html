@@ -245,6 +245,8 @@ label.f input,label.f select,label.f textarea,.inp{border:1px solid var(--line);
 .banner.info{background:color-mix(in srgb,var(--accent) 12%,transparent)}.alx{flex:none;border:0;background:none;color:var(--muted);font-size:20px;line-height:1;padding:0 4px;cursor:pointer}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}.kpis div{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column}.kpis span{font-size:12px;color:var(--muted)}.kpis b{font-size:16px}
 .kpit{width:100%;border-collapse:collapse;font-size:13px}.kpit th{font-size:11px;color:var(--muted);font-weight:600;text-align:right;padding:4px 2px}.kpit td{white-space:nowrap;padding:7px 2px;border-top:1px solid var(--line);text-align:right}.kpit td:first-child{text-align:left;white-space:normal}.kc.g{color:var(--plus)}.kc.b{color:var(--crit)}
+.budr{padding:10px 0;border-top:1px solid var(--line)}.budr:first-child{border-top:0}.budt{display:flex;align-items:center;gap:10px}.budt .main{flex:1;min-width:0}.budt .t{font-weight:600}.budt .s{font-size:12px;color:var(--muted)}.budt .inp{width:104px;text-align:right;flex:none}
+.budr .bar{height:6px;margin-top:6px}.budro{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);margin-top:4px}.budro input{width:15px;height:15px;accent-color:var(--accent)}.budr.over .t{color:var(--crit)}
 .toastbtn{margin-left:12px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:0;cursor:pointer}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .spin{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -669,7 +671,7 @@ function incomeTotal(mk){return (useArch(mk)?S.arch:S.tx).filter(x=>x.type==='ge
 function othersMonth(mk){const by={};livePortions().filter(p=>p.personId!==ME&&p.pdate.slice(0,7)===mk).forEach(p=>by[p.personId]=(by[p.personId]||0)+p.pamount);return by}
 /* devirli bütçe: kullanılmayan kısım sonraki aya geçer (aşım da sonraki ayı azaltır), başlangıç ayından itibaren */
 function budgetCarry(b,mk){if(!b.rollover)return 0;let c=0;for(let m=b.since||mk;m<mk;m=shiftMonth(m,1))c+=b.limit-(mineCats(m)[b.category]?.v||0);return c}
-function budgetUse(mk){const by=mineCats(mk);return S.budgets.map(b=>{const spent=by[b.category]?.v||0;const carry=budgetCarry(b,mk);const lim=b.limit+carry;return {...b,base:b.limit,carry,limit:lim,spent,pct:lim>0?spent/lim*100:(spent>0?100:0)}}).sort((a,b)=>b.pct-a.pct)}
+function budgetUse(mk){const by=mineCats(mk);return S.budgets.map(b=>{const spent=by[b.category]?.v||0;const carry=budgetCarry(b,mk);const lim=Math.max(0,b.limit+carry);return {...b,base:b.limit,carry,limit:lim,spent,pct:lim>0?spent/lim*100:(spent>0?100:0)}}).sort((a,b)=>b.pct-a.pct)}
 /* geçmiş 12 ay (Money Pro arşivi dahil): hiç harcama olmayan aylar da sayılarak aylık ortalama */
 function budgetSuggest(){const cur=today().slice(0,7);const ms=Array.from({length:12},(_,i)=>shiftMonth(cur,-12+i));const R={};
   ms.forEach(m=>Object.entries(mineCats(m)).forEach(([c,o])=>{if(EST_SKIP.includes(c))return;(R[c]=R[c]||{c,tot:0,n:0}).tot+=o.v;if(o.v>0)R[c].n++}));
@@ -875,7 +877,7 @@ function alerts(){const out=[];const t=today();const cash=cashNow();
   dues.forEach(({c,s,d})=>{const hit=[...(F?.short||[]),...(F2?.short||[])].find(x=>x.x.k==='card'&&x.x.id===c.id&&x.x.date===s.due);const miss=hit?hit.miss:0;
     out.push({lvl:miss>0?'crit':'warn',act:'cardopen',id:c.id,html:`<b>${esc(c.name)}</b> ödemesi ${d===0?'bugün':d===1?'yarın':d+' gün sonra'} · ${TL(s.total)}${miss>0?` · <b>${TL(miss)} eksik</b> (o güne kadarki diğer ödemelerle birlikte)`:' · hesaplarındaki para yetiyor'}`})});
   const mk=t.slice(0,7);budgetUse(mk).filter(b=>b.pct>=80).forEach(b=>{const fc=forecastCat(b.category,mk);
-    out.push({lvl:b.pct>=100?'crit':'warn',act:'cat',c:b.category,html:`<b>${esc(b.category)}</b> bütçesi ${b.pct>=100?'aşıldı':'%'+Math.round(b.pct)+' doldu'} · ${TL(b.spent)} / ${TL(b.limit)}${fc>b.limit&&b.pct<100?` · bu hızla ay sonu ${TL(fc)}`:''}`})});
+    out.push({lvl:b.pct>=100?'crit':'warn',act:'plansheet',html:`<b>${esc(b.category)}</b> bütçesi ${b.pct>=100?'aşıldı':'%'+Math.round(b.pct)+' doldu'} · ${TL(b.spent)} / ${TL(b.limit)}${fc>b.limit&&b.pct<100?` · bu hızla ay sonu ${TL(fc)}`:''}`})});
   S.assets.filter(a=>a.lent&&a.dueDate).forEach(a=>{const d=daysBetween(t,a.dueDate);if(d<=30)out.push({lvl:d<0?'crit':'warn',act:'assets',html:`<b>${esc(a.who||'?')}</b> ${nfq.format(a.qty)} ${esc(ASSET_TYPES[a.type]||a.type)} ${d<0?`geri vermesi gerekiyordu (${fmtD(a.dueDate)})`:d===0?'bugün geri verecek':`${d} gün sonra geri verecek`}`})});
   kurStale().forEach(s=>out.push({lvl:'warn',act:'assets',html:`<b>${s.what}</b> ${s.d} gündür güncellenmedi`}));
   S.debts.filter(x=>!x.paid&&x.dueDate&&debtLeft(x)>0).forEach(x=>{const d=daysBetween(t,x.dueDate);if(d<=3)out.push({lvl:d<0?'crit':'warn',act:'ledger',html:`<b>${esc(x.who)}</b> ${x.dir==='alacak'?'sana ödeyecek':'borcun'} ${curFmt(debtLeft(x),x.cur)} · ${d<0?'gecikti':d===0?'bugün':d+' gün sonra'}`})});
@@ -992,7 +994,10 @@ function catHist(mk){/* yeni harcama: taksit payları ve sabit gider kayıtları
   else S.arch.forEach(t=>{if(t.type!=='gider'||t.personId!==ME||t.date.slice(0,7)!==mk||nonSpend(t.category,t.sub))return;const c=t.category||'Diğer';by[c]=(by[c]||0)+t.amount});
   return _hc.m[mk]=by}
 const median=a=>{if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);const m=Math.floor(b.length/2);return b.length%2?b[m]:(b[m-1]+b[m])/2};
-function estCat(c,mk){if(EST_SKIP.includes(c))return {v:0,src:'hesaba girmez'};const ov=S.catplan?.months?.[mk]?.[c];if(ov!=null)return {v:ov,src:'senin planın',set:true};
+/* bütçe tek kaynak: limit koyduğun kategoride tahmini harcama = bütçen (devreden dahil) */
+const budOf=c=>S.budgets.find(b=>b.category===c);
+function budLim(c,mk){const b=budOf(c);if(!b)return null;return Math.max(0,b.limit+budgetCarry(b,mk))}
+function estCat(c,mk){if(EST_SKIP.includes(c))return {v:0,src:'hesaba girmez'};const bl=budLim(c,mk);if(bl!=null)return {v:bl,src:'bütçen',set:true,budget:true};const ov=S.catplan?.months?.[mk]?.[c];if(ov!=null)return {v:ov,src:'senin planın',set:true};
   if(EST_IRREG.includes(c))return {v:0,src:'düzensiz · planlarsan ekle'};const cur=today().slice(0,7);
   const ly=catHist(shiftMonth(mk,-12))[c]||0;if(EST_SEASON.includes(c)&&ly>0)return {v:ly,src:'geçen yıl aynı ay'};
   const prev=[1,2,3,4,5,6].map(i=>shiftMonth(cur,-i)).filter(m=>Object.keys(catHist(m)).length).map(m=>catHist(m)[c]||0);
@@ -1011,8 +1016,8 @@ function estSpend(srcPred,from,to){if(to<from)return 0;const t=today();const sh=
   while(m<=to.slice(0,7)){const[y,mo]=m.split('-').map(Number);const days=new Date(y,mo,0).getDate();const ms=m+'-01',me=monthEnd(m);
     const a=from>ms?from:ms,b=to<me?to:me;const isCur=m===t.slice(0,7);const restStart=isCur?addDays(t,1):ms;const restDays=Math.max(0,daysBetween(restStart,me)+1);
     const ovl=Math.max(0,daysBetween(a>restStart?a:restStart,b)+1);
-    if(ovl>0&&restDays>0){const E=estCats(m);const H=isCur?catHist(m):{};
-      Object.entries(E).forEach(([c,e])=>{const left=Math.max(0,e.v-(H[c]||0));if(left<=0)return;const share=sh.by[c]||sh.all;Object.entries(share).forEach(([src,f])=>{if(srcPred(src))sum+=left*f*ovl/restDays})})}
+    if(ovl>0&&restDays>0){const E=estCats(m);const H=isCur?catHist(m):{};const MC=isCur?mineCats(m):{};
+      Object.entries(E).forEach(([c,e])=>{const left=Math.max(0,e.v-(e.budget?(MC[c]?.v||0):(H[c]||0)));if(left<=0)return;const share=sh.by[c]||sh.all;Object.entries(share).forEach(([src,f])=>{if(srcPred(src))sum+=left*f*ovl/restDays})})}
     m=shiftMonth(m,1)}
   return sum}
 const ticariAmt=items=>items.filter(p=>isTic(p.category)).reduce((a,p)=>a+p.pamount,0);
@@ -1040,7 +1045,7 @@ function monthPlan(mk){
     const cert=Math.max(0,s.total-paidTo);const fully=s.paid||bankRem<=0.5;
     if(s.total>0.5)outs.push({k:'card',id:c.id,title:c.name,date:s.due,amount:fully?s.total:cert,total:fully?s.total:bankRem,paidTo,done:fully||cert<=0.5,stag:paidTo>0.5&&!fully?`${TL(paidTo)} ödendi`:'',tag:[open?'dönem açık':'',tic>0.5?`içinde ticari ${TL(tic)}`:'',...oth.map(([pid,v])=>`içinde ${personName(pid)} payı ${TL(v)}`)].filter(Boolean).join(' · '),mine:(s.by[ME]||0)-tic,acc:'kart borcu'});
     /* kesime kadar yapılacağı tahmin edilen harcama ayrı satır */
-    if(est>0.5&&!s.paid)outs.push({k:'estcard',id:mk,est:true,title:c.name,date:s.due,amount:est,done:false,stag:`kesime (${fmtD(s.cut)}) kadar`,tag:`kesime (${fmtD(s.cut)}) kadar tahmini harcama`});
+    if(est>0.5&&!s.paid)outs.push({k:'estcard',id:mk,est:true,title:'Bütçeye göre harcama',date:s.due,amount:est,done:false,stag:'kalan bütçe',tag:'kalan bütçeden kartla ödenecek kısım'});
     Object.entries(s.by).forEach(([pid,a])=>{if(pid===ME||a<=0.5)return;const L=owedLeft(pid,c.id,s.cut);
       if(L){const got=L.amt-L.left;if(L.left<=0.5){ins.push({alacak:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:L.amt,done:true,tag:c.name+' · alındı'});return}
         if(got>0.5)ins.push({alacak:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:got,done:true,tag:c.name+' · alındı'});
@@ -1048,7 +1053,7 @@ function monthPlan(mk){
       const got=S.tx.filter(x=>x.type==='tahsilat'&&x.personId===pid&&x.date.slice(0,7)===mk).reduce((q,x)=>q+x.amount,0);
       ins.push({alacak:true,k:'person',id:pid,title:personName(pid),date:s.due,amount:a,done:got>=a-1,tag:c.name})});
   })});
-  if(mk>=t.slice(0,7)){const a=mk===t.slice(0,7)?t:mk+'-01';const v=estSpend(src=>src.startsWith('a:'),mk===t.slice(0,7)?addDays(t,1):a,monthEnd(mk));if(v>0.5)outs.push({k:'estcash',id:mk,est:true,title:'Nakit/hesaptan harcamalar',date:a,amount:v,done:false,tag:'tahmini'})}
+  if(mk>=t.slice(0,7)){const a=mk===t.slice(0,7)?t:mk+'-01';const v=estSpend(src=>src.startsWith('a:'),mk===t.slice(0,7)?addDays(t,1):a,monthEnd(mk));if(v>0.5)outs.push({k:'estcash',id:mk,est:true,title:'Bütçeye göre harcama',date:a,amount:v,done:false,stag:'kalan bütçe',tag:'kalan bütçeden hesaptan/nakit kısım'})}
   S.plans.forEach(pl=>{const s=planStatus(pl);const[y,m]=mk.split('-').map(Number);const date=dayIn(y,m-1,pl.day||1);
     const got=planGot(pl,mk);
     const ahead=Math.max(0,monthsBetween(t.slice(0,7),mk));const left=s.remaining+(got?got:0)-ahead*(pl.installment||0);const due=Math.min(pl.installment||left,left);
@@ -1083,7 +1088,7 @@ function projGroup(e){const x=e.x;const r=x.k==='rec'?S.recs.find(q=>q.id===x.id
   if(x.k==='card')return 'kart';if(x.k==='estcard')return 'kartT';if(x.k==='estcash')return 'tahmin';
   if(x.k==='debt'||(x.k==='rec'&&r&&(r.count||r.loan||/KREDI|TAKSIT/.test(asciiUp(r.name)))))return 'kredi';
   if(x.k==='rec')return x.goal?'hedef':'sabit';return 'diger'}
-const PG_LBL={maas:'Maaş',alacak:'Alacaklar (kişilerden, borç verdiklerimden)',gelir:'Diğer gelirler',kart:'Kredi kartı ekstreleri · kesin',kartT:'Kredi kartı · kesime kadar tahmini',kredi:'Kredi, taksit ve borçlar',sabit:'Faturalar ve sabit giderler',hedef:'Birikim hedefleri',tahmin:'Tahmini günlük harcama (market, yakıt…)',diger:'Diğer planlı ödemeler'};
+const PG_LBL={maas:'Maaş',alacak:'Alacaklar (kişilerden, borç verdiklerimden)',gelir:'Diğer gelirler',kart:'Kredi kartı ekstreleri · kesin',kartT:'Bütçeye göre harcama · kartla',kredi:'Kredi, taksit ve borçlar',sabit:'Faturalar ve sabit giderler',hedef:'Birikim hedefleri',tahmin:'Bütçeye göre harcama · hesaptan/nakit',diger:'Diğer planlı ödemeler'};
 function projBreak(P){const g={};P.ev.forEach(e=>{const k=projGroup(e);const o=g[k]=g[k]||{k,s:e.s,v:0,n:0,est:!!e.x.est};o.v+=e.x.amount;o.n++});
   const inT=P.ev.filter(e=>e.s>0).reduce((a,e)=>a+e.x.amount,0),outT=P.ev.filter(e=>e.s<0).reduce((a,e)=>a+e.x.amount,0);
   const estT=P.ev.filter(e=>e.s<0&&e.x.est).reduce((a,e)=>a+e.x.amount,0);
@@ -1111,19 +1116,32 @@ function projSheet(){shReg('proj',projSheet);const P=projection();const B=projBr
       <div class="sumline" style="border-top:1px solid var(--line);padding-top:8px;margin-top:4px"><b>${fmtD(addDays(today(),P.days))} tahmini bakiye</b><b style="color:${P.end<0?'var(--crit)':''}">${P.end<0?'−':''}${TL(Math.abs(P.end))}</b></div>
       <div class="sumline"><span>En düşük bakiye</span><b style="color:${P.min.bal<0?'var(--crit)':''}">${P.min.bal<0?'−':''}${TL(Math.abs(P.min.bal))} · ${fmtD(P.min.d)}</b></div>
       ${fall.length?`<div class="banner crit" style="margin-top:8px"><span>⚠ ${fmtD(fall[0].d)} günü <b>${esc(fall[0].x.title)}</b> ödemesinde para yetmiyor (${TL(-fall[0].bal)} eksik).${(()=>{const sal=P.ev.find(e=>e.s>0&&e.d>fall[0].d);return sal?` ${fmtD(sal.d)} günü ${esc(sal.x.title)} (${TL(sal.x.amount)}) geliyor; ödemeyi o güne kaydırmak ya da kısmen ödemek açığı kapatabilir.`:' Bir hesaptan transfer ya da harcamayı azaltma gerekebilir.'})()}</span></div>`:''}
-      <button class="btn ghost sm" data-act="plansheet" style="margin-top:8px">Harcama tahminini düzenle</button></section>
+      <button class="btn ghost sm" data-act="plansheet" style="margin-top:8px">Bütçemi düzenle</button></section>
     <section class="sec" style="margin-top:12px"><h2>Gelecekler</h2>${gl(1)}</section>
     <section class="sec" style="margin-top:12px"><h2>Çıkacaklar</h2>${gl(-1)}</section>
     <section class="sec" style="margin-top:12px"><h2>Gün gün bakiye</h2>${P.ev.map(e=>`<div class="row"><div class="main"><div class="t">${esc(e.x.title)}${e.x.est?' <span class="pst est">tahmini</span>':''}</div><div class="s">${fmtD(e.d)}${e.x.tag?' · '+esc(e.x.tag):''}</div></div><div class="amt ${e.s>0?'plus':''}">${e.s>0?'+':'−'}${TL(e.x.amount)}<small style="color:${e.bal<0?'var(--crit)':'var(--muted)'}">kalan ${e.bal<0?'−':''}${TL(Math.abs(e.bal))}</small></div></div>`).join('')||'<div class="empty">Bekleyen hareket yok.</div>'}</section>`)}
-/* harcama planı: kategori tahminleri, bu ay harcanan, elle değiştir */
+/* ===== BÜTÇE: tek yer. Limitler (S.budgets) burada; Gelen-Giden'deki tahmin, uyarılar, kategori seçici, analiz hepsi buradan okur ===== */
+function budCats(mk){const by=mineCats(mk);const s=new Set([...Object.keys(catTree()),...Object.keys(by),...S.budgets.map(b=>b.category)]);
+  return [...s].filter(c=>!EST_SKIP.includes(c)&&!isTic(c)&&!nonSpend(c))}
+function budgetTot(mk){const by=mineCats(mk);let lim=0,spent=0;S.budgets.forEach(b=>{if(nonSpend(b.category))return;const l=budLim(b.category,mk);lim+=l;spent+=by[b.category]?.v||0});return {lim,spent,pct:lim>0?spent/lim*100:0,over:lim>0&&spent>lim+0.5}}
 let planEditMonth=null;
-function planSheet(mk){mk=mk||planEditMonth||today().slice(0,7);planEditMonth=mk;const E=estCats(mk);const H=mk===today().slice(0,7)?catHist(mk):{};const tot=Object.values(E).reduce((a,e)=>a+e.v,0);const spent=Object.values(H).reduce((a,v)=>a+v,0);
-  const rows=Object.entries(E).sort((a,b)=>b[1].v-a[1].v);
-  openSheet(head('Harcama planı')+`<div class="chips" style="margin-bottom:10px">${[0,1,2].map(i=>shiftMonth(today().slice(0,7),i)).map(m=>`<button class="${m===mk?'on':''}" data-act="planmon" data-v="${m}">${monthLabel(m)}</button>`).join('')}</div>
-    <section class="sec"><div class="eyebrow">${monthLabel(mk)} tahmini harcaman</div><div class="total">${TL(tot)}</div><div class="small muted">${H&&spent?`Şimdiye kadar ${TL(spent)} · `:''}Taksitler, sabit giderler ve ticari giderler hariç; onlar zaten ayrıca biliniyor.</div></section>
-    <section class="sec" style="margin-top:12px"><form data-form="catplan"><input type="hidden" name="mk" value="${mk}">${rows.map(([c,e])=>`<div class="planrow"><span class="anic">${catIcon(c,'')}</span><div class="main"><div class="t">${esc(c)}</div><div class="s">${esc(e.src)}${H[c]?` · harcanan ${TL(H[c])}`:''}</div></div><input class="inp" name="c_${esc(c)}" type="number" step="any" min="0" inputmode="decimal" value="${Math.round(e.v)}" data-orig="${Math.round(e.v)}" style="width:110px;text-align:right;${e.set?'border-color:var(--accent)':''}"></div>`).join('')}
-      <div class="btnrow" style="margin-top:10px"><button class="btn" type="submit">Kaydet</button><button class="btn ghost" type="button" data-act="planreset" data-v="${mk}">Otomatik tahmine dön</button></div></form>
-      <p class="small muted" style="margin-top:8px">Değiştirdiğin tutarlar sadece ${monthLabel(mk)} için geçerli. Örneğin gezi planlıyorsan Gezi'ye tutar yaz.</p></section>`)}
+function planSheet(mk){mk=mk||planEditMonth||today().slice(0,7);planEditMonth=mk;shReg('budget',()=>planSheet(mk));const cur=today().slice(0,7);const by=mineCats(mk);const SG={};budgetSuggest().forEach(r=>SG[r.c]=Math.round(r.avg/100)*100);
+  const cats=budCats(mk).map(c=>{const b=budOf(c);const lim=b?budLim(c,mk):null;const ov=S.catplan?.months?.[mk]?.[c];const e=b?null:estCat(c,mk);return {c,b,lim,spent:by[c]?.v||0,ov,est:e?e.v:0,sug:SG[c]||0}})
+    .sort((a,b)=>(!!b.b-!!a.b)||(b.lim||0)-(a.lim||0)||b.spent-a.spent||b.est-a.est);
+  const B=budgetTot(mk);
+  const row=x=>{const pct=x.lim?Math.min(100,x.spent/x.lim*100):0;const over=x.lim!=null&&x.spent>x.lim+0.5;const near=!over&&x.lim&&x.spent>=x.lim*0.8;
+    return `<div class="budr${over?' over':near?' near':''}"><div class="budt"><span class="anic">${catIcon(x.c,'')}</span><div class="main"><div class="t">${esc(x.c)}</div>
+      <div class="s">${x.lim!=null?`${TL(x.spent)} / ${TL(x.lim)} · ${over?`<b style="color:var(--crit)">${TL(x.spent-x.lim)} aşıldı</b>`:`kalan ${TL(x.lim-x.spent)}`}${x.b.rollover&&Math.abs(x.lim-x.b.limit)>0.5?` · devreden ${x.lim>x.b.limit?'+':'−'}${TL(Math.abs(x.lim-x.b.limit))}`:''}`:`harcanan ${TL(x.spent)} · limit yok${x.est>0.5?` · tahmin ~${TL(x.est)}`:''}`}</div></div>
+      <input class="inp" data-bc="${esc(x.c)}" type="number" step="any" min="0" inputmode="decimal" value="${x.b?Math.round(x.b.limit):x.ov!=null?Math.round(x.ov):''}" placeholder="${x.sug?'~'+nf0(x.sug):'limit'}" data-sug="${x.sug||''}" aria-label="${esc(x.c)} aylık limit"></div>
+      ${x.lim!=null?`<div class="bar"><i style="width:${pct}%;${over?'background:var(--crit)':near?'background:var(--warn)':''}"></i></div>`:''}
+      <label class="budro"><input type="checkbox" data-br="${esc(x.c)}" ${x.b?.rollover?'checked':''}> kullanılmayan kısım sonraki aya devretsin</label></div>`};
+  openSheet(head('Bütçem')+`<div class="chips" style="margin-bottom:10px">${[-1,0,1].map(i=>shiftMonth(cur,i)).map(m=>`<button class="${m===mk?'on':''}" data-act="planmon" data-v="${m}">${monthLabel(m)}</button>`).join('')}</div>
+    <section class="sec"><div class="eyebrow">${monthLabel(mk)} · limit koyduğun kategoriler</div><div class="total" style="color:${B.over?'var(--crit)':''}">${TL(B.spent)} <span class="small muted" style="font-weight:500">/ ${TL(B.lim)}</span></div>
+      ${B.lim>0.5?`<div class="bar" style="margin-top:6px"><i style="width:${Math.min(100,B.pct)}%;${B.over?'background:var(--crit)':B.pct>=80?'background:var(--warn)':''}"></i></div>`:''}
+      <div class="small muted" style="margin-top:6px">Aylık limit yaz. Limit %80'e gelince ve aşılınca uyarı verir. Gelen-Giden'deki tahmini harcama, ana sayfadaki uyarılar, kategori seçimi ve Analiz bu bütçeden okur. Limit koymadığın kategoride geçmiş aylara göre tahmin kullanılır. Harcanan = Analiz'deki tutar (taksitler dahil, analize dahil olmayanlar hariç).</div></section>
+    <form data-form="budgets" style="margin-top:12px"><input type="hidden" name="mk" value="${mk}"><section class="sec">${cats.map(row).join('')||'<div class="empty">Kategori yok.</div>'}</section>
+      <div class="btnrow" style="margin-top:10px"><button class="btn" type="submit">Bütçeyi kaydet</button><button class="btn ghost" type="button" data-act="budfill">Boşları önerilerle doldur</button></div>
+      <p class="small muted" style="margin-top:6px">Limiti silip kaydedersen o kategori bütçeden çıkar. Öneri: son 12 ayın aylık ortalaması.</p></form>`)}
 function cashFlow(mk){
   const cur=today().slice(0,7);if(mk<cur)return null;const t=today();
   let bal=cashNow();
@@ -1140,6 +1158,10 @@ function relDay(d,done){if(done)return '';const n=daysBetween(today(),d);return 
 /* durum: gelen/giden, kesin/tahmini, bekleyen/gerçekleşen net ayrılır */
 function rowStatus(x){const io=x.io||'out';if(x.done)return io==='in'?['ok','tahsil edildi']:['ok','ödendi'];if(x.est)return ['est','tahmini'];
   if(!x.muted&&x.date<today())return ['late','gecikti'];if(x.alacak)return ['rcv','alacak'];return io==='in'?['wait','bekleniyor']:['due','ödenecek']}
+/* tahmini harcama tek satır: bütçeden kalan; dokununca bütçe ekranı */
+function budRow(est){const v=est.reduce((a,x)=>a+x.amount,0);const mk=planMonth;const B=budgetTot(mk);
+  return `<div class="pgrp estg"><div class="ph"><span>Tahmini harcama <em>bütçene göre, kalan günler</em></span><span>~${TL(v)}</span></div>
+    <div class="pl2 tap est" data-act="plansheet" data-v="${mk}"><div class="pday"><b>₺</b><span>bütçe</span></div><div class="pm"><div class="n">Bütçem</div><div class="r2">${B.lim>0.5?`<span class="pst ${B.over?'late':'est'}">${B.over?'aşıldı':'%'+Math.round(B.pct)}</span> · ${TL(B.spent)} / ${TL(B.lim)} limit`:'<span class="pst est">limit yok</span> · geçmiş aylara göre tahmin'} · dokun: limitleri gör</div></div><div class="pa"><b>~${TL(v)}</b></div></div></div>`}
 function planRow(x){const note=x.stag||(x.k==='card'&&x.tag&&x.tag.includes('dönem açık')?'dönem açık':'')||((x.k==='rec'||x.k==='personout'||x.k==='plan'||x.k==='person')&&x.tag?x.tag:'');const dd=parse(x.date);
   const late=!x.done&&!x.muted&&!x.est&&x.date<today();const isNow=!x.done&&x.date===today();const[sc,st]=rowStatus(x);
   return `<div class="pl2 tap ${x.done||x.muted?'done':''}${x.est?' est':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pday${late?' late':isNow?' now':''}"><b>${dd.getDate()}</b><span>${AYK[dd.getMonth()]}</span></div>
@@ -1191,10 +1213,10 @@ function planTableFlow(mk,F){
     <div class="psec"><div class="psh"><span>Giden</span><b>${TL(outT)}</b></div><div class="ptot2">Bu ay toplam giden <b>${TL(dOut+outT)}</b> · ödenen ${TL(dOut)} · bekleyen ${TL(outT)}${estT>0.5?` · tahmini ~${TL(estT)}`:''}</div>
       ${grp('Kredi kartları',cards)}${grp('Yatırım hedefi',goals)}${grp('Gönderilecek',send)}${grp('Sabit giderler',fixed)}${grp('Varlık / kredi <em>harcama sayılmaz</em>',assets,'asset')}
       ${!kesin.length?'<div class="small muted pempty">Bekleyen ödeme yok</div>':''}
-      ${est.length?grp('Tahmini harcama <em>kalan günler için</em>',est,'estg'):''}</div></div>
+      ${est.length||planMonth>=today().slice(0,7)?budRow(est):''}</div></div>
     <p class="small muted" style="margin:8px 0 0">Bir kaleme dokun: tamamını ya da bir kısmını öde/geldi işaretle, tarihini düzenle.</p>
     ${done.length?`<details class="pdone"><summary>Bu ay gerçekleşenler (${done.length})</summary>${done.sort((a,b)=>a.date.localeCompare(b.date)).map(planRow).join('')}</details>`:''}
-    <div class="chips padd"><button data-act="newrec" data-dir="gelir">+ Sabit gelir</button><button data-act="addticari">+ Ticari gelir</button><button data-act="newrec" data-dir="gider">+ Sabit gider</button><button data-act="newtx" data-type="gider">+ İleri tarihli ödeme</button>${P.outs.some(x=>x.goal)?'':'<button data-act="newrec" data-dir="hedef">+ Yatırım hedefi</button>'}<button data-act="plansheet">Harcama planı</button><button data-act="projsheet">Nakit akışı</button></div>
+    <div class="chips padd"><button data-act="newrec" data-dir="gelir">+ Sabit gelir</button><button data-act="addticari">+ Ticari gelir</button><button data-act="newrec" data-dir="gider">+ Sabit gider</button><button data-act="newtx" data-type="gider">+ İleri tarihli ödeme</button>${P.outs.some(x=>x.goal)?'':'<button data-act="newrec" data-dir="hedef">+ Yatırım hedefi</button>'}<button data-act="plansheet">Bütçem</button><button data-act="projsheet">Nakit akışı</button></div>
   </section>`;
 }
 /* ===== Gelen/Giden görünümü: ay, hafta, gün ===== */
@@ -1796,6 +1818,10 @@ function cumDays(mk){const n=dimOf(mk);const d=new Array(n+1).fill(0);Object.val
 function vizTip(attr){return `data-tip="${esc(attr)}"`}
 
 /* aylık göstergeler: gelir, tüketim (benim harcamam), kasadan çıkan, kart harcaması, birikim ve oranı */
+function budgetSec(mk){const L=budgetUse(mk).filter(b=>!nonSpend(b.category));const B=budgetTot(mk);
+  if(!L.length)return `<section class="sec tap" data-act="plansheet" data-v="${mk}"><h2>Bütçem${chev}</h2><div class="small muted">Henüz limit yok. Dokun: market, yakıt gibi kategorilere aylık limit koy.</div></section>`;
+  return `<section class="sec tap" data-act="plansheet" data-v="${mk}"><h2>Bütçem<span class="sp"></span><span class="small ${B.over?'':'muted'}" style="${B.over?'color:var(--crit)':''}">${TL(B.spent)} / ${TL(B.lim)}</span>${chev}</h2>
+    ${L.map(b=>{const over=b.spent>b.limit+0.5;return `<div class="catbar"><span>${esc(b.category)}</span><b style="${over?'color:var(--crit)':''}">${TL(b.spent)} / ${TL(b.limit)}</b><div class="bar"><i style="width:${Math.min(100,b.pct)}%;${over?'background:var(--crit)':b.pct>=80?'background:var(--warn)':''}"></i></div></div>`}).join('')}</section>`}
 function kpiMonth(mk){const inM=d=>d&&d.slice(0,7)===mk;const inc=incA(mk),cons=mineTotal(mk);
   const cardSp=livePortions().filter(p=>p.cardId&&p.personId===ME&&inM(p.pdate)).reduce((a,p)=>a+p.pamount,0);
   const out=S.tx.filter(x=>inM(x.date)&&x.date<=today()&&!x.cardId&&(['gider','verdim','odeme'].includes(x.type)||(x.type==='transfer'&&x.toCardId))).reduce((a,x)=>a+x.amount,0);
@@ -1835,6 +1861,7 @@ function viewAnaliz(){
   if(future||(!tot&&!inc))return h+`<section class="sec"><div class="empty">${future?'Bu ay henüz gelmedi.':'Bu ay için harcama kaydı yok.'}</div></section>`+lay('analiz',vizMore(mk));
   const P=[];
   P.push(['kpi','Ayın göstergeleri',kpiSec(mk,isCur)]);
+  P.push(['budget','Bütçem',budgetSec(mk)]);
   /* 2) içgörüler */
   const ins=vizInsights(mk,by,avgBy,tot,avg,isCur,inc);P.push(['ins','Öne çıkanlar',ins.length?`<section class="sec"><h2>Öne çıkanlar</h2><ul class="vins">${ins.map(x=>`<li><span class="vdot ${x.k}"></span><span>${x.t}</span></li>`).join('')}</ul></section>`:'']);
   /* 4) ay içi gidiş */
@@ -2077,7 +2104,7 @@ function catDetail(c,o){o=o||{};shReg('cat:'+c+'|'+(o.sub??''),()=>catDetail(c,o
   const fcs=k=>sub==null&&!ex&&k===cur?forecastCat(c,k):0;const ref=isCur&&fcs(mk)?fcs(mk):by.v;const ch=R?null:pctS(ref,avg);const tot=R?Object.values(mineCatsR(R)).reduce((a,o)=>a+o.v,0):mineTotal(mk);const title=sub!=null?`${esc(c)} › ${esc(sub||'Genel')}`:esc(c);
   const chip=ch==null||!avg?'':Math.abs(ch)<5?'<span class="vchip">ortalama civarı</span>':`<span class="vchip ${ch>0?'up':'down'}">${ch>0?'▲':'▼'} %${Math.abs(ch)} ${ch>0?'fazla':'az'}</span>`;
   let h=head(`${title} · ${R?'tarih aralığı':monthLabel(mk)}`)+`${ex?`<div class="banner warn" style="margin-bottom:10px"><span>Bu ${sub!=null?'alt başlık':'kategori'} <b>analize dahil değil</b>; harcama toplamına girmiyor. Burada sadece görmen için.</span></div>`:''}<section class="sec">${rgBox('an',`${monthLabel(mk)} · başka tarih aralığı seç`)}<div style="display:flex;gap:12px;align-items:center;margin-top:10px"><span class="anic big" style="color:${col}">${catIcon(c,sub||undefined)}</span><div><div class="total">${TL(by.v)}</div>
-    <div class="small muted">${!ex&&tot>0?`Harcamanın %${Math.round(by.v/tot*100)}'i · `:''}${items.length} kayıt</div>${(()=>{const k=items.filter(p=>p.cardId).reduce((a,p)=>a+p.pamount,0);const n=by.v-k;return k>0.5&&n>0.5?`<div class="small muted">Kartlardan ${TL(k)} · hesaptan/nakitten ${TL(n)}</div>`:''})()}</div></div>
+    <div class="small muted">${!ex&&tot>0?`Harcamanın %${Math.round(by.v/tot*100)}'i · `:''}${items.length} kayıt</div>${!R&&sub==null&&budOf(c)?(()=>{const l=budLim(c,mk);const ov=by.v>l+0.5;return `<div class="small tap" data-act="plansheet" data-v="${mk}" style="color:${ov?'var(--crit)':'var(--muted)'}">Bütçe ${TL(by.v)} / ${TL(l)} · ${ov?`${TL(by.v-l)} aşıldı`:`kalan ${TL(l-by.v)}`} ›</div>`})():''}${(()=>{const k=items.filter(p=>p.cardId).reduce((a,p)=>a+p.pamount,0);const n=by.v-k;return k>0.5&&n>0.5?`<div class="small muted">Kartlardan ${TL(k)} · hesaptan/nakitten ${TL(n)}</div>`:''})()}</div></div>
     <div class="vsub" style="margin-top:8px">${R?`${daysBetween(R.from,R.to)+1} gün`:`${isCur&&fcs(mk)&&by.v>0?`Bu hızla ay sonu <b>${TL(ref)}</b> · `:''}${avg?`6 ay ortalaması ${TL(avg)} `:''}${chip}`}</div>
     ${exSub?'<div class="small muted" style="margin-top:6px">Analize dahil olmayan alt başlıkları bu toplama girmiyor; aşağıda ayrıca görünür.</div>':''}</section>`;
   const V=last12(mk).map(k=>({k,v:catPart(k,c,sub).v,f:fcs(k)}));
@@ -2541,11 +2568,7 @@ function settingsSheet(){
     <section class="sec"><h2>Hesaplarım</h2>${S.accounts.map(a=>`<div class="row"><div class="main tap" data-act="account" data-id="${a.id}"><div class="t">${esc(a.name)}</div><div class="s">${a.balanceAt?TL(accBalance(a)):'Bakiye girilmedi, dokun'}</div></div><button class="x" data-act="deldoc" data-id="${a.id}" aria-label="Sil">✕</button></div>`).join('')}
       <form data-form="account" style="margin-top:8px"><div class="two"><label class="f">Yeni hesap<input id="accName" name="name" required></label><label class="f">Bakiye (₺)<input id="accBal" name="balance" type="number" step="0.01"></label></div><button class="btn sm" type="submit">Ekle</button></form></section>
     <section class="sec"><h2>Düzenli gelir ve giderler<span class="sp"></span><button class="linkbtn" data-act="newrec">+ Ekle</button></h2>${S.recs.map(r=>`<div class="row tap" data-act="editrec" data-id="${r.id}"><div class="main"><div class="t">${esc(r.name)}</div><div class="s">Her ayın ${r.day}'i · ${r.dir==='gelir'?'gelir':'gider'}</div></div><div class="amt ${r.dir==='gelir'?'plus':''}">${TL(r.amount)}</div></div>`).join('')||'<div class="empty">Maaşını ekle; tahmin ona göre hesaplanır.</div>'}</section>
-    <section class="sec"><h2>Bütçe limitleri</h2>${budgetUse(today().slice(0,7)).map(b=>`<div class="row"><div class="main"><div class="t">${esc(b.category)}</div><div class="s">${b.rollover?`devirli · ${b.carry>=0?'devreden +':'aşım −'}${TL(Math.abs(b.carry))} · bu ay kullanılabilir ${TL(b.limit-b.spent)}`:'aylık'}</div></div><div class="amt">${TL(b.base)}/ay</div><button class="x" data-act="deldoc" data-id="${b.id}" aria-label="Sil">✕</button></div>`).join('')||'<div class="empty">Limit yok.</div>'}
-      <form data-form="budget" style="margin-top:8px"><div class="two"><label class="f">Kategori<select id="bCat" name="category">${Object.keys(catTree()).map(c=>opt(c,c,'Dışarıda Yemek')).join('')}</select></label><label class="f">Aylık limit (₺)<input id="bLim" name="limit" type="number" step="any" required placeholder="10000"></label></div>
-        <label class="check"><input type="checkbox" name="rollover" checked> Kullanılmayan kısım sonraki aya devretsin (gezi, alışveriş gibi her ay olmayan harcamalar için)</label>
-        <button class="btn sm" type="submit">Limit ekle</button></form>
-      ${(()=>{const R=budgetSuggest();return R.length?`<details style="margin-top:10px"><summary class="small">Geçmiş 12 aya göre öneriler (Money Pro dahil)</summary><div class="small muted" style="margin:6px 0">Hiç harcama olmayan aylar da sayılarak aylık ortalama. Dokununca forma yazılır.</div>${R.map(r=>`<div class="sumline tap" data-act="budsug" data-c="${esc(r.c)}" data-v="${Math.round(r.avg/100)*100}"><span>${esc(r.c)} <span class="muted small">· son 12 ayda ${r.n} ay harcama · yıllık ${TL(r.tot)}</span></span><b>${TL(Math.round(r.avg/100)*100)}/ay</b></div>`).join('')}</details>`:''})()}</section>
+    <section class="sec"><h2>Bütçem<span class="sp"></span><button class="linkbtn" data-act="plansheet">Düzenle ›</button></h2>${budgetUse(today().slice(0,7)).map(b=>`<div class="sumline tap" data-act="plansheet"><span>${esc(b.category)}</span><b style="color:${b.spent>b.limit+0.5?'var(--crit)':''}">${TL(b.spent)} / ${TL(b.limit)}</b></div>`).join('')||'<div class="empty tap" data-act="plansheet">Limit yok · dokun, kategorilere limit koy</div>'}</section>
     <section class="sec"><h2>Kartımı kullananlar</h2>${S.persons.map(p=>`<div class="row"><div class="main"><div class="t">${esc(p.name)}</div><div class="s">${holderCard(p.id)?'Ek kart · '+esc(holderCard(p.id).name):'Kartımı kullanıyor'}</div></div><button class="x" data-act="delperson" data-id="${p.id}" aria-label="Sil">✕</button></div>`).join('')}
       <form data-form="person" style="margin-top:8px"><label class="f">Yeni kişi<input id="perName" name="name" required></label><button class="btn sm" type="submit">Ekle</button></form></section>
     <section class="sec"><h2>Gelir türleri<span class="sp"></span><button class="linkbtn" data-act="incedit">Düzenle</button></h2><div class="small muted">${incomeSrc().map(esc).join(' · ')}</div></section>
@@ -2870,8 +2893,9 @@ document.addEventListener('click',async e=>{
     case 'plansheetH':document.querySelector('.ptab,.pcols')?.scrollIntoView({behavior:'smooth'});break;
     case 'projh':{const inSheet=!!el.closest('#sheetBody');PROJH=+el.dataset.v||0;ls.set('kd_projh',String(PROJH));render();if(inSheet)projSheet();break}
     case 'alsnz':{const z=snz();z[el.dataset.k]=today();ls.set('kd_snz',JSON.stringify(z));render();break}
-    case 'plansheet':planSheet(today().slice(0,7));break;
+    case 'plansheet':planSheet(el.dataset.v||today().slice(0,7));break;
     case 'planmon':planSheet(el.dataset.v);break;
+    case 'budfill':{document.querySelectorAll('#sheetBody input[data-bc]').forEach(i=>{if(!i.value&&i.dataset.sug)i.value=i.dataset.sug});toast('Öneriler yazıldı, kaydetmeyi unutma');break}
     case 'planreset':{const mk=el.dataset.v;const months={...(S.catplan?.months||{})};delete months[mk];await put({id:'catplan',k:'catplan',months});S.catplan={months};planSheet(mk);toast('Otomatik tahmine dönüldü');break}
     case 'yearsum':yearSheet(+el.dataset.v);break;
     case 'subsearch':gsQuery=el.dataset.q;gsFilter='all';searchSheet();break;
@@ -3183,6 +3207,13 @@ document.addEventListener('submit',async e=>{
       const t={id:newId(),type:'transfer',amount:amt,date:g('date')||today(),account:from,toAccount:to,note:g('note')||'',merchant:`${from} → ${to}`,ts:Date.now(),via:'manuel'};await saveTx([t]);
       const fee=num(g('fee'));if(fee>0){await saveFee(t,fee);closeSheet();toast(`Transfer ve ${TL(fee)} ücret kaydedildi`)}else feeAsk(t);break}
     case 'fee':{const fee=num(g('fee'));if(PENDFEE&&fee>0){await saveFee(PENDFEE,fee);toast(`${TL(fee)} komisyon kaydedildi`)}else toast('Kaydedildi');PENDFEE=null;closeSheet();break}
+    case 'budgets':{const mk=g('mk');let n=0;
+      for(const inp of f.querySelectorAll('input[data-bc]')){const c=inp.dataset.bc;const v=inp.value.trim()===''?null:Math.max(0,num(inp.value));const ro=!!f.querySelector(`input[data-br="${CSS.escape(c)}"]`)?.checked;const ex=budOf(c);
+        if(v==null||v<=0){if(ex){await del(ex.id);n++}continue}
+        if(!ex||Math.abs(ex.limit-v)>0.005||!!ex.rollover!==ro){await put({...(ex||{}),id:ex?.id,k:'budget',category:c,limit:v,rollover:ro,since:ex?.since||today().slice(0,7),ts:Date.now()});n++}}
+      /* eski aylık plan tutarları bütçeye taşındı: tek kaynak kalsın */
+      if(S.catplan?.months&&Object.keys(S.catplan.months).length){await put({id:'catplan',k:'catplan',months:{}});S.catplan={months:{}}}
+      toast(n?'Bütçe kaydedildi':'Değişiklik yok');setTimeout(()=>planSheet(mk),250);break}
     case 'catplan':{const mk=g('mk');const months={...(S.catplan?.months||{})};const cur={...(months[mk]||{})};
       f.querySelectorAll('input[name^="c_"]').forEach(inp=>{const c=inp.name.slice(2);const v=num(inp.value);if(String(Math.round(v))!==inp.dataset.orig||cur[c]!=null)cur[c]=Math.max(0,v)});
       months[mk]=cur;await put({id:'catplan',k:'catplan',months});S.catplan={months};toast('Plan kaydedildi');planSheet(mk);break}
