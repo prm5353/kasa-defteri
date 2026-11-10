@@ -2608,17 +2608,23 @@ async function saveFis(){
 /* ===================== OLAYLAR ===================== */
 /* ekran geçmişi: arama, kategori ayrıntısı gibi ekranlardan başka bir ekran açılınca "‹" ile geri dönülür.
    Bu ekranlar açılmadan önce shReg ile kendini nasıl yeniden açacağını bildirir. closeSheet (kaydettikten sonra) bir önceki ekrana döner; ✕ hepsini kapatır */
-let SHSTACK=[],SHCUR=null,SHNEXT=null;
+let SHSTACK=[],SHCUR=null,SHNEXT=null,SHBACK=false;
 const shReg=(k,fn)=>{SHNEXT={k,fn}};
+/* her ekranda ‹ geri tuşu: önceki ekran kayıtlıysa (shReg) güncel hâliyle yeniden açılır, değilse son görüntüsüyle geri gelir; önceki ekran yoksa sayfaya döner */
+const shTitle=b=>{const t=b.querySelector('h3');return t?t.textContent.replace(/^‹/,'').trim():''};
 function openSheet(html){const sh=document.getElementById('sheet'),body=document.getElementById('sheetBody');const re=SHNEXT;SHNEXT=null;
   if(sh.hidden){SHSTACK=[];SHCUR=null}
-  else if(SHCUR&&(!re||re.k!==SHCUR.k)){SHSTACK.push({...SHCUR,top:body.scrollTop});if(SHSTACK.length>12)SHSTACK.shift()}
+  else if(!SHBACK){const same=re&&SHCUR?re.k===SHCUR.k:(!re&&!SHCUR&&(()=>{const d=document.createElement('div');d.innerHTML=html;return shTitle(d)===shTitle(body)})());
+    if(!same){const snap=body.cloneNode(true);snap.querySelectorAll('[data-act=sheetback]').forEach(b=>b.remove());SHSTACK.push({...(SHCUR||{}),html:snap.innerHTML,top:body.scrollTop});if(SHSTACK.length>15)SHSTACK.shift()}}
   SHCUR=re;body.innerHTML=html;
-  if(SHSTACK.length){const h3=body.querySelector('h3');if(h3)h3.insertAdjacentHTML('afterbegin','<button class="x back" data-act="sheetback" aria-label="Geri">‹</button>')}
+  const h3=body.querySelector('h3');if(h3)h3.insertAdjacentHTML('afterbegin',`<button class="x back" data-act="sheetback" aria-label="${SHSTACK.length?'Geri':'Kapat ve geri dön'}">‹</button>`);
   sh.hidden=false;syncTxForm()}
-function sheetBack(){const p=SHSTACK.pop();if(!p){closeAll();return}SHCUR=null;p.fn();const body=document.getElementById('sheetBody');requestAnimationFrame(()=>{body.scrollTop=p.top||0})}
+function sheetBack(){const p=SHSTACK.pop();if(!p){closeAll();return}const body=document.getElementById('sheetBody');SHCUR=null;
+  if(p.fn){SHBACK=true;try{p.fn()}finally{SHBACK=false}}else{body.innerHTML=p.html;const h3=body.querySelector('h3');if(h3)h3.insertAdjacentHTML('afterbegin',`<button class="x back" data-act="sheetback" aria-label="Geri">‹</button>`);syncTxForm()}
+  requestAnimationFrame(()=>{body.scrollTop=p.top||0})}
 function closeAll(){SHSTACK=[];SHCUR=null;SHNEXT=null;document.getElementById('sheet').hidden=true;RV=null;RC=null}
-function closeSheet(){if(SHSTACK.length&&!document.getElementById('sheet').hidden){sheetBack();return}closeAll()}
+/* kaydettikten sonra: önceki ekran kayıtlıysa ona (güncel hâliyle) dön, değilse kapat */
+function closeSheet(){const p=SHSTACK[SHSTACK.length-1];if(p&&p.fn&&!document.getElementById('sheet').hidden){sheetBack();return}closeAll()}
 let toastT;function toast(m,ms,undo){const t=document.getElementById('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);ms=undo?Math.max(ms||0,7000):(ms||3200);
   if(undo){const b=document.createElement('button');b.type='button';b.className='toastbtn';b.textContent='Geri al';
     b.onclick=async ev=>{ev.stopPropagation();b.disabled=true;clearTimeout(toastT);t.hidden=true;try{await undo();toast('Geri alındı')}catch(e){toast('Geri alınamadı')}};t.append(b)}

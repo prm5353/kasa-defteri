@@ -204,6 +204,24 @@ def main():
         check("Arama: tarih aralığı sonuçları daraltır", 0 < after < before, (before, after))
         page.evaluate("RG.search=null;closeAll()")
 
+        print("Her ekranda geri tuşu")
+        page.evaluate("closeAll();RG.an=null;DSEL=null;viewMonth='2026-10';goTab('analiz')"); page.wait_for_timeout(300)
+        for mode in ["donut", "bar"]:
+            page.evaluate(f"ls.set('kd_vmode','{mode}');render()"); page.wait_for_timeout(200)
+            page.evaluate("closeAll()"); page.wait_for_timeout(100)
+            page.locator("#view .vlegs .vleg.tap, #view .vbars .vbr").first.click(); page.wait_for_timeout(300)
+            check(f"Analiz {mode}: kategoriye basınca geri tuşu var", page.locator("#sheetBody [data-act=sheetback]").count() == 1)
+            page.locator("#sheetBody .vshop.tap, #sheetBody details.vmore summary").first.click(); page.wait_for_timeout(300)
+            page.locator("#sheetBody .row.tap").first.click() if page.locator("#sheetBody .row.tap").count() else None; page.wait_for_timeout(300)
+            depth = page.evaluate("SHSTACK.length")
+            for _ in range(depth + 1):
+                page.click("#sheetBody [data-act=sheetback]"); page.wait_for_timeout(250)
+            check(f"Analiz {mode}: geri tuşlarıyla sayfaya dönülür", page.evaluate("document.getElementById('sheet').hidden"), depth)
+        page.evaluate("ls.set('kd_vmode','donut');settingsSheet()"); page.wait_for_timeout(300)
+        btn = page.locator("#sheetBody button.tap, #sheetBody .row.tap, #sheetBody [data-act]").filter(has_not_text="✕").nth(3)
+        check("Ayarlar ekranında da geri tuşu var", page.locator("#sheetBody [data-act=sheetback]").count() == 1)
+        page.evaluate("closeAll()")
+
         print("Halka, dahil edilenler, kategori düzenleme")
         page.evaluate("viewMonth='2026-10';DSEL=null;goTab('analiz')"); page.wait_for_timeout(300)
         labs = page.evaluate("[...document.querySelectorAll('.vdonut2 .dl1')].map(t=>t.textContent)")
