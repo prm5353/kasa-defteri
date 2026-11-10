@@ -196,6 +196,7 @@ label.f input,label.f select,label.f textarea,.inp{border:1px solid var(--line);
 .icr.sub{padding:8px 0 8px 26px}.icr.sub .n{font-weight:500}.icr.dis{opacity:.45}.incl>.icr{border-top:1px solid var(--line)}.incl>.icr:first-child{border-top:0}
 .icx{background:var(--chip);border:0;border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;color:var(--muted);cursor:pointer}
 .icsubs{display:none;padding-bottom:6px}.ic.open .icsubs{display:block}.ic.open .icx{color:var(--accent)}
+.subr{display:flex;align-items:center;gap:6px;padding:9px 0;border-top:1px solid var(--line)}.subr .main{flex:1;min-width:0}.subr .t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.subr .s{font-size:12.5px;color:var(--muted)}.subr .btn{flex:none;margin:0}
 .toastbtn{margin-left:12px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:0;cursor:pointer}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .spin{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -1508,41 +1509,61 @@ function ticariSec(mk){const ks=[5,4,3,2,1,0].map(i=>shiftMonth(mk,-i));
     ${c.a>0.5?`<div class="sumline small"><span>Ticari varlık alımı <span class="muted">· gider sayılmadı, kârdan düşmedi</span></span><b>${TL(c.a)}</b></div>`:''}
     <div style="display:flex;gap:6px;align-items:flex-end;height:70px;margin-top:10px">${R.map(r=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end" ${vizTip(`${monthLabel(r.mk)} · gelir ${TL(r.i)} · gider ${TL(r.g)} · ${r.p>=0?'kâr':'zarar'} ${TL(Math.abs(r.p))}`)}><div style="width:100%;border-radius:4px;background:${r.p>=0?'var(--vdown)':'var(--vup)'};opacity:${r===c?1:.5};height:${Math.max(2,Math.abs(r.p)/mx*48)}px"></div><span style="font-size:10px" class="${r===c?'':'muted'}">${AYK[+r.mk.slice(5)-1]}</span></div>`).join('')}</div>
     <div class="small muted" style="margin-top:6px">Son 6 ayın ticari kârı (mavi kâr, kırmızı zarar). Ticari giderler bu ayın harcamasında var; kişisel gelir-birikim hesabına girmez. Cihaz gibi varlık alımlarını <b>Analize dahil olanlar › Ticari Gider</b>'den çıkarabilirsin.</div></section>`}
-/* abonelikler: aynı işyerinden, benzer tutarda, ayda bir gelen harcamalar (son 6 ay) */
-function subscriptions(){const from=addMonths(today(),-6);const L=[];
+/* abonelikler: otomatik bulunanlar + kullanıcının tanımladıkları.
+   Tanım: {id, name: ekstrede görünen ad (ör. Apple), amt: tutar, note: açıklama (ör. YouTube)}. Ödeme, adı içeren ve tutarı ±%6 olan harcamalarla eşleşir;
+   böylece Apple üzerinden ödenen YouTube, iCloud, Amazon ayrı ayrı görünür. Otomatik bulunana açıklama yazınca o da tanıma dönüşür. */
+const subNorm=s=>asciiUp(s||'').replace(/[^A-Z0-9]/g,'');
+const near=(a,b)=>b>0&&Math.abs(a-b)/b<=0.06;
+function subsPayments(){const from=addMonths(today(),-6);const L=[];
   livePortions().forEach(p=>{if(p.personId===ME&&p.pn===1&&p.pamount>0&&p.pdate>=from)L.push({d:p.pdate,a:p.pamount,m:p.merchant||'',cat:p.category,sub:p.sub})});
   S.arch.forEach(t=>{if(t.type==='gider'&&t.personId===ME&&t.amount>0&&t.date>=from&&useArch(t.date.slice(0,7)))L.push({d:t.date,a:t.amount,m:t.merchant||'',cat:t.category,sub:t.sub})});
+  return L}
+const subStat=items=>{if(!items.length)return {months:0,none:true};const last=items.reduce((a,x)=>x.d>a.d?x:a);const months=new Set(items.map(x=>x.d.slice(0,7)));
+  return {last:last.d,lastAmt:last.a,lastName:last.m,months:months.size,day:Math.round(items.reduce((a,x)=>a+parse(x.d).getDate(),0)/items.length),thisMonth:months.has(today().slice(0,7)),cat:last.cat,sub:last.sub}};
+function subscriptions(){const L=subsPayments();const E=subsEdit();
   const by={};L.forEach(x=>{const k=normKey(x.m);if(!k)return;(by[k]=by[k]||[]).push(x)});const out=[];
   /* abonelik: tutar neredeyse sabit (%6), en az 3 ayrı ay, ayda bir; o işyerindeki harcamaların çoğu bu tutarda (market gibi her ay değişen tutarlı yerler elenir) */
   const allM=new Set(L.map(x=>x.d.slice(0,7)));
-  Object.entries(by).forEach(([k,arr])=>{arr.sort((a,b)=>a.a-b.a);const cl=[];arr.forEach(x=>{const c=cl.find(c=>Math.abs(x.a-c.ref)/c.ref<=0.06);if(c){c.items.push(x)}else cl.push({ref:x.a,items:[x]})});
+  Object.entries(by).forEach(([k,arr])=>{arr.sort((a,b)=>a.a-b.a);const cl=[];arr.forEach(x=>{const c=cl.find(c=>near(x.a,c.ref));if(c){c.items.push(x)}else cl.push({ref:x.a,items:[x]})});
     cl.forEach(c=>{const months=new Set(c.items.map(x=>x.d.slice(0,7)));const isAbo=c.items.some(x=>x.cat==='Abonelik');
-      if(!isAbo){if(months.size<Math.min(3,allM.size))return;if(c.items.length/arr.length<0.6)return}
-      if(c.items.length/months.size>1.3)return;
-      const last=c.items.reduce((a,x)=>x.d>a.d?x:a);if(daysBetween(last.d,today())>45)return;const day=Math.round(c.items.reduce((a,x)=>a+parse(x.d).getDate(),0)/c.items.length);
-      out.push({k,name:last.m,amt:last.a,months:months.size,last:last.d,day,cat:last.cat,sub:last.sub,thisMonth:months.has(today().slice(0,7))})})});
-  /* kullanıcı düzeltmeleri: "abonelik değil" dedikleri çıkar, elle eklediklerinin son kaydı alınır */
-  const E=subsEdit();const res=out.filter(x=>!E.hide.includes(x.k)&&!E.add.includes(x.k));
-  E.add.forEach(k=>{const arr=(by[k]||[]).sort((a,b)=>a.d.localeCompare(b.d));const last=arr[arr.length-1];const months=new Set(arr.map(x=>x.d.slice(0,7)));
-    res.push(last?{k,name:last.m,amt:last.a,months:months.size,last:last.d,day:parse(last.d).getDate(),cat:last.cat,sub:last.sub,thisMonth:months.has(today().slice(0,7)),manual:true}:{k,name:k,amt:0,months:0,day:0,manual:true,none:true})});
-  return res.sort((a,b)=>b.amt-a.amt)}
-const subsEdit=()=>({hide:S.catIcons?.__subs?.hide||[],add:S.catIcons?.__subs?.add||[]});
-async function subsSave(E){const I={...(S.catIcons||{})};I.__subs={hide:[...new Set(E.hide)],add:[...new Set(E.add)]};await saveCatAll(catTree(),I)}
-/* düzenleme: listede olanı çıkar, çıkarılanı geri al, son 6 ayın işyerlerinden ekle */
+      if(!isAbo){if(months.size<Math.min(3,allM.size))return;const perM=arr.length/new Set(arr.map(x=>x.d.slice(0,7))).size;if(c.items.length/arr.length<0.6&&perM>2.5)return}
+      if(c.items.length/months.size>1.3)return;const st=subStat(c.items);if(daysBetween(st.last,today())>45)return;
+      out.push({k,name:st.lastName,amt:st.lastAmt,...st,items:c.items})})});
+  /* kullanıcı tanımları */
+  const defs=E.items.map(it=>{const q=subNorm(it.name);const items=L.filter(x=>subNorm(x.m).includes(q)&&(!it.amt||near(x.a,it.amt)));const st=subStat(items);
+    return {k:normKey(it.name)||it.name,id:it.id,name:it.name,note:it.note||'',amt:it.amt||st.lastAmt||0,...st,manual:true,items}});
+  /* eski sürümün "işyerini ekle" kayıtları */
+  E.add.filter(k=>!defs.some(d=>d.k===k)).forEach(k=>{const items=by[k]||[];const st=subStat(items);defs.push({k,name:st.lastName||k,amt:st.lastAmt||0,...st,manual:true,items})});
+  const hidden=x=>E.hide.some(h=>{const[k,a]=h.split('@');return k===x.k&&(!a||near(x.amt,+a))});
+  const res=out.filter(x=>!hidden(x)&&!defs.some(d=>d.items.some(i=>x.items.includes(i))));
+  return [...res,...defs].sort((a,b)=>b.amt-a.amt)}
+const subsEdit=()=>({hide:S.catIcons?.__subs?.hide||[],add:S.catIcons?.__subs?.add||[],items:S.catIcons?.__subs?.items||[]});
+async function subsSave(E){const I={...(S.catIcons||{})};I.__subs={hide:[...new Set(E.hide)],add:[...new Set(E.add)],items:E.items};await saveCatAll(catTree(),I)}
+const subTitle=x=>x.note?esc(x.note):esc(x.name);
+const subSubtitle=x=>x.note?`${esc(x.name)} · `:'';
+/* düzenleme ekranı */
 let subsQ='';
-function subsEditSheet(){const A=subscriptions();const E=subsEdit();const from=addMonths(today(),-6);const inA=new Set(A.map(x=>x.k));
-  const M={};const put_=(m,a,d)=>{const k=normKey(m);if(!k||inA.has(k))return;const o=M[k]=M[k]||{k,name:m,n:0,months:new Set(),last:0};o.n++;o.months.add(d.slice(0,7));if(d>=(o.ld||'')){o.ld=d;o.last=a;o.name=m}};
-  livePortions().forEach(p=>{if(p.personId===ME&&p.pn===1&&p.pamount>0&&p.pdate>=from)put_(p.merchant||'',p.pamount,p.pdate)});
-  S.arch.forEach(t=>{if(t.type==='gider'&&t.personId===ME&&t.amount>0&&t.date>=from&&useArch(t.date.slice(0,7)))put_(t.merchant||'',t.amount,t.date)});
-  const q=asciiUp(subsQ.trim());const cand=Object.values(M).filter(o=>!q||asciiUp(o.name).includes(q)||o.k.includes(q)).sort((a,b)=>b.months.size-a.months.size||b.n-a.n).slice(0,q?30:12);
-  openSheet(head('Abonelikleri düzenle')+`<section class="sec"><h2>Abonelik sayılanlar</h2>${A.length?A.map(x=>`<div class="sumline" style="align-items:center;padding:8px 0;border-top:1px solid var(--line)"><span><b>${esc(x.name)}</b> <span class="small muted">· ${x.none?'son 6 ayda kayıt yok':TL(x.amt)}${x.manual?' · elle eklendi':''}</span></span><button class="btn sm ghost" data-act="subhide" data-k="${esc(x.k)}">Abonelik değil</button></div>`).join(''):'<div class="empty">Abonelik yok.</div>'}</section>
-    ${E.hide.length?`<section class="sec" style="margin-top:12px"><h2>Abonelik değil dediklerin</h2>${E.hide.map(k=>`<div class="sumline" style="align-items:center;padding:6px 0"><span class="muted">${esc(k)}</span><button class="btn sm ghost" data-act="subunhide" data-k="${esc(k)}">Geri al</button></div>`).join('')}</section>`:''}
-    <section class="sec" style="margin-top:12px"><h2>Abonelik ekle</h2><input class="inp" id="subsQ" type="search" placeholder="İşyeri ara (son 6 ay)" value="${esc(subsQ)}">
-    ${cand.map(o=>`<div class="sumline" style="align-items:center;padding:8px 0;border-top:1px solid var(--line)"><span>${esc(o.name)} <span class="small muted">· ${o.months.size} ayda ${o.n} kez · son ${TL(o.last)}</span></span><button class="btn sm" data-act="subadd" data-k="${esc(o.k)}">Ekle</button></div>`).join('')||'<div class="empty">Eşleşen işyeri yok.</div>'}
-    <p class="small muted" style="margin:8px 0 0">Eklediğin işyerinin her ayki son ödemesi abonelik tutarı sayılır.</p></section>`)}
+function subsEditSheet(){const A=subscriptions();const E=subsEdit();
+  const M={};subsPayments().forEach(x=>{const k=normKey(x.m);if(!k)return;const o=M[k]=M[k]||{k,name:x.m,n:0,months:new Set(),last:0,ld:''};o.n++;o.months.add(x.d.slice(0,7));if(x.d>=o.ld){o.ld=x.d;o.last=x.a;o.name=x.m}});
+  const q=asciiUp(subsQ.trim());const cand=Object.values(M).filter(o=>!q||asciiUp(o.name).includes(q)||o.k.includes(q)).sort((a,b)=>b.months.size-a.months.size||b.n-a.n).slice(0,q?30:10);
+  const row=x=>`<div class="subr"><div class="main"><div class="t">${subTitle(x)}</div><div class="s">${subSubtitle(x)}${x.amt?TL2(x.amt):'tutar yok'}${x.none?' · son 6 ayda ödeme yok':` · ${x.months} ay`}${x.manual?' · senin eklediğin':''}</div></div>
+    <button class="btn sm ghost" data-act="subform" ${x.id?`data-id="${esc(x.id)}"`:`data-name="${esc(x.name)}" data-amt="${x.amt}" data-k="${esc(x.k)}"`}>${x.note?'Düzenle':'Açıklama'}</button>${x.id?'':`<button class="btn sm ghost" data-act="subhide" data-k="${esc(x.k)}" data-amt="${x.amt}">Değil</button>`}</div>`;
+  openSheet(head('Abonelikleri düzenle')+`<section class="sec"><button class="btn" style="width:100%" data-act="subform">+ Abonelik ekle</button>
+    <p class="small muted" style="margin:8px 0 0">Ekstrede tek isimle görünen ödemeleri (ör. <b>Apple</b> üzerinden YouTube, iCloud) tutarlarıyla ayrı ayrı ekleyip açıklama yazabilirsin.</p></section>
+    <section class="sec" style="margin-top:12px"><h2>Abonelik sayılanlar</h2>${A.length?A.map(row).join(''):'<div class="empty">Abonelik yok.</div>'}</section>
+    ${E.hide.length?`<section class="sec" style="margin-top:12px"><h2>Abonelik değil dediklerin</h2>${E.hide.map(h=>{const[k,a]=h.split('@');return `<div class="sumline" style="align-items:center;padding:6px 0"><span class="muted">${esc(k)}${a?' · '+TL(+a):''}</span><button class="btn sm ghost" data-act="subunhide" data-k="${esc(h)}">Geri al</button></div>`}).join('')}</section>`:''}
+    <section class="sec" style="margin-top:12px"><h2>Son 6 ayın işyerleri</h2><input class="inp" id="subsQ" type="search" placeholder="İşyeri ara" value="${esc(subsQ)}">
+    ${cand.map(o=>`<div class="subr"><div class="main"><div class="t">${esc(o.name)}</div><div class="s">${o.months.size} ayda ${o.n} kez · son ${TL2(o.last)}</div></div><button class="btn sm" data-act="subform" data-name="${esc(o.name)}" data-amt="${o.last}">Ekle</button></div>`).join('')||'<div class="empty">Eşleşen işyeri yok.</div>'}</section>`)}
+/* tek abonelik formu: ekstrede görünen ad, tutar, açıklama */
+function subForm(o){const it=o.id?subsEdit().items.find(x=>x.id===o.id):null;const v=it||{name:o.name||'',amt:o.amt?r2(+o.amt):'',note:''};
+  openSheet(head(it?'Aboneliği düzenle':'Abonelik ekle')+`<form data-form="sub"><input type="hidden" name="id" value="${esc(it?.id||'')}"><input type="hidden" name="k" value="${esc(o.k||'')}">
+    <label class="f">Ekstrede görünen ad<input name="name" required value="${esc(v.name)}" placeholder="ör. Apple"></label>
+    <div class="two"><label class="f">Aylık tutar (₺)<input name="amount" type="number" step="any" inputmode="decimal" value="${v.amt}" placeholder="ör. 159,99"></label><label class="f">Açıklama<input name="note" value="${esc(v.note||'')}" placeholder="ör. YouTube"></label></div>
+    <p class="small muted" style="margin:0 0 8px">Adı içeren ve tutarı yakın (±%6) ödemeler bu abonelik sayılır. Tutarı boş bırakırsan o yere yapılan her ödeme sayılır.</p>
+    <button class="btn" type="submit">Kaydet</button>${it?`<button class="btn danger" type="button" data-act="subdel" data-id="${esc(it.id)}">Sil</button>`:''}<button class="btn ghost" type="button" data-act="subsedit">‹ Abonelikler</button></form>`)}
 function subsSec(){const A=subscriptions();if(!A.length)return `<section class="sec"><div class="empty">Abonelik bulunamadı.</div><button class="btn ghost" style="width:100%" data-act="subsedit">Abonelikleri düzenle</button></section>`;const mon=A.reduce((a,x)=>a+x.amt,0);const td=parse(today()).getDate();
   return `<section class="sec"><h2>Abonelikler ve düzenli ödemeler<span class="sp"></span><span class="sum">${TL(mon)}/ay</span></h2><div class="small muted" style="margin-bottom:6px">Yılda ${TL(mon*12)} · son 6 ayda her ay benzer tutarla tekrar edenler ve senin eklediklerin</div>
-    ${A.map(x=>`<div class="row tap" data-act="subsearch" data-q="${esc(x.k)}"><div class="main"><div class="t">${esc(x.name)}</div><div class="s">${x.none?'son 6 ayda kayıt yok':`${x.months} aydır · genelde ayın ${x.day}'i · `+(x.thisMonth?'<span style="color:var(--plus)">bu ay ödendi</span>':td>x.day+3?'<span style="color:var(--warn)">bu ay henüz görünmedi</span>':'bu ay bekleniyor')}</div></div><div class="amt">${TL(x.amt)}<small>yılda ${TL(x.amt*12)}</small></div></div>`).join('')}<button class="btn ghost" style="width:100%;margin-top:8px" data-act="subsedit">Abonelikleri düzenle</button></section>`}
+    ${A.map(x=>`<div class="row tap" ${x.id?`data-act="subform" data-id="${esc(x.id)}"`:`data-act="subsearch" data-q="${esc(x.k)}"`}><div class="main"><div class="t">${subTitle(x)}</div><div class="s">${subSubtitle(x)}${x.none?'son 6 ayda ödeme yok':`${x.months} aydır · genelde ayın ${x.day}'i · `+(x.thisMonth?'<span style="color:var(--plus)">bu ay ödendi</span>':td>x.day+3?'<span style="color:var(--warn)">bu ay henüz görünmedi</span>':'bu ay bekleniyor')}</div></div><div class="amt">${TL(x.amt)}<small>yılda ${TL(x.amt*12)}</small></div></div>`).join('')}<button class="btn ghost" style="width:100%;margin-top:8px" data-act="subsedit">Abonelikleri düzenle</button></section>`}
 /* ===== ANALİZ SEKMESİ: seçili ayın harcaması tek ekranda, grafiklerle =====
    Renk kategoriye bağlı (sıraya değil): son 12 ayda en çok harcanan 6 kategori sabit renk alır, gerisi gri "Diğerleri".
    Grafiklerin üstüne gelince/dokununca (data-tip) küçük bilgi kutusu çıkar. */
@@ -2571,9 +2592,10 @@ document.addEventListener('click',async e=>{
     case 'catmonth':viewMonth=el.dataset.mk;render();catDetail(el.dataset.c);break;
     case 'cmp':cmpSheet();break;
     case 'subsedit':subsQ='';subsEditSheet();break;
-    case 'subhide':{const E=subsEdit();E.hide.push(el.dataset.k);E.add=E.add.filter(k=>k!==el.dataset.k);await subsSave(E);subsEditSheet();toast('Abonelikten çıkarıldı');break}
+    case 'subform':subForm({id:el.dataset.id,name:el.dataset.name,amt:el.dataset.amt,k:el.dataset.k});break;
+    case 'subhide':{const E=subsEdit();E.hide.push(el.dataset.k+(el.dataset.amt?'@'+r2(+el.dataset.amt):''));await subsSave(E);subsEditSheet();toast('Abonelikten çıkarıldı');break}
     case 'subunhide':{const E=subsEdit();E.hide=E.hide.filter(k=>k!==el.dataset.k);await subsSave(E);subsEditSheet();break}
-    case 'subadd':{const E=subsEdit();E.add.push(el.dataset.k);E.hide=E.hide.filter(k=>k!==el.dataset.k);await subsSave(E);subsEditSheet();toast('Aboneliklere eklendi');break}
+    case 'subdel':if(armed(el)){const E=subsEdit();E.items=E.items.filter(x=>x.id!==el.dataset.id);await subsSave(E);subsEditSheet();toast('Silindi')}break;
     case 'incl':inclSheet();break;
     case 'icx':el.closest('.ic').classList.toggle('open');break;
     case 'dsel':{const c=el.dataset.c;if(DSEL===c){catSheet(c)}else{DSEL=c;render()}break}
@@ -2748,6 +2770,8 @@ document.addEventListener('submit',async e=>{
       const o={...(ex||{}),id:g('id')||undefined,k:'debt',dir:g('dir'),who:g('who').trim(),amount:num(g('amount')),cur:g('cur')||'TRY',dueDate:g('dueDate')||'',note:g('note')||'',payments,paid:!!ex?.paid};if(!o.paid&&debtLeft(o)<=0){o.paid=true;o.closedAt=today()}await put(o);closeSheet();toast('Kaydedildi');break}
     case 'plan':await put({id:g('id')||undefined,k:'plan',name:g('name'),who:g('who'),total:num(g('total')),installment:num(g('installment')),day:Math.round(num(g('day')))||1,already:num(g('already')),account:g('account')||''});closeSheet();toast('Kaydedildi');break;
     case 'rec':{const ex=S.recs.find(r=>r.id===g('id'));const no=Math.round(num(g('no')));await put({...(ex||{}),id:g('id')||undefined,k:'rec',dir:g('dir'),name:g('name').trim(),amount:num(g('amount')),day:Math.round(num(g('day')))||1,startMonth:no?planMonth:(ex?.startMonth||planMonth),startNo:no||undefined,count:Math.round(num(g('count')))||undefined,account:g('account')||'',asset:fd.has('asset')});closeSheet();toast('Kaydedildi');break}
+    case 'sub':{const E=subsEdit();const id=g('id');const it={id:id||newId(),name:g('name').trim(),amt:num(g('amount'))>0?r2(num(g('amount'))):0,note:g('note').trim()};if(!it.name)return;
+      if(id)E.items=E.items.map(x=>x.id===id?it:x);else E.items.push(it);await subsSave(E);subsEditSheet();toast(it.note?`${it.note} kaydedildi`:'Kaydedildi');break}
     case 'payrec':{const r=S.recs.find(x=>x.id===g('id'));const mk=g('mk');const o=recOcc(r,mk);const amt=Math.abs(num(g('amount')));if(!(amt>0))return;const gel=r.dir==='gelir';
       const full=fd.has('close')||amt>=o.amount-0.5;
       await saveTx([{id:newId(),type:gel?'gelir':'odeme',amount:amt,date:g('date')||today(),account:g('account')||'',merchant:r.name,source:gel?(incomeSrc().includes(r.name)?r.name:'Diğer'):undefined,recId:r.id,recMonth:mk,...(full?{}:{recPart:true}),ts:Date.now(),via:'manuel'}]);

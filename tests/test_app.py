@@ -35,6 +35,15 @@ def check(name, cond, detail=""):
     print(("  ✓ " if cond else "  ✗ ") + name + ("" if cond else f"  → {detail}"))
     if not cond: fails.append(name)
 
+def wait_loaded(page, timeout=10000):
+    """S.loaded olana kadar bekler (wait_for_function sayfanın CSP'sine takılabildiği için evaluate ile yoklanır)"""
+    for _ in range(timeout // 100):
+        try:
+            if page.evaluate("typeof S!=='undefined'&&!!S.loaded"): return
+        except Exception: pass
+        page.wait_for_timeout(100)
+    raise TimeoutError("uygulama yüklenmedi")
+
 def serve():
     h = functools.partial(http.server.SimpleHTTPRequestHandler, directory=ROOT)
     h.log_message = lambda *a: None
@@ -52,7 +61,7 @@ def main():
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("console", lambda m: csp.append(m.text) if "Content Security Policy" in m.text else None)
         page.clock.install(time=NOW)
-        page.goto(url); page.wait_for_function("S.loaded", timeout=10000)
+        page.goto(url); wait_loaded(page)
 
         print("Yedek yükleme")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'y.json'))", SAMPLE)
@@ -193,17 +202,30 @@ def main():
         check("ağaçta hiç olmamış alt başlık yerinde kalır", page.evaluate("archMap({type:'gider',category:'Sağlık',sub:'Eczane'}).category") == "Sağlık")
         print("Abonelikleri düzenle")
         subs = page.evaluate("subscriptions().map(x=>x.k)")
-        check("abonelikler algılanır", len(subs) >= 1, subs)
+        check("abonelikler algılanır, marketler abonelik sayılmaz", len(subs) >= 1 and not any(s in ("MIGROS","BIM","A101","MANAV") for s in subs), subs)
         page.evaluate("subsEditSheet()"); page.wait_for_timeout(200)
         page.locator(f'#sheetBody [data-act=subhide][data-k="{subs[0]}"]').first.click(); page.wait_for_timeout(400)
-        check("'Abonelik değil' denen listeden çıkar", subs[0] not in page.evaluate("subscriptions().map(x=>x.k)"))
-        page.locator(f'#sheetBody [data-act=subunhide][data-k="{subs[0]}"]').click(); page.wait_for_timeout(400)
+        check("'Değil' denen listeden çıkar", subs[0] not in page.evaluate("subscriptions().map(x=>x.k)"))
+        page.locator('#sheetBody [data-act=subunhide]').first.click(); page.wait_for_timeout(400)
         check("geri alınınca geri gelir", subs[0] in page.evaluate("subscriptions().map(x=>x.k)"))
-        page.fill("#subsQ", "otel"); page.wait_for_timeout(600)
-        k = page.evaluate("document.querySelector('#sheetBody [data-act=subadd]')?.dataset.k")
-        page.locator("#sheetBody [data-act=subadd]").first.click(); page.wait_for_timeout(400)
-        check("aramayla bulunan işyeri aboneliğe eklenir", k and k in page.evaluate("subscriptions().map(x=>x.k)"), k)
         page.evaluate("closeSheet()")
+        page.evaluate("""saveTx(['2026-08','2026-09','2026-10','2026-11'].flatMap((m,i)=>[
+          {id:'ap'+i,type:'gider',amount:159.99,date:m+'-03',account:'Banka',personId:'me',category:'Eğlence',sub:'',merchant:'APPLE.COM/BILL',ts:i},
+          {id:'aq'+i,type:'gider',amount:39.99,date:m+'-05',account:'Banka',personId:'me',category:'Eğlence',sub:'',merchant:'APPLE.COM/BILL',ts:i}]))"""); page.wait_for_timeout(300)
+        ap = page.evaluate("subscriptions().filter(x=>/APPLE/i.test(x.name)).map(x=>Math.round(x.amt*100)/100).sort((a,b)=>a-b)")
+        check("Apple'dan iki ayrı tutar iki ayrı abonelik", ap == [39.99, 159.99], ap)
+        page.evaluate("subsEditSheet()"); page.wait_for_timeout(200)
+        page.click("#sheetBody >> text=+ Abonelik ekle"); page.wait_for_timeout(200)
+        page.fill("#sheetBody input[name=name]", "Apple"); page.fill("#sheetBody input[name=amount]", "159.99"); page.fill("#sheetBody input[name=note]", "YouTube")
+        page.click("#sheetBody button[type=submit]"); page.wait_for_timeout(400)
+        yt = page.evaluate("subscriptions().filter(x=>/APPLE/i.test(x.name)).map(x=>[x.note||'',Math.round(x.amt*100)/100,x.months]).sort()")
+        check("Apple 159,99 'YouTube' açıklamasıyla, 4 ay ödenmiş; 39,99 ayrı kalır", yt == [["", 39.99, 4], ["YouTube", 159.99, 4]], yt)
+        page.locator('#sheetBody [data-act=subform][data-amt^="39.99"]').first.click(); page.wait_for_timeout(200)
+        page.fill("#sheetBody input[name=note]", "iCloud"); page.click("#sheetBody button[type=submit]"); page.wait_for_timeout(400)
+        notes = page.evaluate("subscriptions().filter(x=>/APPLE/i.test(x.name)).map(x=>x.note).sort()")
+        check("otomatik bulunana açıklama yazılabilir (iCloud)", notes == ["YouTube", "iCloud"] or notes == ["iCloud", "YouTube"], notes)
+        page.evaluate("closeSheet();viewMonth='2026-11';goTab('analiz')"); page.wait_for_timeout(300)
+        check("Analiz listesinde açıklama başlık olarak görünür", page.evaluate("(()=>{const t=document.getElementById('view').textContent;return t.includes('YouTube')&&t.includes('iCloud')})()"))
 
         print("Ticari bölüm")
         page.evaluate("""saveTx([{id:'tc1',type:'gider',amount:20000,date:'2026-11-03',account:'Banka',personId:'me',category:'Ticari Gider',sub:'Medikal',merchant:'Cihaz',ts:1},
@@ -302,7 +324,7 @@ def main():
         page.evaluate("ls.set('kd_non2','')")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'v.json'))", va); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
-        page.reload(); page.wait_for_function("S.loaded"); page.wait_for_timeout(300)
+        page.reload(); wait_loaded(page); page.wait_for_timeout(300)
         check("araç taksiti harcamaya girmez", page.evaluate("!mineCats('2026-11')['Araçlarım']"), page.evaluate("Object.keys(mineCats('2026-11'))"))
         check("araç satışı taksiti gelire girmez (analiz)", page.evaluate("incP('2026-11')") == 50000, page.evaluate("incP('2026-11')"))
         page.evaluate("planMonth='2026-11';goTab('ana')"); page.wait_for_timeout(300)
