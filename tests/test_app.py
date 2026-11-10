@@ -550,6 +550,39 @@ def main():
             check("maaş tutarı değişince geçmiş aylar eski tutarla kalır", vals == [80000, 80000, 80000, 90000, 90000], vals)
         page.evaluate("closeAll();planMonth='2026-11'")
 
+        print("Senaryo: kredi kartı, kesin ekstre, parça parça ödeme")
+        cc = json.loads(json.dumps(SAMPLE))
+        cc["cards"] = [{"id": "k1", "name": "Ana Kart", "limit": 300000, "cutDay": 20, "dueDay": 30, "ts": 1}]
+        cc["accounts"] = [{"id": "a1", "name": "Banka", "balance": 100000, "balanceAt": 1, "ts": 1}]
+        cc["months"] = {"m-2026-10": {
+            "c1": {"type": "gider", "amount": 50000, "date": "2026-10-05", "cardId": "k1", "personId": "me", "category": "Alışveriş", "sub": "", "merchant": "Mağaza", "ts": 1},
+            "c2": {"type": "gider", "amount": 2000, "date": "2026-10-19", "cardId": "k1", "personId": "me", "category": "Market", "sub": "", "merchant": "Market", "ts": 2}},
+          "m-2026-11": {"c3": {"type": "gider", "amount": 3000, "date": "2026-11-02", "cardId": "k1", "personId": "me", "category": "Market", "sub": "", "merchant": "Market", "ts": 3}}}
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'cc.json'))", cc); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        st = page.evaluate("(()=>{const s=cardState(cardById('k1'));return [s.last.cut,s.last.total,s.open.total,s.T.debt]})()")
+        check("kart harcaması kart borcunu artırır (55.000)", st == ["2026-10-20", 52000, 3000, 55000], st)
+        page.evaluate("openSheet(formManStmt('k1','2026-10-20'))"); page.wait_for_timeout(200)
+        page.fill("#sheetBody input[name=amount]", "47500"); page.click("#sheetBody form[data-form=manstmt] button[type=submit]"); page.wait_for_timeout(400)
+        st = page.evaluate("(()=>{const s=cardState(cardById('k1'));return [s.last.total,s.open.total,s.T.debt]})()")
+        check("kesin ekstre 47.500; 4.500 sonraki döneme, toplam borç aynı", st == [47500, 7500, 55000], st)
+        row = page.evaluate("monthPlan('2026-10').outs.concat(monthPlan('2026-11').outs).filter(x=>x.k==='card').map(x=>[x.date,x.amount,x.done])")
+        check("Giden'de ekstre son ödeme gününde 47.500", ["2026-10-30", 47500, False] in row, row)
+        b0 = page.evaluate("accBalance(S.accounts[0])")
+        for amt in ("30000", "17500"):
+            page.evaluate("openSheet(formPayCard('k1'))"); page.wait_for_timeout(200)
+            page.fill("#sheetBody input[name=amount]", amt); page.click("#sheetBody form[data-form=paycard] button[type=submit]"); page.wait_for_timeout(400)
+            if amt == "30000":
+                d = page.evaluate("debtSplit(cardById('k1'),cardState(cardById('k1'))).old")
+                check("30.000 ödenince ekstreden 17.500 kalır", abs(d - 17500) < 0.5, d)
+        check("iki ödeme bankadan düştü (47.500)", abs(page.evaluate("accBalance(S.accounts[0])") - (b0 - 47500)) < 0.5)
+        check("ekstre tamamen kapanınca ödendi", page.evaluate("monthPlan('2026-10').outs.filter(x=>x.k==='card').every(x=>x.done)"))
+        check("ekstre ödemesi tüketim gideri sayılmaz", abs(page.evaluate("mineTotal('2026-10')") - 52000) < 0.5, page.evaluate("mineTotal('2026-10')"))
+        page.evaluate("closeAll();openSheet(head('k')+cardBlock(cardById('k1'),cardState(cardById('k1'))))"); page.wait_for_timeout(200)
+        txt = page.evaluate("document.getElementById('sheetBody').textContent")
+        check("kartta ödeme geçmişi (2) ve ortalamalar", "Ödeme geçmişi (2)" in txt and "Tahmini gelecek ekstre" in txt, txt[:400])
+        page.evaluate("closeAll()")
+
         print("Güvenlik")
         check("içerik güvenlik politikası ihlali yok", not csp, csp[:2])
         check("sayfa hatası yok", not errors, errors[:3])
