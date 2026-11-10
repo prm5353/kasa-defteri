@@ -183,6 +183,8 @@ label.f input,label.f select,label.f textarea,.inp{border:1px solid var(--line);
 .vcmptot{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px 10px;margin-top:14px;font-size:14px;align-items:baseline}.vcmptot>b{text-align:right}.vcmptot>span{color:var(--muted)}.vcmptot>.d,.vcmptot>.muted:last-child{text-align:right}.vcmptot b.neg{color:var(--crit)}.vcmptot .d{font-weight:700;font-size:13px;text-align:right}
 .vcmp{padding:10px 0;border-top:1px solid var(--line)}.vcmp:first-of-type{border-top:0}.vcmp .d{font-size:13px;font-weight:700}
 .vcb{display:flex;align-items:center;gap:8px;margin-top:5px;height:9px}.vcb i{display:block;height:9px;border-radius:0 4px 4px 0;min-width:2px}.vcb em{font-style:normal;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.pgrp.asset .ph em{display:block;font-style:normal;font-weight:500;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0}.pgrp .ph span:last-child{white-space:nowrap;margin-left:6px}.pgrp.asset .pl2 b{color:var(--muted)}
+.cer .x.nsb{width:auto;padding:0 8px;font-size:11.5px;font-weight:700;color:var(--muted)}.cer .x.nsb.on{color:var(--warn)}
 .toastbtn{margin-left:12px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:0;cursor:pointer}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .spin{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -401,6 +403,11 @@ const CAT_TREE={
 const INCOME_DEF=['Maaş','Ticari Gelir','Araba taksiti','Temettü Geliri','Banka','Hediyeler','Diğer'];
 /* gelir türleri düzenlenebilir (ad değiştir, ekle, sil, sırala) */
 const incomeSrc=()=>S.incSrc&&S.incSrc.length?S.incSrc:INCOME_DEF;
+/* varlık ve kredi: araç/ev taksiti, banka kredisi ödemesi harcama değil; araç satışından gelen taksit gelir değil. Nakit akışında yine görünür, ayrı grupta */
+const nonIncome=()=>S.catIcons?.__nonInc||['Araba taksiti'];
+const isNonInc=src=>nonIncome().includes(src||'');
+const ASSET_RX=/kredi|ara[çc](?![a-zçğıöşü])|araba|ta[şs][ıi]t|konut|mortgage/i;
+const isAssetRec=r=>r.asset!=null?!!r.asset:(r.dir!=='hedef'&&ASSET_RX.test(r.name||''));
 const ASSET_TYPES={gram:'Gram altın',ceyrek:'Çeyrek altın',yarim:'Yarım altın',tam:'Tam altın',gumus:'Gram gümüş',usd:'Dolar',eur:'Euro',tl:'Türk lirası',esya:'Araç / diğer eşya'};
 /* yarım = 2 çeyrek, tam = 4 çeyrek fiyatından hesaplanır */
 const PRICED=Object.keys(ASSET_TYPES).filter(k=>!['tl','yarim','tam','esya'].includes(k));
@@ -772,6 +779,9 @@ async function boot(){
   try{if(ls.get('kd_sal1','')!=='1'){if(!S.recs.some(r=>r.dir==='gelir')){await put({k:'rec',dir:'gelir',name:'Maaş',amount:80000,day:15});await put({k:'rec',dir:'gelir',name:'Ek gelir 1',amount:10000,day:25});await put({k:'rec',dir:'gelir',name:'Ek gelir 2',amount:10000,day:30})}ls.set('kd_sal1','1')}}catch(e){}
   /* kategori ağacı hiç kaydedilmemişse, kullanılan alt kategorilerle birlikte veriye yazılır (kod içindeki varsayılan değişse de kaybolmaz) */
   try{if(!S.catTree&&S.tx.length){const t=catTree();S.tx.forEach(x=>{if(x.category&&x.sub&&t[x.category]&&!t[x.category].includes(x.sub))t[x.category].push(x.sub)});await saveTree(t)}}catch(e){}
+  /* bir kez: araç taksiti ve banka kredisi harcama sayılmasın (kullanıcı kategori ayarından geri açabilir) */
+  try{if(ls.get('kd_non2','')!=='1'){const I={...(S.catIcons||{})};const L=new Set(I.__non||[]);const t=catTree();['Araçlarım|Araç','Banka|Kredi','Banka|Kredi Kartı'].forEach(k=>{const[m,sb]=k.split('|');if(t[m]&&t[m].includes(sb))L.add(k)});
+    if(L.size!==(I.__non||[]).length){I.__non=[...L];await saveCatAll(t,I)}ls.set('kd_non2','1')}}catch(e){}
   try{if(ls.get('kd_cash1','')!=='1'){if(!S.accounts.some(isCashAcc))await put({k:'account',name:'Nakit',balance:0,balanceAt:1,ts:Date.now()});ls.set('kd_cash1','1')}}catch(e){}
   /* Parafly: kesim günündeki (25) harcamalar bankada yeni döneme yazılıyor; son gün 24 */
   try{const pf=S.cards.find(c=>c.id==='card-parafly');if(pf&&pf.cuts&&pf.cuts['2026-10-25']){const cuts={};Object.entries(pf.cuts).forEach(([k,v])=>{cuts[k.endsWith('-25')?k.slice(0,8)+'24':k]=v});await put({...pf,cuts,cutDay:24})}}catch(e){}
@@ -941,8 +951,9 @@ function monthPlan(mk){
     else if(x.type==='gelir'||x.type==='tahsilat')ins.push({k:'sched',id:x.id,title:x.merchant||x.source||(x.personId?personName(x.personId):'Gelir'),date:x.date,amount:x.amount,done:false,stag:acc,info:x.type==='tahsilat'&&x.personId&&x.personId!==ME})});
   S.recs.forEach(r=>{const o=recOcc(r,mk);if(!o)return;const L=r.dir==='gelir'?ins:outs;const tag=o.no?(o.count?`${o.no}/${o.count}`:`${o.no}`):'';const part=!o.done&&o.paid>0.5;
     /* kısmen ödenmişse: ödenen kısım gerçekleşenlerde, kalan bekleyenlerde */
-    if(part)L.push({k:'rec',id:r.id,title:r.name,date:o.date,amount:o.paid,done:true,tag:[tag,'kısmi'].filter(Boolean).join(' · '),goal:r.dir==='hedef'});
-    if(!part||o.amount>0.5)L.push({k:'rec',id:r.id,title:r.name,date:o.date,amount:o.amount,done:o.done,tag,goal:r.dir==='hedef',stag:part?`${TL(o.paid)} ${r.dir==='gelir'?'geldi':'ödendi'}`:'',total:part?o.plan:undefined})});
+    const asset=isAssetRec(r);
+    if(part)L.push({k:'rec',id:r.id,title:r.name,date:o.date,amount:o.paid,done:true,tag:[tag,'kısmi'].filter(Boolean).join(' · '),goal:r.dir==='hedef',asset});
+    if(!part||o.amount>0.5)L.push({k:'rec',id:r.id,title:r.name,date:o.date,amount:o.amount,done:o.done,tag,goal:r.dir==='hedef',asset,stag:part?`${TL(o.paid)} ${r.dir==='gelir'?'geldi':'ödendi'}`:'',total:part?o.plan:undefined})});
   S.cards.filter(c=>!c.ticari).forEach(c=>{const cst=cardState(c);const D=debtSplit(c,cst);cardDuesInMonth(c,mk).forEach(s=>{
     const tic=ticariAmt(s.items);const prev=prevCut(c,s.cut);const open=s.cut>=t;
     /* karta yapılan ödemeler önce eski ekstreye: bu ekstrenin bankada kalan borcu ve bana düşen kalan */
@@ -965,8 +976,8 @@ function monthPlan(mk){
   S.plans.forEach(pl=>{const s=planStatus(pl);const[y,m]=mk.split('-').map(Number);const date=dayIn(y,m-1,pl.day||1);
     const got=planGot(pl,mk);
     const ahead=Math.max(0,monthsBetween(t.slice(0,7),mk));const left=s.remaining+(got?got:0)-ahead*(pl.installment||0);const due=Math.min(pl.installment||left,left);
-    if(got>0)ins.push({k:'plan',id:pl.id,title:pl.who||pl.name,date,amount:got,done:true,tag:pl.name+(due-got>0.5?' · kısmi':'')});
-    if(due-got>0.5&&mk>=t.slice(0,7))ins.push({k:'plan',id:pl.id,title:pl.who||pl.name,date,amount:due-got,done:false,tag:pl.name,stag:got>0.5?`${TL(got)} geldi`:'',total:got>0.5?due:undefined});
+    if(got>0)ins.push({k:'plan',id:pl.id,asset:true,title:pl.who||pl.name,date,amount:got,done:true,tag:pl.name+(due-got>0.5?' · kısmi':'')});
+    if(due-got>0.5&&mk>=t.slice(0,7))ins.push({k:'plan',id:pl.id,asset:true,title:pl.who||pl.name,date,amount:due-got,done:false,tag:pl.name,stag:got>0.5?`${TL(got)} geldi`:'',total:got>0.5?due:undefined});
   });
   /* kart payına sayılmayan fazla ödemeler: o kişiye geri verilecek / onun için kullanılacak para, giderlerde */
   excessList().forEach(e=>{const cur=t.slice(0,7);const disp=e.left>0.5&&e.date.slice(0,7)<cur?cur:e.date.slice(0,7);if(disp!==mk)return;
@@ -1021,9 +1032,9 @@ function cashFlow(mk){
 /* aylık tablo satırı: ad ve tutar, altında sadece tarih ve kısa not; ayrıntı dokununca */
 function planRow(x){const note=x.stag||(x.k==='card'&&x.tag&&x.tag.includes('dönem açık')?'dönem açık':'')||(x.k==='rec'&&x.tag?x.tag:'');
   return `<div class="pl2 tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="r1"><span class="n">${esc(x.title)}</span><b>${x.est?'~':''}${TL(x.amount)}</b></div>${x.total!=null&&x.total-x.amount>0.5?`<div class="r3">toplam ${TL(x.total)}</div>`:''}<div class="r2">${fmtD(x.date)}${note?' · '+esc(note):''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' ✓':''}</div></div>`}
-const grp=(title,items,cls)=>items.length?`<div class="pgrp ${cls||''}"><div class="ph">${title}<span>${TL(items.reduce((a,x)=>a+x.amount,0))}</span></div>${items.sort((a,b)=>a.date.localeCompare(b.date)).map(planRow).join('')}</div>`:'';
+const grp=(title,items,cls)=>items.length?`<div class="pgrp ${cls||''}"><div class="ph"><span>${title}</span><span>${TL(items.reduce((a,x)=>a+x.amount,0))}</span></div>${items.sort((a,b)=>a.date.localeCompare(b.date)).map(planRow).join('')}</div>`:'';
 function planLine(x){
-  return `<div class="pl tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pr"><span class="pn">${esc(x.title)}</span><b>${TL(x.amount)}</b></div><div class="pd">${fmtD(x.date)}${x.tag?` · ${esc(x.tag)}`:''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' · ✓':''}${x.mine!=null&&Math.abs(x.mine-x.amount)>1?` · benim ${TL(x.mine)}`:''}${x.goal?' · hedef':''}</div></div>`;
+  return `<div class="pl tap ${x.done||x.muted?'done':''}" data-act="planitem" data-k="${x.k}" data-id="${esc(x.id)}"><div class="pr"><span class="pn">${esc(x.title)}</span><b>${TL(x.amount)}</b></div><div class="pd">${fmtD(x.date)}${x.tag?` · ${esc(x.tag)}`:''}${x.short?` · <b style="color:var(--crit)">${TL(x.short)} eksik</b>`:''}${x.done?' · ✓':''}${x.mine!=null&&Math.abs(x.mine-x.amount)>1?` · benim ${TL(x.mine)}`:''}${x.goal?' · hedef':''}${x.asset?' · varlık/kredi':''}</div></div>`;
 }
 function planTable(mk){
   const F=cashFlow(mk);if(F)return planTableFlow(mk,F);
@@ -1044,10 +1055,11 @@ function planTable(mk){
 }
 function planTableFlow(mk,F){
   const P=F.P;const cur=mk===today().slice(0,7);
-  const pin=P.ins.filter(x=>!x.done&&!x.info),pinfo=P.ins.filter(x=>!x.done&&x.info),pall=P.outs.filter(x=>!x.done);
+  const pin0=P.ins.filter(x=>!x.done&&!x.info),pin=pin0.filter(x=>!x.asset),pinA=pin0.filter(x=>x.asset),pinfo=P.ins.filter(x=>!x.done&&x.info),pall=P.outs.filter(x=>!x.done);
   const cards=pall.filter(x=>x.k==='card'),goals=pall.filter(x=>x.goal),send=pall.filter(x=>['sched','debt','personout'].includes(x.k)),est=pall.filter(x=>x.est);
-  const fixed=pall.filter(x=>!cards.includes(x)&&!goals.includes(x)&&!send.includes(x)&&!est.includes(x));
-  const kesin=[...cards,...goals,...send,...fixed];const inT=F.start+pin.reduce((a,x)=>a+x.amount,0),outT=kesin.reduce((a,x)=>a+x.amount,0),estT=est.reduce((a,x)=>a+x.amount,0);
+  const assets=pall.filter(x=>x.asset&&!cards.includes(x)&&!goals.includes(x)&&!send.includes(x)&&!est.includes(x));
+  const fixed=pall.filter(x=>!cards.includes(x)&&!goals.includes(x)&&!send.includes(x)&&!est.includes(x)&&!assets.includes(x));
+  const kesin=[...cards,...goals,...send,...assets,...fixed];const inT=F.start+pin0.reduce((a,x)=>a+x.amount,0),outT=kesin.reduce((a,x)=>a+x.amount,0),estT=est.reduce((a,x)=>a+x.amount,0);
   const done=[...P.ins.filter(x=>x.done&&!x.info),...P.outs.filter(x=>x.done)];
   const held=cur?heldTotal():0;
   /* aynı gün aynı kartın kesin ve tahmini kısmı tek uyarı */
@@ -1057,10 +1069,10 @@ function planTableFlow(mk,F){
     <div class="cols" style="margin-top:10px">
       <div class="col"><div class="eyebrow" style="color:var(--plus)">Gelirler</div>
         <div class="pgrp"><div class="pl2 ${cur?'tap':''}" ${cur?'data-act="cashsheet"':''}><div class="r1"><span class="n">${cur?'Hesaplarımda':'Devreden'}</span><b style="color:${F.start<0?'var(--crit)':'var(--plus)'}">${TL(F.start)}</b></div><div class="r2">${cur?(F.withBal?'bugün':'<span style="color:var(--warn)">bakiyeleri gir</span>'):'tahmini'}${held>0.5?` · ${TL(held)} kişilerin`:''}</div></div></div>
-        ${grp('Gelecek',pin)}
+        ${grp('Gelecek',pin)}${grp('Varlık satışı <em>gelir sayılmaz</em>',pinA,'asset')}
         ${pinfo.length?grp('Kişiler öder',pinfo.map(x=>({...x,muted:true})),'muted'):''}</div>
       <div class="col"><div class="eyebrow">Giderler</div>
-        ${grp('Kredi kartları',cards)}${grp('Yatırım hedefi',goals)}${grp('Gönderilecek',send)}${grp('Sabit giderler',fixed)}
+        ${grp('Kredi kartları',cards)}${grp('Yatırım hedefi',goals)}${grp('Gönderilecek',send)}${grp('Sabit giderler',fixed)}${grp('Varlık / kredi <em>harcama sayılmaz</em>',assets,'asset')}
         ${!kesin.length?'<div class="small muted" style="padding:6px 2px">Bekleyen gider yok</div>':''}
         ${est.length?grp('Tahmini harcama',est,'estg'):''}</div>
     </div>
@@ -1230,9 +1242,9 @@ function heldTotal(){const M=heldByAcc();return Object.values(M).flat().reduce((
 let PENDPAY=null;
 function incEditSheet(){const L=incomeSrc();openSheet(head('Gelir türleri')+`<section class="sec">${L.map((x,i)=>`<div class="cer"><span class="nm">${esc(x)}</span>
     <button class="x" data-act="incmv" data-i="${i}" data-d="-1" ${i===0?'disabled':''} aria-label="Yukarı">↑</button><button class="x" data-act="incmv" data-i="${i}" data-d="1" ${i===L.length-1?'disabled':''} aria-label="Aşağı">↓</button>
-    <button class="x" data-act="incren" data-i="${i}" aria-label="Adını değiştir">✎</button><button class="x" data-act="incdel" data-i="${i}" aria-label="Sil">🗑</button></div>`).join('')}
+    <button class="x nsb${isNonInc(x)?' on':''}" data-act="incns" data-i="${i}" aria-label="Gelir sayılmasın" title="Gelir sayılmasın (varlık satışı)">${isNonInc(x)?'varlık':'gelir'}</button><button class="x" data-act="incren" data-i="${i}" aria-label="Adını değiştir">✎</button><button class="x" data-act="incdel" data-i="${i}" aria-label="Sil">🗑</button></div>`).join('')}
     <button class="cg add" style="width:100%;margin-top:10px" data-act="incadd">+ Yeni gelir türü</button>
-    <p class="small muted" style="margin-top:8px">Adını değiştirince bu türle girilmiş eski gelirlerin de adı değişir (Money Pro arşivi hariç). Silersen eski kayıtların adı aynen kalır.</p>
+    <p class="small muted" style="margin-top:8px"><b>gelir / varlık</b> düğmesi: "varlık" olanlar (ör. araç satışından gelen taksit) hesabına girer ama analizde gelir ve birikim sayılmaz. Adını değiştirince bu türle girilmiş eski gelirlerin de adı değişir (Money Pro arşivi hariç). Silersen eski kayıtların adı aynen kalır.</p>
     <button class="btn ghost" style="width:100%;margin-top:6px" data-act="quickinopen">‹ Gelir girişine dön</button></section>`)}
 async function incSave(list){S.incSrc=list;await put({id:'incsrc',k:'incsrc',list})}
 /* hesaplar arası transfer; banka ücreti Banka › Komisyon harcaması olarak gönderen hesaptan düşer */
@@ -1515,7 +1527,7 @@ function viewAnaliz(){
   const avg=hasHist.length?hasHist.reduce((a,k)=>a+mineTotal(k),0)/hasHist.length:0;
   const avgBy={};hasHist.forEach(k=>Object.entries(mineCats(k)).forEach(([c,o])=>avgBy[c]=(avgBy[c]||0)+o.v/hasHist.length));
   const fc=isCur?forecastCat(null,mk):tot;const ref=isCur?fc:tot;const ch=pctS(ref,avg);
-  const inc=incomeTotal(mk);const COL=vizColors();
+  const inc=incP(mk);const COL=vizColors();
   const fromArch=useArch(mk)&&S.arch.some(x=>x.date.slice(0,7)===mk);
   const chip=ch==null||!avg?'':Math.abs(ch)<5?`<span class="vchip">ortalama civarı</span>`:`<span class="vchip ${ch>0?'up':'down'}">${ch>0?'▲':'▼'} %${Math.abs(ch)} ${ch>0?'fazla':'az'}</span>`;
   /* 1) özet */
@@ -1617,7 +1629,7 @@ function vizYear(mk){const cur=today().slice(0,7);return vizCols(last12(mk).map(
 
 /* kişisel gelir ve harcama: ticari gelir ve ticari giderler hariç (onlar yatırıma gidiyor) */
 const spendP=mk=>mineTotal(mk)-(mineCats(mk)['Ticari Gider']?.v||0);
-const incP=mk=>incomeTotal(mk)-(incomeBy(mk)['Ticari Gelir']?.v||0);
+const incP=mk=>{const b=incomeBy(mk);return incomeTotal(mk)-(b['Ticari Gelir']?.v||0)-Object.entries(b).filter(([k])=>isNonInc(k)).reduce((a,[,o])=>a+o.v,0)};
 
 /* ===== gelir, gider ve kalan: son 12 ay ===== */
 function vizFlow(mk){const cur=today().slice(0,7);const ks=last12(mk).filter(k=>k<=cur);
@@ -1711,9 +1723,11 @@ function vizShops(by,tot){const g={};Object.values(by).forEach(o=>o.items.forEac
 /* ayrıntılar: varsayılan kapalı */
 function vizMore(mk){const N=nonSpendMonth(mk);const oth=othersMonth(mk);const t=ticariSec(mk);const sub=subsSec();
   const parts=[];
-  if(N.v>0.5)parts.push(`<div class="sumline"><span>Harcama sayılmayanlar <span class="small muted">· ${[...new Set(N.items.map(p=>p.sub||p.category))].map(esc).join(', ')}</span></span><b>${TL(N.v)}</b></div><div class="small muted" style="margin-bottom:8px">Borç ödemesi / varlık alımı: kart borcunda ve planda duruyor, toplama girmiyor.</div>`);
+  if(N.v>0.5)parts.push(`<div class="sumline"><span>Harcama sayılmayanlar <span class="small muted">· ${[...new Set(N.items.map(p=>p.sub||p.category))].map(esc).join(', ')}</span></span><b>${TL(N.v)}</b></div><div class="small muted" style="margin-bottom:8px">Varlık alımı ya da kredi ödemesi: kart borcunda ve Ana Sayfa tablosunda duruyor, harcama toplamına girmiyor.</div>`);
+  const NI=Object.entries(incomeBy(mk)).filter(([k])=>isNonInc(k)&&!0);const niV=NI.reduce((a,[,o])=>a+o.v,0);
+  if(niV>0.5)parts.push(`<div class="sumline"><span>Gelir sayılmayanlar <span class="small muted">· ${NI.map(([k])=>esc(k)).join(', ')}</span></span><b style="color:var(--plus)">${TL(niV)}</b></div><div class="small muted" style="margin-bottom:8px">Varlık satışından gelen para: hesabına girdi ama gelir ve birikim hesabına girmiyor.</div>`);
   if(Object.keys(oth).length)parts.push(`<div class="eyebrow" style="margin-top:6px">Kartımı kullananlar · senin harcamana dahil değil</div>${Object.entries(oth).map(([p,v])=>`<div class="row tap" data-act="person" data-id="${p}"><div class="main"><div class="t">${esc(personName(p))}</div></div><div class="amt" style="color:var(--other)">${TL(v)}</div>${chev}</div>`).join('')}`);
-  return `${parts.length?`<details class="sec vmore"><summary><h2>Toplama girmeyenler</h2></summary>${parts.join('')}</details>`:''}
+  return `${parts.length?`<details class="sec vmore"><summary><h2>Varlık, kredi ve toplama girmeyenler</h2></summary>${parts.join('')}</details>`:''}
     ${t}${sub?`<details class="sec vmore"><summary><h2>Düzenli ödemeler</h2></summary>${sub.replace(/^<section class="sec">|<\/section>$/g,'')}</details>`:''}
     <button class="btn ghost" style="width:100%;margin-top:4px" data-act="analiz">Tarih aralığıyla ayrıntılı analiz</button>`}
 
@@ -1728,7 +1742,7 @@ function vizMore(mk){const N=nonSpendMonth(mk);const oth=othersMonth(mk);const t
   document.addEventListener('scroll',hide,{passive:true,capture:true});})();
 
 /* ===== HAREKETLER: ayın kayıtları; Money Pro ayında arşiv kayıtları (salt okunur) ===== */
-function viewSpend(){const mk=viewMonth;const tot=mineTotal(mk),inc=incomeTotal(mk);const arch=useArch(mk)&&S.arch.some(x=>x.date.slice(0,7)===mk);
+function viewSpend(){const mk=viewMonth;const tot=mineTotal(mk),inc=incP(mk);const arch=useArch(mk)&&S.arch.some(x=>x.date.slice(0,7)===mk);
   return `<section class="sec">${monthBar(mk)}<div class="vmini"><div><span class="k">Benim harcamam</span><b>${TL(tot)}</b></div><div><span class="k">Gelir</span><b style="color:var(--plus)">${TL(inc)}</b></div><button class="linkbtn" data-act="goanaliz">Analiz ›</button></div>${arch?'<div class="ro" style="margin-top:10px">Money Pro arşivinden · sadece görüntülenir</div>':''}</section>
   <input class="inp" id="txSearch" type="search" placeholder="Ara: işyeri, kategori, kişi (arşiv dahil)" value="${esc(txQuery)}" aria-label="Hareketlerde ara">
   <div class="chips">${[[ME,'Benim'],...S.persons.map(p=>[p.id,p.name]),['gelir','Gelir'],['all','Tümü']].map(([k,l])=>`<button class="${txWho===k?'on':''}" data-act="who" data-v="${esc(k)}">${esc(l)}</button>`).join('')}</div>
@@ -2080,6 +2094,7 @@ function formRec(r,dir){
     <div class="two"><label class="f">Aylık tutar (₺)<input id="rAmt" name="amount" type="number" required value="${r.amount??''}"></label><label class="f">Her ayın kaçı<input id="rDay" name="day" type="number" min="1" max="31" required value="${r.day||1}"></label></div>
     <div class="two"><label class="f">${monthLabel(mk)}'da kaçıncı ödeme<input id="rNo" name="no" type="number" min="1" value="${curNo}" placeholder="yoksa boş"></label><label class="f">Toplam kaç ödeme<input id="rCnt" name="count" type="number" min="1" value="${r.count||''}" placeholder="bilinmiyorsa boş"></label></div>
     <label class="f">Hesap<select id="rAcc" name="account">${accOpts(r.account||S.accounts[0]?.name||'')}</select></label>
+    <label class="chk small" style="display:flex;gap:8px;align-items:flex-start;margin:2px 0 10px"><input type="checkbox" name="asset" ${r.id?(isAssetRec(r)?'checked':''):''} style="margin-top:2px"><span><b>Varlık ya da kredi</b> · araç/ev taksiti, banka kredisi ya da araç satışından gelen para. Tabloda ayrı grupta durur; analizde harcama ya da gelir sayılmaz.</span></label>
     <p class="small muted" style="margin:0">Her ay Ana Sayfa'daki tabloda görünür; geldiğinde ya da ödediğinde üstüne dokunup işaretlersin. Değişen tutarı o ay işaretlerken düzeltebilirsin.</p>
     <button class="btn" type="submit">Kaydet</button>${r.id?`<button class="btn danger" type="button" data-act="deldoc" data-id="${r.id}">Sil</button>`:''}</form>`;
 }
@@ -2411,6 +2426,7 @@ document.addEventListener('click',async e=>{
     case 'quickinopen':openSheet(formQuick('gelir'));break;
     case 'incmv':{const L=[...incomeSrc()];const i=+el.dataset.i,j=i+(+el.dataset.d);if(j<0||j>=L.length)break;[L[i],L[j]]=[L[j],L[i]];await incSave(L);incEditSheet();break}
     case 'incadd':{const n=(prompt('Yeni gelir türünün adı')||'').trim();if(!n)break;const L=[...incomeSrc()];if(L.includes(n)){toast('Bu ad zaten var');break}L.push(n);await incSave(L);incEditSheet();break}
+    case 'incns':{const x=incomeSrc()[+el.dataset.i];const I={...(S.catIcons||{})};const L=new Set(nonIncome());if(L.has(x))L.delete(x);else L.add(x);I.__nonInc=[...L];await saveCatAll(catTree(),I);incEditSheet();toast(L.has(x)?`${x}: gelir sayılmayacak`:`${x}: gelir sayılacak`);break}
     case 'incdel':{const L=[...incomeSrc()];if(L.length<=1){toast('En az bir tür kalmalı');break}if(!armed(el,'Sil?'))break;L.splice(+el.dataset.i,1);await incSave(L);incEditSheet();toast('Silindi');break}
     case 'incren':{const L=[...incomeSrc()];const i=+el.dataset.i;const old=L[i];const n=(prompt('Yeni adı',old)||'').trim();if(!n||n===old)break;if(L.includes(n)){toast('Bu ad zaten var');break}L[i]=n;await incSave(L);
       const list=S.tx.filter(x=>x.type==='gelir'&&x.source===old).map(x=>({...x,source:n}));if(list.length)await saveTx(list);incEditSheet();toast('Adı değişti');break}
@@ -2615,7 +2631,7 @@ document.addEventListener('submit',async e=>{
     case 'debt':{const ex=S.debts.find(d=>d.id===g('id'));const payments=[...(ex?.payments||[])];const pay=num(g('pay'));if(pay>0)payments.push({date:g('payDate')||today(),amount:pay});
       const o={...(ex||{}),id:g('id')||undefined,k:'debt',dir:g('dir'),who:g('who').trim(),amount:num(g('amount')),cur:g('cur')||'TRY',dueDate:g('dueDate')||'',note:g('note')||'',payments,paid:!!ex?.paid};if(!o.paid&&debtLeft(o)<=0){o.paid=true;o.closedAt=today()}await put(o);closeSheet();toast('Kaydedildi');break}
     case 'plan':await put({id:g('id')||undefined,k:'plan',name:g('name'),who:g('who'),total:num(g('total')),installment:num(g('installment')),day:Math.round(num(g('day')))||1,already:num(g('already')),account:g('account')||''});closeSheet();toast('Kaydedildi');break;
-    case 'rec':{const ex=S.recs.find(r=>r.id===g('id'));const no=Math.round(num(g('no')));await put({...(ex||{}),id:g('id')||undefined,k:'rec',dir:g('dir'),name:g('name').trim(),amount:num(g('amount')),day:Math.round(num(g('day')))||1,startMonth:no?planMonth:(ex?.startMonth||planMonth),startNo:no||undefined,count:Math.round(num(g('count')))||undefined,account:g('account')||''});closeSheet();toast('Kaydedildi');break}
+    case 'rec':{const ex=S.recs.find(r=>r.id===g('id'));const no=Math.round(num(g('no')));await put({...(ex||{}),id:g('id')||undefined,k:'rec',dir:g('dir'),name:g('name').trim(),amount:num(g('amount')),day:Math.round(num(g('day')))||1,startMonth:no?planMonth:(ex?.startMonth||planMonth),startNo:no||undefined,count:Math.round(num(g('count')))||undefined,account:g('account')||'',asset:fd.has('asset')});closeSheet();toast('Kaydedildi');break}
     case 'payrec':{const r=S.recs.find(x=>x.id===g('id'));const mk=g('mk');const o=recOcc(r,mk);const amt=Math.abs(num(g('amount')));if(!(amt>0))return;const gel=r.dir==='gelir';
       const full=fd.has('close')||amt>=o.amount-0.5;
       await saveTx([{id:newId(),type:gel?'gelir':'odeme',amount:amt,date:g('date')||today(),account:g('account')||'',merchant:r.name,source:gel?(incomeSrc().includes(r.name)?r.name:'Diğer'):undefined,recId:r.id,recMonth:mk,...(full?{}:{recPart:true}),ts:Date.now(),via:'manuel'}]);

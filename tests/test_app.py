@@ -225,6 +225,27 @@ def main():
         check("taksitli alacak: Aralık taksiti erken geldi, Aralık'ta bekleyen kalmaz", dec == 0, dec)
         check("gelir ekranları hatasız", not errors, errors[:3])
 
+        print("Varlık ve kredi: harcama/gelir sayılmaz, tabloda ayrı grupta")
+        va = json.loads(json.dumps(SAMPLE))
+        va["recs"] = [{"id": "k1", "name": "Konut kredisi", "amount": 15000, "day": 20, "dir": "gider", "account": "Banka", "ts": 1},
+                      {"id": "k2", "name": "Kira", "amount": 10000, "day": 21, "dir": "gider", "account": "Banka", "ts": 1}]
+        va["plans"] = [{"id": "pl1", "name": "Araba", "who": "Alıcı", "total": 30000, "installment": 10000, "day": 25, "account": "Banka", "ts": 1}]
+        va["months"]["m-2026-11"]["v1"] = {"type": "gider", "amount": 9000, "date": "2026-11-04", "cardId": "c1", "personId": "me", "category": "Araçlarım", "sub": "Araç", "merchant": "Araç taksiti", "ts": 9}
+        va["months"]["m-2026-11"]["v2"] = {"type": "gelir", "amount": 10000, "date": "2026-11-05", "account": "Banka", "source": "Araba taksiti", "planId": "pl1", "ts": 9}
+        va["months"]["m-2026-11"]["v3"] = {"type": "gelir", "amount": 50000, "date": "2026-11-05", "account": "Banka", "source": "Maaş", "ts": 9}
+        page.evaluate("ls.set('kd_non2','')")
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'v.json'))", va); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        page.reload(); page.wait_for_function("S.loaded"); page.wait_for_timeout(300)
+        check("araç taksiti harcamaya girmez", page.evaluate("!mineCats('2026-11')['Araçlarım']"), page.evaluate("Object.keys(mineCats('2026-11'))"))
+        check("araç satışı taksiti gelire girmez (analiz)", page.evaluate("incP('2026-11')") == 50000, page.evaluate("incP('2026-11')"))
+        page.evaluate("planMonth='2026-11';goTab('ana')"); page.wait_for_timeout(300)
+        grp = page.evaluate("[...document.querySelectorAll('.pgrp.asset')].map(g=>g.innerText)")
+        check("tabloda konut kredisi 'Varlık ve kredi' grubunda", any("Konut kredisi" in g and "VARLIK VE KREDİ" in g.upper() for g in grp), grp)
+        check("kira sabit giderlerde kalır", not any("Kira" in g for g in grp))
+        check("kalan hesabı değişmez (kredi yine nakit çıkışı)", page.evaluate("monthPlan('2026-11').outs.some(x=>x.title==='Konut kredisi'&&x.asset)"))
+        check("varlık ekranları hatasız", not errors, errors[:3])
+
         print("Güvenlik")
         check("içerik güvenlik politikası ihlali yok", not csp, csp[:2])
         check("sayfa hatası yok", not errors, errors[:3])
