@@ -994,7 +994,7 @@ function recOcc(r,mk){
   if(r.endMonth&&mk>r.endMonth)return null;
   const no=r.startNo?r.startNo+monthsBetween(r.startMonth,mk):null;
   if(no!==null&&r.count&&no>r.count)return null;
-  const[y,m]=mk.split('-').map(Number);const ov=(r.over||{})[mk]||{};const date=ov.date||dayIn(y,m-1,r.day||1);const base=ov.amount!=null?ov.amount:recBase(r,mk);
+  const[y,m]=mk.split('-').map(Number);const ov=(r.over||{})[mk]||{};if(ov.skip&&!S.tx.some(t=>t.recId===r.id&&t.recMonth===mk))return null;const date=ov.date||dayIn(y,m-1,r.day||1);const base=ov.amount!=null?ov.amount:recBase(r,mk);
   /* o ayın ödemeleri: recPart işaretli olanlar kısmi; işaretsiz bir kayıt varsa kalem kapanmış sayılır */
   const txs=S.tx.filter(t=>t.recId===r.id&&t.recMonth===mk);const paid=txs.reduce((a,t)=>a+(t.amount||0),0);const done=txs.some(t=>!t.recPart);
   return {date,amount:done?paid:Math.max(0,base-paid),plan:base,paid,done,ov:ov.date||ov.amount!=null,txId:txs[txs.length-1]?.id,txs,no,count:r.count};
@@ -1295,7 +1295,17 @@ function formBankCmp(cardId){const c=cardById(cardId);const st=cardState(c);cons
 function bankCmpLine(c,open){return bankCmpLine0(c,open)+`<button class="linkbtn" data-act="stmtcmp" data-id="${c.id}" data-per="open" style="text-align:left;display:block;margin-top:4px">Banka hareketleriyle satır satır karşılaştır (ekran görüntüsü) ›</button>`}
 function bankCmpLine0(c,open){const bc=c.bankCheck&&c.bankCheck.cut===open.cut?c.bankCheck:null;if(!bc)return `<button class="linkbtn" data-act="bankcmp" data-id="${c.id}" style="text-align:left">Bankadaki tutarla karşılaştır</button>`;
   const d=r2(bc.amount-open.total);return `<div class="small tap" data-act="bankcmp" data-id="${c.id}">${Math.abs(d)<1?'<span class="chip ok">Banka ile tutuyor</span>':`<span class="chip warn">Bankada ${TL2(bc.amount)} · fark ${TL2(Math.abs(d))} ${d>0?'eksik':'fazla'}</span>`} <span class="muted">${fmtD(bc.at)}</span></div>${Math.abs(d)>=1&&d>0?'<div class="small muted">Eksik harcama var: aynı ekran görüntülerini tekrar yükle; eklenmiş olanlar atlanır, sadece eksikler çıkar.</div>':''}`}
-function planItemSheet(k,id){
+/* Gelen-Giden'deki her kalemin altında: tablodan kaldır / sil (takip tek yerden yapılsın) */
+function planItemSheet(k,id){planItemSheet0(k,id);const b=rmBox(k,id,planMonth);const sb=document.getElementById('sheetBody');if(b&&sb&&!sb.querySelector('.rmbox'))sb.insertAdjacentHTML('beforeend',b)}
+function rmBox(k,id,mk){const box=(btn,note)=>`<section class="sec rmbox" style="margin-top:14px">${btn}<p class="small muted" style="margin:6px 0 0">${note}</p></section>`;
+  if(k==='personout')return box(`<button class="btn danger" style="width:100%" data-act="rmexcess" data-id="${id}">Bu borcu sil</button>`,'Artık geri vermeyeceksen ya da başka bir kalemle birleştirdiysen sil. Para hesabında senin paran olarak kalır.');
+  if(k==='sched')return box(`<button class="btn danger" style="width:100%" data-act="deltx" data-id="${id}">Kalemi sil</button>`,'Tablodan ve kayıtlardan kalkar. Yanlışlıkla silersen çıkan bildirimden geri alırsın.');
+  if(k==='debt'||k==='plan')return box(`<button class="btn danger" style="width:100%" data-act="deldoc" data-id="${id}">Kalemi sil</button>`,'Bu borç/alacak kaydı tamamen silinir; geri alabilirsin.');
+  const r=S.recs.find(x=>x.id===id);if(r)return box(`<button class="btn ghost" style="width:100%" data-act="recskip" data-id="${id}" data-mk="${mk}">Sadece ${monthLabel(mk)} için kaldır</button><button class="btn danger" style="width:100%;margin-top:8px" data-act="deldoc" data-id="${id}">Kalemi tamamen sil (her ay)</button>`,'Bu ay için kaldırırsan diğer aylar aynen kalır.');
+  if(k==='person')return box('','Bu tutar kartta o kişi adına girilmiş harcamalardan geliyor. Değiştirmek için Kartlar\'da ilgili harcamaya dokunup kişiyi ya da tutarı düzelt.');
+  if(k==='card')return box('','Kart borcu kart harcamalarından hesaplanır; Kartlar\'da harcamaları düzeltirsen burası da değişir.');
+  return ''}
+function planItemSheet0(k,id){
   const mk=planMonth;
   if(k==='card'){const it=monthPlan(mk).outs.find(x=>x.k==='card'&&x.id===id&&!x.done);openSheet(formPayCard(id,it?it.amount:undefined,it));return}
   if(k==='personout'){excessSheet(id);return}
@@ -1454,7 +1464,7 @@ function feeAsk(t){PENDFEE=t;openSheet(head('Transfer ücreti')+`<section class=
   <form data-form="fee"><label class="f">Kesilen ücret (₺) <span class="small muted">· EFT/FAST ücreti ve BSMV toplamı</span><input name="fee" type="number" step="0.01" inputmode="decimal" autofocus></label><button class="btn" type="submit" style="width:100%">Ücreti kaydet</button></form>
   <button class="btn ghost" style="width:100%;margin-top:8px" data-act="nofee">Ücret kesilmedi</button><p class="small muted" style="margin-top:8px">Ücret, Banka › Komisyon harcaması olarak ${esc(t.account||'Nakit')} hesabından düşer.</p></section>`)}
 async function saveFee(t,fee){if(!(fee>0))return;await saveTx([{id:newId(),type:'gider',amount:fee,date:t.date,account:t.account||'',personId:ME,category:'Banka',sub:'Komisyon',merchant:`Transfer ücreti · ${t.account||'Nakit'} → ${t.toAccount||'Nakit'}`,feeOf:t.id,inst:1,ts:Date.now()+1,via:'manuel'}])}
-function excessList(){return S.tx.filter(x=>x.type==='tahsilat'&&x.cardAlloc!=null&&x.amount-x.cardAlloc>0.5).map(x=>{const ex=x.amount-x.cardAlloc;const back=S.tx.filter(v=>v.excessOf===x.id).reduce((a,v)=>a+v.amount,0);return {id:x.id,pid:x.personId,date:x.date,due:x.excessDue||'',ex,left:Math.max(0,ex-back)}})}
+function excessList(){return S.tx.filter(x=>x.type==='tahsilat'&&!x.excessDrop&&x.cardAlloc!=null&&x.amount-x.cardAlloc>0.5).map(x=>{const ex=x.amount-x.cardAlloc;const back=S.tx.filter(v=>v.excessOf===x.id).reduce((a,v)=>a+v.amount,0);return {id:x.id,pid:x.personId,date:x.date,due:x.excessDue||'',ex,left:Math.max(0,ex-back)}})}
 function excessSheet(id){const e=excessList().find(x=>x.id===id);if(!e)return;const x=txAll().find(t=>t.id===id);const left=r2(e.left);
   const back=S.tx.filter(v=>v.excessOf===id);
   openSheet(head(esc(personName(e.pid))+' · fazla ödeme')+`<section class="sec"><div class="eyebrow">${left>0.5?'Ona vereceğin':'Hepsi verildi'}</div><div class="total">${TL(left>0.5?left:e.ex)}</div>
@@ -2912,6 +2922,8 @@ document.addEventListener('click',async e=>{
       if(x.recId||x.planId||x.debtId||(x.type==='tahsilat'&&x.personId&&x.personId!==ME)){await saveTx([],[id]);if(x.debtId){const d=S.debts.find(q=>q.id===x.debtId);if(d&&d.payments)await put({...d,payments:d.payments.filter(p=>p.txId!==id),paid:false})}}
       else await saveTx([clean({...x,ok:undefined,await:true})]);
       closeSheet();toast(gi?'Gelmedi olarak işaretlendi · hesaptan çıktı, onay bekliyor':'Ödenmedi olarak işaretlendi · hesaba geri eklendi, onay bekliyor',4000,async()=>{await saveTx([x])});break}
+    case 'rmexcess':{if(!armed(el,'Emin misin? Tekrar bas'))break;const x=txAll().find(t=>t.id===id);if(!x)break;await saveTx([{...x,excessDrop:true}]);closeSheet();toast('Silindi',4000,async()=>{await saveTx([x])});break}
+    case 'recskip':{if(!armed(el,'Emin misin? Tekrar bas'))break;const r=S.recs.find(x=>x.id===id);if(!r)break;const mk=el.dataset.mk;const old=JSON.parse(JSON.stringify(r));await put({...r,over:{...(r.over||{}),[mk]:{...((r.over||{})[mk]||{}),skip:true}}});closeSheet();toast(`${monthLabel(mk)} için kaldırıldı`,4000,async()=>{await put(old)});break}
     case 'pendtx':{const x=txAll().find(t=>t.id===id);if(x)schedPaySheet(x);break}
     case 'recpost':{const r=S.recs.find(x=>x.id===id);const mk=el.dataset.mk;const o=recOcc(r,mk);const over={...(r.over||{})};over[mk]={...(over[mk]||{}),date:addDays(o.date,7)};await put({...r,over});closeSheet();toast(`${fmtD(addDays(o.date,7))} tarihine ertelendi`);break}
     case 'recovclr':{const r=S.recs.find(x=>x.id===id);const over={...(r.over||{})};delete over[el.dataset.mk];await put({...r,over});closeSheet();toast('Bu ay normale döndü');break}
