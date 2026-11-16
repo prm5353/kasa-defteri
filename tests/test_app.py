@@ -825,6 +825,16 @@ def main():
         check("c1 payı ödenince sadece o kapanır, Platinum borcu aynen durur", "c1" not in R2 and R2.get("c2") == 9000, R2)
         page.evaluate("closeAll()")
 
+        print("Fazla ödeme sonraki dönemin payından düşülmez")
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'fz.json'))", SAMPLE); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        page.evaluate("saveTx([{id:'nx1',type:'gider',amount:500,date:'2026-10-10',cardId:'c1',personId:'p1',category:'',sub:'',merchant:'Önceki dönem',ts:60}])"); page.wait_for_timeout(300)
+        page.evaluate("openSheet(formPay('p1'))"); page.wait_for_timeout(200)
+        page.fill("#payAmt", "1000"); page.click("#sheetBody form[data-form=pay] button[type=submit]"); page.wait_for_timeout(500)
+        L = page.evaluate("(owedByDue(),_owAll.find(o=>o.pid==='p1').lines.map(l=>[l.cut,Math.round(l.left)]))")
+        check("eski kalem kapandı, fazlası (700) sonraki dönemin 600 payından düşülmedi", L == [["2026-10-20", 0], ["2026-11-20", 600]], L)
+        page.evaluate("closeAll()")
+
         print("Tutarlılık: aynı rakam her ekranda aynı")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tt.json'))", SAMPLE); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
