@@ -762,6 +762,8 @@ const PEND_FROM='2026-11-16';
 const PEND_T=['gelir','tahsilat','gider','verdim','odeme','transfer'];
 const isIn=t=>t.type==='gelir'||t.type==='tahsilat';
 const isPend=t=>PEND_T.includes(t.type)&&!t.cardId&&!t.recId&&!t.planId&&!t.debtId&&!t.ok&&(!!t.await||(t.date>=PEND_FROM&&!!t.ts&&ymd(new Date(t.ts))<t.date));
+/* "Gelmedi" denmiş kişi ödemeleri eskiden beklemede kalıyordu; alacak satırıyla aynı para olduğu için kaldırılır (alacak satırı Gelen'de durur) */
+let _fpp=false;function fixPendPerson(){if(_fpp||!S.pend)return;_fpp=true;const L=S.pend.filter(x=>x.type==='tahsilat'&&x.personId&&x.personId!==ME&&x.ts&&ymd(new Date(x.ts))>=x.date);if(L.length)saveTx([],L.map(x=>x.id)).catch(()=>{})}
 const txAll=()=>S.pend&&S.pend.length?[...S.tx,...S.pend]:S.tx;
 function derive(){_dv++;_tix=null;{const all=flat(S.months);S.pend=all.filter(isPend);S.tx=S.pend.length?all.filter(t=>!isPend(t)):all}S.arch=flat(S.amonths).map(archMap);S.receipts=flat(S.rmonths);_ep=null;_ps=null;_hc=null;_sh=null;
   const mn=t=>S.tx.filter(x=>x.type===t).reduce((a,x)=>x.date<a?x.date:a,START());S.cutG=mn('gider');S.cutI=mn('gelir')}
@@ -838,7 +840,7 @@ async function boot(){
   try{idb=await idbOpen();(await idbAll()).forEach(([k,v])=>MEM.set(k,v))}catch(e){S.error='idb';render();return}
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
   db=localDb;base=localDb.collection();
-  base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render()});
+  base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render();fixPendPerson()});
   try{if(ls.get('kd_due1','')!=='1'){for(const c of S.cards){if(!c.cuts||!hasDays(c))continue;const nc=fixCuts(c.cuts,c.cutDay,c.dueDay);if(JSON.stringify(nc)!==JSON.stringify(c.cuts))await put({...c,cuts:nc})}ls.set('kd_due1','1')}}catch(e){}
   try{if(ls.get('kd_sal1','')!=='1'){if(!S.recs.some(r=>r.dir==='gelir')){await put({k:'rec',dir:'gelir',name:'Maaş',amount:80000,day:15});await put({k:'rec',dir:'gelir',name:'Ek gelir 1',amount:10000,day:25});await put({k:'rec',dir:'gelir',name:'Ek gelir 2',amount:10000,day:30})}ls.set('kd_sal1','1')}}catch(e){}
   /* kategori ağacı hiç kaydedilmemişse, kullanılan alt kategorilerle birlikte veriye yazılır (kod içindeki varsayılan değişse de kaybolmaz) */
@@ -1042,6 +1044,7 @@ function monthPlan(mk){
     else if(x.type==='transfer'&&x.toCardId)outs.push({k:'sched',id:x.id,title:(cardById(x.toCardId)?.name||'Kart')+' ödemesi',date:x.date,amount:x.amount,done:false,stag:acc});
     else if(x.type==='gelir'||x.type==='tahsilat')ins.push({k:'sched',id:x.id,title:x.merchant||x.source||(x.personId?personName(x.personId):'Gelir'),date:x.date,amount:x.amount,done:false,stag:acc,alacak:x.type==='tahsilat'&&!!x.personId&&x.personId!==ME})});
   (S.pend||[]).forEach(x=>{const xm=x.date.slice(0,7);if(!(xm===mk||(mk===t.slice(0,7)&&xm<mk)))return;const acc=x.account||'Nakit';const due=x.date<=t;
+    if(x.type==='tahsilat'&&x.personId&&x.personId!==ME&&(owedByDue(),_owAll.some(o=>o.pid===x.personId&&o.lines.length)))return;/* aynı para alacak satırında zaten var */
     if(isIn(x))ins.push({k:'sched',id:x.id,pend:true,title:x.merchant&&x.merchant!=='Ödeme aldım'?x.merchant:(x.source||(x.personId?personName(x.personId):'Gelir')),date:x.date,amount:x.amount,done:false,stag:due?'onayla: geldi mi?':acc,acc,alacak:x.type==='tahsilat'&&!!x.personId&&x.personId!==ME});
     else if(x.type!=='transfer'||x.toCardId)outs.push({k:'sched',id:x.id,pend:true,title:x.type==='transfer'?(cardById(x.toCardId)?.name||'Kart')+' ödemesi':x.merchant||x.note||(x.type==='verdim'?personName(x.personId):catLabel(x.category,x.sub))||'Ödeme',date:x.date,amount:x.amount,done:false,stag:due?'onayla: ödendi mi?':acc,acc})});
   S.recs.forEach(r=>{const o=recOcc(r,mk);if(!o)return;const L=r.dir==='gelir'?ins:outs;const tag=o.no?(o.count?`${o.no}/${o.count}`:`${o.no}`):'';const part=!o.done&&o.paid>0.5;
@@ -1222,7 +1225,6 @@ function planTableFlow(mk,F){
       <div><span>+ Gelecek</span><b class="plus">${TL(pinT)}</b><i>${pin0.length} kalem</i></div><div><span>− Ödenecek</span><b>${TL(outT)}</b><i>${kesin.length} kalem</i></div></div>
     <div class="kalan"><span>AY SONU KALAN</span><b style="color:${left>=0?'var(--plus)':'var(--crit)'}">${TL(left)}</b></div>
     ${estT>0.5?`<div class="small muted" style="text-align:right;margin-top:-4px">Tahmini harcamalar (~${TL(estT)}) düşülünce <b style="color:${F.end>=0?'var(--plus)':'var(--crit)'}">~${TL(F.end)}</b></div>`:''}
-    ${held>0.5?`<div class="small muted" style="text-align:right">Hesaplarındaki ${TL(held)} kişilerin parası (karta ödenecek)</div>`:''}
     <div class="pcols"><div class="psec"><div class="psh plus"><span>Gelen</span><b>${TL(pinT)}</b></div><div class="ptot2">Bu ay toplam gelen <b>${TL(dIn+pinT)}</b> · gelen ${TL(dIn)} · bekleyen ${TL(pinT)}</div>
       ${grp('Gelir',pin)}${grp('Alacak · kişilerden gelecek <em>gelir sayılmaz</em>',pinP,'asset')}${grp('Varlık satışı <em>gelir sayılmaz</em>',pinA,'asset')}${pin0.length?'':'<div class="small muted pempty">Bu ay beklenen gelir yok</div>'}
       ${pinfo.length?grp('Kişiler öder <em>kartına, hesaba girmez</em>',pinfo.map(x=>({...x,muted:true})),'muted'):''}</div>
@@ -1427,7 +1429,9 @@ function heldMoney(){const since=addDays(START(),-40);const out={};
 /* hesapta duran kişi parası: hesabın bakiyesini aşamaz; para başka yerde harcandıysa hesapta görünmez */
 function heldByAcc(){const m={};heldMoney().forEach(o=>{const tot=Object.values(o.where).reduce((a,v)=>a+v,0);Object.entries(o.where).forEach(([w,v])=>{const k=w||'Nakit';(m[k]=m[k]||[]).push({pid:o.pid,amt:o.held*v/tot})})});
   Object.entries(m).forEach(([k,l])=>{const a=S.accounts.find(x=>x.name===k)||(k==='Nakit'?S.accounts.find(isCashAcc):null);const bal=a?Math.max(0,accBalance(a)):0;const sum=l.reduce((q,x)=>q+x.amt,0);if(sum>bal){const f=sum>0?bal/sum:0;l.forEach(x=>x.amt*=f)}});return m}
-function heldNote(names){const m=heldByAcc();const by={};names.forEach(n=>(m[n]||[]).forEach(x=>by[x.pid]=(by[x.pid]||0)+x.amt));const e=Object.entries(by).filter(([,v])=>v>0.5);return e.length?`<div class="s" style="color:var(--other)">${e.map(([p,v])=>`içinde ${esc(personName(p))} parası ${TL(v)} · karta ödenecek`).join(' · ')}</div>`:''}
+function heldNote(names){return '';/* banka gibi: hesaptaki para tek bakiye, kimin attığı ayrıca gösterilmez */
+}
+function heldNote0(names){const m=heldByAcc();const by={};names.forEach(n=>(m[n]||[]).forEach(x=>by[x.pid]=(by[x.pid]||0)+x.amt));const e=Object.entries(by).filter(([,v])=>v>0.5);return e.length?`<div class="s" style="color:var(--other)">${e.map(([p,v])=>`içinde ${esc(personName(p))} parası ${TL(v)} · karta ödenecek`).join(' · ')}</div>`:''}
 /* başkalarından alıp henüz karta yatırmadığım ve hesabımda duran para: benim param değil */
 function heldTotal(){const M=heldByAcc();return Object.values(M).flat().reduce((a,x)=>a+x.amt,0)}
 let PENDPAY=null;
@@ -1505,7 +1509,6 @@ function viewHome(){
     ['cash','Nakit akışı tahmini',safeBox()],
     ['plan','Gelir-gider tablosu',`  ${planTable(planMonth)}`],
     ['owed','Bana ödenecek kart payları',`  ${owedSection()}`],
-    ['held','Kişilerin hesabımdaki parası',`  ${heldSection()}`],
     ['cardspend','Kart harcamalarım',`  <section class="sec tap" data-act="spendsheet"><h2>Kart harcamalarım<span class="sp"></span><span class="small muted">${monthLabel(today().slice(0,7))} · analizle aynı</span>${chev}</h2>
     <div style="display:flex;gap:12px;align-items:center">${donut(rows,tot,120)}<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">${perCard.map(x=>`<div class="cl"><span>${esc(x.c.name)}</span><b>${TL(x.m)}${x.o>0.5?` <span style="color:var(--other);font-weight:500">+${TL(x.o)}</span>`:''}</b></div>`).join('')}<div class="small muted" style="margin-top:4px">Dokun: kategoriler, ekstre dönemi</div></div></div>
   </section>`],
@@ -2525,7 +2528,7 @@ function formTx(x,type){
     <label class="f" data-for="transfer">Nereye<select id="txTo" name="to">${srcOpts(x.toCardId?'c:'+x.toCardId:(x.toAccount?'a:'+x.toAccount:''))}</select></label>
     <label class="f">Not<input id="txNote" name="note" value="${esc(x.note||'')}"></label>
     <button class="btn" type="submit">${x.id?'Kaydet':'Ekle'}</button>
-    ${x.id&&PEND_T.includes(x.type)&&!x.cardId&&!isPend(x)?(()=>{const gi=isIn(x);const linked=x.recId||x.planId||x.debtId;return `<button class="btn ghost" type="button" data-act="txunrecv" data-id="${x.id}">${gi?'Gelmedi':'Ödenmedi'} · ${linked?'geri al, tekrar beklesin':'beklemeye al'}</button><div class="small muted" style="margin:-4px 0 8px">${gi?'Para hesabına gelmediyse':'Ödeme yapılmadıysa'} buna bas: tutar hesaptan ${gi?'çıkar':'geri eklenir'}, kayıt Gelen-Giden'de "onay bekliyor" olarak durur; ${gi?'gelince "Geldi"':'ödeyince "Ödedim"'} dersin.</div>`})():''}
+    ${x.id&&PEND_T.includes(x.type)&&!x.cardId&&!isPend(x)?(()=>{const gi=isIn(x);const linked=x.recId||x.planId||x.debtId||(x.type==='tahsilat'&&x.personId&&x.personId!==ME);return `<button class="btn ghost" type="button" data-act="txunrecv" data-id="${x.id}">${gi?'Gelmedi':'Ödenmedi'} · ${linked?'geri al, tekrar beklesin':'beklemeye al'}</button><div class="small muted" style="margin:-4px 0 8px">${gi?'Para hesabına gelmediyse':'Ödeme yapılmadıysa'} buna bas: tutar hesaptan ${gi?'çıkar':'geri eklenir'}${x.type==='tahsilat'&&x.personId&&x.personId!==ME?`, ${esc(personName(x.personId))}'in kalemi Gelen'de tekrar "alacak" olur; gelince oradan "Geldi" dersin`:`, kayıt Gelen-Giden'de "onay bekliyor" olarak durur; ${gi?'gelince "Geldi"':'ödeyince "Ödedim"'} dersin`}.</div>`})():''}
     ${x.id?`<button class="btn danger" type="button" data-act="deltx" data-id="${x.id}">Kaydı sil</button>`:''}</form>
     ${x.hist&&x.hist.length?`<details class="sec" style="margin-top:12px"><summary class="eyebrow" style="cursor:pointer">Değişiklik geçmişi (${x.hist.length})</summary>${[...x.hist].reverse().map((s,i)=>`<div class="sumline" style="align-items:center"><span class="small">${new Date(s.at).toLocaleString('tr-TR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} önce: <b>${TL(Math.abs(s.amount||0))}</b> · ${fmtD(s.date||x.date)}${s.merchant?' · '+esc(s.merchant):''}</span><button class="btn sm ghost" data-act="txrevert" data-id="${x.id}" data-i="${x.hist.length-1-i}">Bu hâle dön</button></div>`).join('')}</details>`:''}`;
 }
@@ -2906,7 +2909,7 @@ document.addEventListener('click',async e=>{
     case 'pnext':planMonth=shiftMonth(planMonth,1);render();break;
     case 'planitem':planItemSheet(el.dataset.k,id);break;
     case 'txunrecv':{if(!armed(el,'Emin misin? Tekrar bas'))break;const x=txAll().find(t=>t.id===id);if(!x)break;const gi=isIn(x);
-      if(x.recId||x.planId||x.debtId){await saveTx([],[id]);if(x.debtId){const d=S.debts.find(q=>q.id===x.debtId);if(d&&d.payments)await put({...d,payments:d.payments.filter(p=>p.txId!==id),paid:false})}}
+      if(x.recId||x.planId||x.debtId||(x.type==='tahsilat'&&x.personId&&x.personId!==ME)){await saveTx([],[id]);if(x.debtId){const d=S.debts.find(q=>q.id===x.debtId);if(d&&d.payments)await put({...d,payments:d.payments.filter(p=>p.txId!==id),paid:false})}}
       else await saveTx([clean({...x,ok:undefined,await:true})]);
       closeSheet();toast(gi?'Gelmedi olarak işaretlendi · hesaptan çıktı, onay bekliyor':'Ödenmedi olarak işaretlendi · hesaba geri eklendi, onay bekliyor',4000,async()=>{await saveTx([x])});break}
     case 'pendtx':{const x=txAll().find(t=>t.id===id);if(x)schedPaySheet(x);break}
