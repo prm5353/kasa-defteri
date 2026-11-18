@@ -1203,7 +1203,7 @@ function planTable(mk){
     <div class="psec"><div class="psh plus">Gelirler</div>${grp('Gelir',P.ins.filter(x=>!x.asset))}${grp('Varlık satışı <em>gelir sayılmaz</em>',P.ins.filter(x=>x.asset),'asset')}${P.ins.length?'':'<div class="small muted pempty">Gelir yok</div>'}</div>
     <div class="psec"><div class="psh">Giderler</div>${grp('Gider',P.outs.filter(x=>!x.asset))}${grp('Varlık / kredi <em>harcama sayılmaz</em>',P.outs.filter(x=>x.asset),'asset')}${P.outs.length?'':'<div class="small muted pempty">Gider yok</div>'}</div>
     <div class="small muted" style="text-align:center;margin-top:8px">Gerçekleşen: gelen ${TL(doneIn)} · ödenen ${TL(doneOut)}</div>
-    <div class="chips padd"><button data-act="newrec" data-dir="gelir">+ Sabit gelir</button><button data-act="addticari">+ Ticari gelir</button><button data-act="newrec" data-dir="gider">+ Sabit gider</button><button data-act="newrec" data-dir="hedef">+ Yatırım hedefi</button></div>
+    <div class="chips padd"><button data-act="newrec" data-dir="gelir">+ Sabit gelir</button><button data-act="addticari">+ Ticari gelir</button><button data-act="newrec" data-dir="gider">+ Sabit gider</button><button data-act="newrec" data-dir="hedef">+ Yatırım hedefi</button><button data-act="extrainv">+ Ek yatırım alımı</button></div>
   </section>`;
 }
 function planTableFlow(mk,F){
@@ -1230,12 +1230,13 @@ function planTableFlow(mk,F){
       ${grp('Gelir',pin)}${grp('Alacak · kişilerden gelecek <em>gelir sayılmaz</em>',pinP,'asset')}${grp('Varlık satışı <em>gelir sayılmaz</em>',pinA,'asset')}${pin0.length?'':'<div class="small muted pempty">Bu ay beklenen gelir yok</div>'}
       ${pinfo.length?grp('Kişiler öder <em>kartına, hesaba girmez</em>',pinfo.map(x=>({...x,muted:true})),'muted'):''}</div>
     <div class="psec"><div class="psh"><span>Giden</span><b>${TL(outT)}</b></div><div class="ptot2">Bu ay toplam giden <b>${TL(dOut+outT)}</b> · ödenen ${TL(dOut)} · bekleyen ${TL(outT)}${estT>0.5?` · tahmini ~${TL(estT)}`:''}</div>
-      ${grp('Kredi kartları',cards)}${grp('Yatırım hedefi',goals)}${grp('Gönderilecek',send)}${grp('Sabit giderler',fixed)}${grp('Varlık / kredi <em>harcama sayılmaz</em>',assets,'asset')}
+      ${grp('Kredi kartları',cards)}${(()=>{const gd=P.outs.filter(x=>x.done&&x.goal);if(!goals.length&&!gd.length)return '';const L=[...goals,...gd].sort((a,b)=>a.date.localeCompare(b.date));
+        return `<div class="pgrp"><div class="ph"><span>Yatırım hedefi${gd.length?' <em>yapılan dahil · ek alım için dokun</em>':''}</span><span>${TL(goals.reduce((a,x)=>a+x.amount,0))}</span></div>${L.map(planRow).join('')}</div>`})()}${grp('Gönderilecek',send)}${grp('Sabit giderler',fixed)}${grp('Varlık / kredi <em>harcama sayılmaz</em>',assets,'asset')}
       ${!kesin.length?'<div class="small muted pempty">Bekleyen ödeme yok</div>':''}
       ${est.length||planMonth>=today().slice(0,7)?budRow(est):''}</div></div>
     <p class="small muted" style="margin:8px 0 0">Bir kaleme dokun: tamamını ya da bir kısmını öde/geldi işaretle, tarihini düzenle.</p>
     ${done.length?`<details class="pdone"><summary>Bu ay gerçekleşenler (${done.length})</summary>${done.sort((a,b)=>a.date.localeCompare(b.date)).map(planRow).join('')}</details>`:''}
-    <div class="chips padd"><button data-act="newrec" data-dir="gelir">+ Sabit gelir</button><button data-act="addticari">+ Ticari gelir</button><button data-act="newrec" data-dir="gider">+ Sabit gider</button><button data-act="newtx" data-type="gider">+ İleri tarihli ödeme</button>${P.outs.some(x=>x.goal)?'':'<button data-act="newrec" data-dir="hedef">+ Yatırım hedefi</button>'}<button data-act="plansheet">Bütçem</button><button data-act="projsheet">Nakit akışı</button></div>
+    <div class="chips padd"><button data-act="newrec" data-dir="gelir">+ Sabit gelir</button><button data-act="addticari">+ Ticari gelir</button><button data-act="newrec" data-dir="gider">+ Sabit gider</button><button data-act="newtx" data-type="gider">+ İleri tarihli ödeme</button><button data-act="newrec" data-dir="hedef">+ Yatırım hedefi</button><button data-act="extrainv">+ Ek yatırım alımı</button><button data-act="plansheet">Bütçem</button><button data-act="projsheet">Nakit akışı</button></div>
   </section>`;
 }
 /* ===== Gelen/Giden görünümü: ay, hafta, gün ===== */
@@ -2939,6 +2940,9 @@ document.addEventListener('click',async e=>{
       closeSheet();toast(gi?'Gelmedi olarak işaretlendi · hesaptan çıktı, onay bekliyor':'Ödenmedi olarak işaretlendi · hesaba geri eklendi, onay bekliyor',4000,async()=>{await saveTx([x])});break}
     case 'rmexcess':{if(!armed(el,'Emin misin? Tekrar bas'))break;const x=txAll().find(t=>t.id===id);if(!x)break;await saveTx([{...x,excessDrop:true}]);closeSheet();toast('Silindi',4000,async()=>{await saveTx([x])});break}
     case 'recskip':{if(!armed(el,'Emin misin? Tekrar bas'))break;const r=S.recs.find(x=>x.id===id);if(!r)break;const mk=el.dataset.mk;const old=JSON.parse(JSON.stringify(r));await put({...r,over:{...(r.over||{}),[mk]:{...((r.over||{})[mk]||{}),skip:true}}});closeSheet();toast(`${monthLabel(mk)} için kaldırıldı`,4000,async()=>{await put(old)});break}
+    case 'extrainv':{const gs=S.recs.filter(r=>r.dir==='hedef'&&recOcc(r,planMonth));if(gs.length===1){planItemSheet('rec',gs[0].id);break}
+      if(!gs.length){openSheet(formAsset());break}
+      openSheet(head('Hangi hedefin üstüne?')+`<section class="sec">${gs.map(r=>`<div class="row tap" data-act="goalextra" data-id="${r.id}" data-mk="${planMonth}"><div class="main"><div class="t">${esc(r.name)}</div><div class="s">aylık hedef ${TL(recBase(r,planMonth))}</div></div>${chev}</div>`).join('')}<div class="row tap" data-act="newasset"><div class="main"><div class="t">Hedefe bağlı değil</div><div class="s">sadece Yatırımlarıma ekle</div></div>${chev}</div></section>`);break}
     case 'goalextra':{const r=S.recs.find(x=>x.id===id);if(!r)break;const nm=asciiUp(r.name||'');const type=/GUMUS/.test(nm)?'gumus':/DOLAR|USD/.test(nm)?'usd':/EURO|EUR/.test(nm)?'eur':/CEYREK/.test(nm)?'ceyrek':/ALTIN|GRAM/.test(nm)?'gram':'tl';
       openSheet(formAsset({type,qty:'',_goal:r.id,_gmk:el.dataset.mk,_acc:r.account||S.accounts[0]?.name||''}));break}
     case 'pendtx':{const x=txAll().find(t=>t.id===id);if(x)schedPaySheet(x);break}
