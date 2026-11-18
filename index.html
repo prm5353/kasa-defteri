@@ -670,9 +670,10 @@ function mineCats(mk,all){
   return by;
 }
 const mineTotal=mk=>Object.values(mineCats(mk)).reduce((a,c)=>a+c.v,0);
-function incomeBy(mk){const by={};const add=(x)=>{const k=x.source||'Diğer';(by[k]=by[k]||{v:0,items:[]}).v+=x.amount;by[k].items.push(x)};if(!useArch(mk))S.tx.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk).forEach(add);else S.arch.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk).forEach(x=>add({...x,arch:true}));return by}
+const notIncTx=x=>!!(x.recId&&(()=>{const r=S.recs.find(q=>q.id===x.recId);return r&&r.dir==='gelir'&&isAssetRec(r)})());
+function incomeBy(mk){const by={};const add=(x)=>{const k=x.source||'Diğer';(by[k]=by[k]||{v:0,items:[]}).v+=x.amount;by[k].items.push(x)};if(!useArch(mk))S.tx.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk&&!notIncTx(x)).forEach(add);else S.arch.filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk).forEach(x=>add({...x,arch:true}));return by}
 function monthEnd(mk){const[y,m]=mk.split('-').map(Number);return dayIn(y,m-1,31)}
-function incomeTotal(mk){return (useArch(mk)?S.arch:S.tx).filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk).reduce((a,x)=>a+x.amount,0)}
+function incomeTotal(mk){return (useArch(mk)?S.arch:S.tx).filter(x=>x.type==='gelir'&&x.date.slice(0,7)===mk&&!notIncTx(x)).reduce((a,x)=>a+x.amount,0)}
 function othersMonth(mk){const by={};livePortions().filter(p=>p.personId!==ME&&p.pdate.slice(0,7)===mk).forEach(p=>by[p.personId]=(by[p.personId]||0)+p.pamount);return by}
 /* devirli bütçe: kullanılmayan kısım sonraki aya geçer (aşım da sonraki ayı azaltır), başlangıç ayından itibaren */
 function budgetCarry(b,mk){if(!b.rollover)return 0;let c=0;for(let m=b.since||mk;m<mk;m=shiftMonth(m,1))c+=b.limit-(mineCats(m)[b.category]?.v||0);return c}
@@ -2634,10 +2635,19 @@ function formRec(r,dir){
     <div class="two"><label class="f">Aylık tutar (₺)<input id="rAmt" name="amount" type="number" required value="${r.amount??''}"></label><label class="f">Her ayın kaçı<input id="rDay" name="day" type="number" min="1" max="31" required value="${r.day||1}"></label></div>
     <div class="two"><label class="f">${monthLabel(mk)}'da kaçıncı ödeme<input id="rNo" name="no" type="number" min="1" value="${curNo}" placeholder="yoksa boş"></label><label class="f">Toplam kaç ödeme<input id="rCnt" name="count" type="number" min="1" value="${r.count||''}" placeholder="bilinmiyorsa boş"></label></div>
     <label class="f">Hesap<select id="rAcc" name="account">${accOpts(r.account||S.accounts[0]?.name||'')}</select></label>
-    <label class="chk small" style="display:flex;gap:8px;align-items:flex-start;margin:2px 0 10px"><input type="checkbox" name="asset" ${r.id?(isAssetRec(r)?'checked':''):''} style="margin-top:2px"><span><b>Varlık ya da kredi</b> · araç/ev taksiti, banka kredisi ya da araç satışından gelen para. Tabloda ayrı grupta durur; analizde harcama ya da gelir sayılmaz.</span></label>
+    <label class="chk small" style="display:flex;gap:8px;align-items:flex-start;margin:2px 0 10px"><input type="checkbox" name="asset" ${r.id?(isAssetRec(r)?'checked':''):''} style="margin-top:2px"><span><b>Varlık ya da kredi</b> · araç/ev taksiti, banka kredisi, başkası adına çektiğin kredinin geri gelen parası. Tabloda ayrı grupta durur; gelir ya da harcama sayılmaz, sadece hesabına girer/çıkar.</span></label>
+    ${r.id?'':'<button class="btn ghost sm" type="button" data-act="loanfor" style="width:100%;margin-bottom:8px">Başkası adına kredi mi çektin? Gelen ve giden tek seferde</button>'}
     <p class="small muted" style="margin:0">Her ay Ana Sayfa'daki tabloda görünür; geldiğinde ya da ödediğinde üstüne dokunup işaretlersin. Değişen tutarı o ay işaretlerken düzeltebilirsin.</p>
     <button class="btn" type="submit">Kaydet</button>${r.id?`<button class="btn danger" type="button" data-act="deldoc" data-id="${r.id}">Sil</button>`:''}</form>`;
 }
+function formLoanFor(){const acc=S.accounts[0]?.name||'';return head('Başkası adına kredi')+`<form data-form="loanfor">
+  <p class="small muted" style="margin:0 0 10px">Krediyi senin adına çektin, taksiti o kişi sana gönderiyor, sen bankaya ödüyorsun. İkisi de Gelen-Giden'de "Varlık / kredi" grubunda görünür; gelirin ya da harcaman sayılmaz, sadece hesabına girip çıkar.</p>
+  <label class="f">Kimin için<input name="who" required placeholder="ör. Fatih Koç"></label>
+  <div class="two"><label class="f">Her ay ondan gelecek (₺)<input name="inAmt" type="number" step="0.01" inputmode="decimal" required></label><label class="f">Ayın kaçında gelir<input name="inDay" type="number" min="1" max="31" required value="1"></label></div>
+  <div class="two"><label class="f">Bankaya taksit (₺)<input name="outAmt" type="number" step="0.01" inputmode="decimal" required></label><label class="f">Taksit günü<input name="outDay" type="number" min="1" max="31" required value="1"></label></div>
+  <div class="two"><label class="f">${monthLabel(planMonth)}'da kaçıncı taksit<input name="no" type="number" min="1" value="1"></label><label class="f">Toplam taksit<input name="count" type="number" min="1" placeholder="ör. 36"></label></div>
+  <label class="f">Hangi hesaba girip çıkıyor<select name="account">${accOpts(acc)}</select></label>
+  <button class="btn" type="submit">Kaydet</button></form>`}
 function formAsset(a){a=a||{type:'gram'};const gr=a._goal?S.recs.find(r=>r.id===a._goal):null;return head(gr?`${esc(gr.name)} · ek alım`:'Varlık')+`<form data-form="asset"><input type="hidden" name="id" value="${esc(a.id||'')}">${gr?`<input type="hidden" name="goalRec" value="${gr.id}"><input type="hidden" name="goalMk" value="${a._gmk}">`:''}<div class="two"><label class="f">Tür<select id="aType" name="type">${Object.entries(ASSET_TYPES).map(([k,l])=>opt(k,l,a.type)).join('')}</select></label><label class="f">Miktar<input id="aQty" name="qty" type="number" step="0.01" required value="${a.qty??1}"></label></div>
     <label class="f" id="aValBox" ${a.type==='esya'?'':'hidden'}>Bugünkü tahmini değeri (₺) · ör. aracın 2. el değeri<input name="value" type="number" step="any" inputmode="decimal" value="${a.value||''}"></label>
     <label class="f" id="aNameBox" ${a.type==='esya'?'':'hidden'}>Adı<input name="name" value="${esc(a.name||'')}" placeholder="ör. Ev, 2021 Passat, motosiklet"></label>
@@ -2988,6 +2998,7 @@ document.addEventListener('click',async e=>{
       openSheet(head('Hangi hedefin üstüne?')+`<section class="sec">${gs.map(r=>`<div class="row tap" data-act="goalextra" data-id="${r.id}" data-mk="${planMonth}"><div class="main"><div class="t">${esc(r.name)}</div><div class="s">aylık hedef ${TL(recBase(r,planMonth))}</div></div>${chev}</div>`).join('')}<div class="row tap" data-act="newasset"><div class="main"><div class="t">Hedefe bağlı değil</div><div class="s">sadece Yatırımlarıma ekle</div></div>${chev}</div></section>`);break}
     case 'sellasset':{const a=S.assets.find(x=>x.id===id);if(a)sellSheet(a);break}
     case 'delasset':{const a=S.assets.find(x=>x.id===id);if(a)delAssetSheet(a);break}
+    case 'loanfor':openSheet(formLoanFor());break;
     case 'goalextra':{const r=S.recs.find(x=>x.id===id);if(!r)break;const nm=asciiUp(r.name||'');const type=/GUMUS/.test(nm)?'gumus':/DOLAR|USD/.test(nm)?'usd':/EURO|EUR/.test(nm)?'eur':/CEYREK/.test(nm)?'ceyrek':/ALTIN|GRAM/.test(nm)?'gram':'tl';
       openSheet(formAsset({type,qty:'',_goal:r.id,_gmk:el.dataset.mk,_acc:r.account||S.accounts[0]?.name||''}));break}
     case 'pendtx':{const x=txAll().find(t=>t.id===id);if(x)schedPaySheet(x);break}
@@ -3294,6 +3305,10 @@ document.addEventListener('submit',async e=>{
     case 'rec':{const ex=S.recs.find(r=>r.id===g('id'));const no=Math.round(num(g('no')));const na=num(g('amount'));let amounts=ex?.amounts;
       if(ex&&Math.abs(na-recBase(ex,planMonth))>0.005){const cur=today().slice(0,7);const from=planMonth>cur?planMonth:cur;amounts=[...(ex.amounts||[{from:'0000-00',amount:ex.amount}])].filter(a=>a.from<from);amounts.push({from,amount:na})}
       await put({...(ex||{}),amounts,id:g('id')||undefined,k:'rec',dir:g('dir'),name:g('name').trim(),amount:num(g('amount')),day:Math.round(num(g('day')))||1,startMonth:no?planMonth:(ex?.startMonth||planMonth),startNo:no||undefined,count:Math.round(num(g('count')))||undefined,account:g('account')||'',asset:fd.has('asset')});closeSheet();toast('Kaydedildi');break}
+    case 'loanfor':{const who=g('who').trim();const no=Math.round(num(g('no')))||1;const cnt=Math.round(num(g('count')))||undefined;const acc=g('account')||'';const base={k:'rec',startMonth:planMonth,startNo:no,count:cnt,account:acc,asset:true,loanFor:who};
+      await put({...base,id:newId(),dir:'gelir',name:`${who} · kredi taksiti gelir`,amount:num(g('inAmt')),day:Math.round(num(g('inDay')))||1});
+      await put({...base,id:newId(),dir:'gider',name:`${who} adına kredi taksiti`,amount:num(g('outAmt')),day:Math.round(num(g('outDay')))||1});
+      closeSheet();toast('Kaydedildi · gelen ve giden Gelen-Giden\'de, gelir/gider sayılmaz');break}
     case 'sub':{const E=subsEdit();const id=g('id');const it={id:id||newId(),name:g('name').trim(),amt:num(g('amount'))>0?r2(num(g('amount'))):0,note:g('note').trim()};if(!it.name)return;
       if(id)E.items=E.items.map(x=>x.id===id?it:x);else E.items.push(it);await subsSave(E);subsEditSheet();toast(it.note?`${it.note} kaydedildi`:'Kaydedildi');break}
     case 'recover':{const r=S.recs.find(x=>x.id===g('id'));if(!r)return;const mk=g('mk');const over={...(r.over||{})};const[y,m]=mk.split('-').map(Number);const def=dayIn(y,m-1,r.day||1);
