@@ -249,6 +249,7 @@ label.f input,label.f select,label.f textarea,.inp{border:1px solid var(--line);
 .budr .bar{height:6px;margin-top:6px}.budro{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);margin-top:4px}.budro input{width:15px;height:15px;accent-color:var(--accent)}.budr.over .t{color:var(--crit)}
 .pendrow{opacity:.75}
 .monnav{display:flex;align-items:center;gap:8px}
+.invbar{display:flex;height:10px;border-radius:6px;overflow:hidden;margin-top:12px;gap:2px}.invbar i{display:block;min-width:3px}.invdot{width:12px;height:12px;border-radius:50%;flex:none;margin-right:10px}
 .toastbtn{margin-left:12px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;padding:0;cursor:pointer}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .spin{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -2365,19 +2366,36 @@ function assetsSheet(mode){if(mode)ASM=mode;const pm=ASM==='prop';shReg('assets'
     <button class="btn" style="width:100%;margin-top:12px" data-act="newprop">+ Mal ekle (ev, araba, motosiklet…)</button>`);return}
   const hist=Object.entries(P.history||{}).sort((a,b)=>a[0].localeCompare(b[0])).slice(-30);let spark='';
   if(hist.length>=2&&S.assets.length){const vals=hist.map(([,h])=>S.assets.reduce((s,a)=>s+aVal(a,h),0));const mn=Math.min(...vals),mx=Math.max(...vals),W=320,H=60;const pts=vals.map((v,i)=>`${(i/(vals.length-1))*W},${H-6-(mx===mn?.5:(v-mn)/(mx-mn))*(H-12)}`);spark=`<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="Birikim değişimi"><polyline points="${pts.join(' ')}" fill="none" stroke="var(--gold)" stroke-width="2"/></svg>`}
-  openSheet(head('Yatırımlarım')+tabs+`<section class="sec"><div class="total" style="color:var(--gold)">${TL(total)}</div><div class="small muted">${P.updatedAt?`Fiyatlar: ${esc(P.source||'elle')} · ${fmtDY(ymd(new Date(P.updatedAt)))} ${new Date(P.updatedAt).toTimeString().slice(0,5)}`:'Fiyat girilmedi'}${P.autoErr&&navigator.onLine!==false?' · otomatik güncelleme alınamadı, son kur kullanılıyor':''}</div>${kurStaleHtml()}${(()=>{const c=pnl(rows,P);return c.n?`<div class="box" style="margin-top:8px"><div class="eyebrow">Maliyeti girilen ${c.n} varlık</div>${pnlLine(c,true)}${(!num(P.usd)||!num(P.eur))?'<div class="small muted">Dolar ve euro kârı için Fiyatlar\'a bugünkü kurları gir.</div>':''}</div>`:''})()}${spark}</section>
-    ${goalSec()}
-    ${assetGroups(rows).map(g=>{const lot=r=>`<div class="row tap" data-act="editasset" data-id="${r.id}"><div class="main"><div class="t">${r.type==='esya'?esc(r.name||'Araç / eşya'):nfq.format(r.qty)+' '+esc(ASSET_TYPES[r.type]||r.type)}${r.lent?` · ${esc(r.who||'?')}`:''}</div><div class="s">${r.type==='esya'?'Elle girilen tahmini değer':r.type==='tl'?'TL birikim':r.pr?'Birim '+TL2(r.pr):'Fiyat yok'}${r.lent&&r.owner?' · '+esc(r.owner)+' birikimi':''}${r.lent&&r.since?' · '+fmtDY(r.since)+' verdim':''}${r.lent&&r.dueDate?` · geri ${fmtDY(r.dueDate)}`:''}${r.note?' · '+esc(r.note):''}</div>${r.costTL>0?`<div class="small muted">${r.buyDate?fmtDY(r.buyDate)+' · ':''}alış ${TL(r.costTL)}</div>${pnlLine(pnl([r],P))}`:''}</div><div class="amt">${TL(r.val)}</div></div>`;
-      const types=[...new Set(g.rows.map(r=>r.type))];
-      return `<section class="sec" style="margin-top:12px"><h2>${esc(g.name)}<span class="sp"></span><span class="sum" style="color:var(--gold)">${TL(g.val)}</span></h2>${types.length>1?pnlLine(pnl(g.rows,P)):''}
-      ${types.map(t=>{const L=g.rows.filter(r=>r.type===t);const q=L.reduce((a,r)=>a+r.qty,0),v=L.reduce((a,r)=>a+r.val,0);const C=L.filter(r=>r.costTL>0);const cq=C.reduce((a,r)=>a+r.qty,0),ct=C.reduce((a,r)=>a+r.costTL,0);
-        if(L.length===1)return lot(L[0]);
-        return `<div class="atype"><div class="sumline" style="font-weight:700"><span>${nfq.format(q)} ${esc(ASSET_TYPES[t]||t)} <span class="muted" style="font-weight:500">· ${L.length} alış</span></span><b>${TL(v)}</b></div>
-          ${ct>0?`<div class="small muted">Toplam maliyet ${TL(ct)}${t!=='tl'&&cq>0?` · ortalama ${TL2(ct/cq)} / ${t==='gram'||t==='gumus'?'gr':t==='usd'?'$':t==='eur'?'€':'adet'}`:''}${cq<q-0.0001?` · ${nfq.format(q-cq)} için maliyet girilmedi`:''}</div>${pnlLine(pnl(L,P),false)}`:'<div class="small muted">Maliyet girilmedi</div>'}
-          <details style="margin-top:4px"><summary class="small">Alışları göster</summary>${L.map(lot).join('')}</details></div>`}).join('')}</section>`}).join('')||'<section class="sec" style="margin-top:12px"><div class="empty">Varlık yok.</div></section>'}
+  /* sade görünüm: türe göre tek satır (miktar, bugünkü değer, kazanç); ayrıntı ve alışlar türün ekranında */
+  const mine=rows.filter(r=>!r.lent),lentL=rows.filter(r=>r.lent);const cost=mine.filter(r=>r.costTL>0);const ct=cost.reduce((s,r)=>s+r.costTL,0),cv=cost.reduce((s,r)=>s+r.val,0);
+  const types=[...new Set(mine.map(r=>r.type))].map(t=>{const L=mine.filter(r=>r.type===t);const C=L.filter(r=>r.costTL>0);return {t,L,q:L.reduce((s,r)=>s+r.qty,0),v:L.reduce((s,r)=>s+r.val,0),c:C.reduce((s,r)=>s+r.costTL,0),cv:C.reduce((s,r)=>s+r.val,0)}}).sort((a,b)=>b.v-a.v);
+  const mtot=types.reduce((s,x)=>s+x.v,0);const col=t=>({gram:'#d4a72c',ceyrek:'#e8c25a',yarim:'#e8c25a',tam:'#e8c25a',gumus:'#9aa4ae',usd:'#3fb27f',eur:'#4a8fe0',tl:'#b07cd8'})[t]||'#888';
+  const gain=(v,c)=>c>0?`<span style="color:${v-c>=0?'var(--plus)':'var(--crit)'}">${v-c>=0?'+':'−'}${TL(Math.abs(v-c))}</span>`:'';
+  const own=x=>{const o={};x.L.forEach(r=>{const k=ownerOf(r);o[k]=(o[k]||0)+r.qty});const ks=Object.keys(o);return ks.length>1?ks.map(k=>`${esc(k)} ${qtyFmt(x.t,o[k])}`).join(' · '):''};
+  openSheet(head('Yatırımlarım')+tabs+`<section class="sec"><div class="eyebrow">Bugünkü değeri</div><div class="total" style="color:var(--gold)">${TL(mtot)}</div>
+    ${ct>0?`<div style="margin-top:4px">Ödediğin <b>${TL(ct)}</b> · kazancın <b>${gain(cv,ct)}</b> <span class="small muted">(%${Math.round((cv-ct)/ct*100)})</span></div>${cost.length<mine.length?`<div class="small muted">${mine.length-cost.length} alışın ödenen tutarı girilmemiş, kazanca katılmadı</div>`:''}`:''}
+    ${mtot>0?`<div class="invbar">${types.map(x=>`<i style="width:${x.v/mtot*100}%;background:${col(x.t)}"></i>`).join('')}</div>`:''}${kurStaleHtml()}</section>
+    <section class="sec" style="margin-top:12px">${types.map(x=>`<div class="row tap" data-act="assettype" data-v="${x.t}"><span class="invdot" style="background:${col(x.t)}"></span><div class="main"><div class="t">${esc(ASSET_TYPES[x.t]||x.t)}</div><div class="s">${qtyFmt(x.t,x.q)}${x.L.length>1?` · ${x.L.length} alış`:''}${own(x)?' · '+own(x):''}</div></div><div class="amt">${TL(x.v)}${x.c>0?`<small>${gain(x.cv,x.c)}</small>`:''}</div></div>`).join('')||'<div class="empty">Henüz yatırım yok.</div>'}</section>
+    ${lentL.length?`<section class="sec" style="margin-top:12px"><h2>Borç verdiklerim</h2>${lentL.map(r=>`<div class="row tap" data-act="editasset" data-id="${r.id}"><div class="main"><div class="t">${esc(r.who||'?')}</div><div class="s">${qtyFmt(r.type,r.qty)} ${esc(ASSET_TYPES[r.type]||'')}${r.dueDate?' · '+fmtD(r.dueDate)+' geri':''}</div></div><div class="amt">${TL(r.val)}</div></div>`).join('')}</section>`:''}
     <button class="btn" style="width:100%;margin-top:12px" data-act="newasset">+ Yatırım ekle (altın, gümüş, döviz)</button>
-    <section class="sec" style="margin-top:12px"><h2>Fiyatlar<span class="sp"></span><button class="linkbtn" data-act="kurnow">Şimdi çek</button><button class="linkbtn" data-act="prices" style="margin-left:10px">Elle</button></h2><div class="small muted" style="margin-bottom:6px">Gram, çeyrek, dolar, euro: Harem Altın alış. Gümüş: Fibabanka FX Market alış. İnternet varken 15 dakikada bir.</div><div class="kv">${PRICED.map(k=>[k,ASSET_TYPES[k]]).map(([k,l])=>`<span class="k">${l}</span><b>${P[k]?TL2(num(P[k])):'—'}</b>`).join('')}${num(P.ceyrek)?`<span class="k">Yarım altın (2 çeyrek)</span><b>${TL2(aPrice(P,'yarim'))}</b><span class="k">Tam altın (4 çeyrek)</span><b>${TL2(aPrice(P,'tam'))}</b>`:''}</div></section>`);
+    ${goalSec()}
+    <details class="sec" style="margin-top:12px"><summary><h2>Fiyatlar <span class="small muted" style="font-weight:500">${P.updatedAt?`· ${fmtD(ymd(new Date(P.updatedAt)))} ${new Date(P.updatedAt).toTimeString().slice(0,5)}`:'· girilmedi'}</span></h2></summary>
+      <div class="small muted" style="margin:6px 0">Gram, çeyrek, dolar, euro: Harem Altın alış. Gümüş: Fibabanka FX Market alış. İnternet varken 15 dakikada bir güncellenir.${P.autoErr&&navigator.onLine!==false?' Son güncelleme alınamadı, son kur kullanılıyor.':''}</div>
+      <div class="kv">${PRICED.map(k=>[k,ASSET_TYPES[k]]).map(([k,l])=>`<span class="k">${l}</span><b>${P[k]?TL2(num(P[k])):'—'}</b>`).join('')}</div>
+      <div class="btnrow" style="margin-top:8px"><button class="btn sm ghost" data-act="kurnow">Şimdi çek</button><button class="btn sm ghost" data-act="prices">Elle gir</button></div></details>`);
 }
+const qtyFmt=(t,q)=>`${nfq.format(q)} ${t==='gram'||t==='gumus'?'gr':t==='usd'?'$':t==='eur'?'€':t==='tl'?'₺':'adet'}`;
+/* bir yatırım türünün ekranı: toplam, ödenen, kazanç ve alışlar tek tek */
+function assetTypeSheet(t){shReg('atype:'+t,()=>assetTypeSheet(t));const P=S.prices||{};const L=S.assets.filter(a=>a.type===t&&!a.lent).map(a=>({...a,val:aVal(a,P)})).sort((a,b)=>(b.buyDate||'').localeCompare(a.buyDate||''));
+  if(!L.length){assetsSheet('inv');return}const q=L.reduce((s,r)=>s+r.qty,0),v=L.reduce((s,r)=>s+r.val,0);const C=L.filter(r=>r.costTL>0);const c=C.reduce((s,r)=>s+r.costTL,0),cv=C.reduce((s,r)=>s+r.val,0),cq=C.reduce((s,r)=>s+r.qty,0);const g=cv-c;
+  const pc=pnl(L,P);
+  openSheet(head(esc(ASSET_TYPES[t]||t))+`<section class="sec"><div class="eyebrow">Elindeki</div><div class="total">${qtyFmt(t,q)}</div>
+    <div class="kv" style="margin-top:8px"><span class="k">Bugünkü değeri</span><b style="color:var(--gold)">${TL(v)}</b>${t!=='tl'?`<span class="k">Bugünkü fiyat</span><b>${aPrice(P,t)?TL2(aPrice(P,t)):'—'}</b>`:''}
+    ${c>0?`<span class="k">Ödediğin</span><b>${TL(c)}</b><span class="k">Kazancın</span><b style="color:${g>=0?'var(--plus)':'var(--crit)'}">${g>=0?'+':'−'}${TL(Math.abs(g))} (%${Math.round(g/c*100)})</b>${t!=='tl'&&cq>0?`<span class="k">Ortalama alış</span><b>${TL2(c/cq)}</b>`:''}`:''}</div>
+    ${pc.nU||pc.nE?`<details style="margin-top:8px"><summary class="small">Dolar / euro bazında</summary>${pnlLine(pc)}</details>`:''}</section>
+    <section class="sec" style="margin-top:12px"><h2>Alışlar</h2>${L.map(r=>`<div class="row tap" data-act="editasset" data-id="${r.id}"><div class="main"><div class="t">${qtyFmt(t,r.qty)}${r.owner?` · ${esc(r.owner)}`:''}</div><div class="s">${r.buyDate?fmtDY(r.buyDate):'tarih yok'}${r.costTL>0?` · ödedin ${TL(r.costTL)}`:' · ödenen girilmedi'}</div></div><div class="amt">${TL(r.val)}${r.costTL>0?`<small style="color:${r.val>=r.costTL?'var(--plus)':'var(--crit)'}">${r.val>=r.costTL?'+':'−'}${TL(Math.abs(r.val-r.costTL))}</small>`:''}</div></div>`).join('')}</section>
+    <p class="small muted">Bir alışa dokununca düzenler, bozdurur ya da silersin.</p>
+    <button class="btn" style="width:100%;margin-top:6px" data-act="newassetof" data-v="${t}">+ ${esc(ASSET_TYPES[t]||'')} alımı ekle</button>`)}
 function ledgerSheet(){
   const open=S.debts.filter(d=>!d.paid),closed=S.debts.filter(d=>d.paid);
   const dr=d=>`<div class="row tap" data-act="editdebt" data-id="${d.id}" ${d.paid?'style="opacity:.6"':''}><div class="main"><div class="t">${esc(d.who)}</div><div class="s">${d.dir==='alacak'?'<span class="chip ok">Bana ödeyecek</span>':'<span class="chip crit">Ben ödeyeceğim</span>'} ${d.dueDate?fmtDY(d.dueDate):'tarih yok'}${d.note?' · '+esc(d.note):''}</div></div><div class="amt">${d.cur&&d.cur!=='TRY'?`${curFmt(d.paid?d.amount:debtLeft(d),d.cur)}<small>≈ ${TL(d.paid?debtAmtTL(d):debtTL(d))}</small>`:TL(d.paid?d.amount:debtLeft(d))}</div></div>`;
@@ -3114,6 +3132,8 @@ document.addEventListener('click',async e=>{
     case 'newrec':openSheet(formRec(null,el.dataset.dir));break;
     case 'editrec':openSheet(formRec(S.recs.find(x=>x.id===id)));break;
     case 'newasset':openSheet(formAsset());break;
+    case 'assettype':assetTypeSheet(el.dataset.v);break;
+    case 'newassetof':openSheet(formAsset({type:el.dataset.v,qty:''}));break;
     case 'editasset':openSheet(formAsset(S.assets.find(x=>x.id===id)));break;
     case 'prices':openSheet(formPrices());break;
   }}catch(err){toast('İşlem tamamlanamadı: '+(err?.message||'hata'))}
