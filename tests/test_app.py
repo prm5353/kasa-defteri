@@ -957,6 +957,8 @@ def main():
         page.click("#sheetBody form[data-form=asset] button[type=submit]"); page.wait_for_timeout(700)
         it = page.evaluate("monthPlan('2026-11').outs.find(x=>x.id==='gl1'&&x.done)")
         check("hesaptan 45.000 düştü, hedef satırı 150.000 ve '45.000 fazla' yazıyor", abs(page.evaluate("accBalance(S.accounts[0])") - (b1 - 45000)) < 0.01 and it and round(it["amount"]) == 150000 and "fazla" in it["tag"], it)
+        G = page.evaluate("goalRows(1)[0]")
+        check("hedef 105.000'de sabit kalır, alınan 150.000 (hedef geçildi)", G["target"] == 105000 and G["got"] == 150000, G)
         page.evaluate("closeAll()")
 
         print("Mal varlığı yatırımlardan ayrı")

@@ -946,12 +946,12 @@ function formQuick(mode){
     <button class="btn" type="submit" style="width:100%">Kaydet</button></form>`}
 /* birikim hedefi: Aylık tablodaki "Birikim hedefi" kalemine karşı o ay alınan birikimlerin (alış maliyeti) toplamı */
 function goalRows(n){const goals=S.recs.filter(r=>r.dir==='hedef');if(!goals.length)return null;const cur=today().slice(0,7);
-  return Array.from({length:n},(_,i)=>shiftMonth(cur,i-n+1)).map(mk=>{const target=goals.reduce((a,r)=>{const o=recOcc(r,mk);return a+(o?(o.done?o.amount:o.plan):0)},0);
+  return Array.from({length:n},(_,i)=>shiftMonth(cur,i-n+1)).map(mk=>{const target=goals.reduce((a,r)=>{const o=recOcc(r,mk);return a+(o?o.plan:0)},0);/* hedef sabit kalır; fazla alım hedefi büyütmez */
     let got=S.assets.filter(a=>a.type!=='esya'&&a.buyDate&&a.buyDate.slice(0,7)===mk&&a.costTL>0).reduce((a,x)=>a+x.costTL,0);
-    if(!got)got=goals.reduce((a,r)=>{const o=recOcc(r,mk);return a+(o?o.paid:0)},0);return {mk,target,got}})}
+    got=Math.max(got,goals.reduce((a,r)=>{const o=recOcc(r,mk);return a+(o?o.paid:0)},0));return {mk,target,got}})}
 function goalSec(){const R=goalRows(6);if(!R)return '';const c=R[5];const mx=Math.max(1,...R.map(r=>Math.max(r.target,r.got)));const pct=c.target>0?c.got/c.target*100:0;
   return `<section class="sec" style="margin-top:12px"><h2>Aylık birikim hedefi<span class="sp"></span><span class="sum">${TL(c.got)} / ${TL(c.target)}</span></h2>
-    <div class="bar" style="height:10px"><i style="width:${Math.min(100,pct)}%;background:${pct>=100?'var(--plus)':'var(--gold)'}"></i></div><div class="small muted" style="margin:4px 0 10px">Bu ay %${Math.round(pct)} · ${c.got>=c.target?'hedef tamam':TL(c.target-c.got)+' kaldı'}</div>
+    <div class="bar" style="height:10px"><i style="width:${Math.min(100,pct)}%;background:${pct>=100?'var(--plus)':'var(--gold)'}"></i></div><div class="small muted" style="margin:4px 0 10px">Bu ay %${Math.round(pct)} · ${c.got>c.target+0.5?`hedefi <b style="color:var(--plus)">${TL(c.got-c.target)}</b> geçtin`:c.got>=c.target-0.5?'hedef tamam':TL(c.target-c.got)+' kaldı'}</div>
     <div style="display:flex;gap:6px;align-items:flex-end;height:80px">${R.map(r=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end"><div style="position:relative;width:100%;height:60px;display:flex;align-items:flex-end"><div style="position:absolute;left:0;right:0;bottom:${r.target/mx*60}px;border-top:2px dashed var(--muted)"></div><div style="width:100%;border-radius:4px;background:${r.got>=r.target&&r.target>0?'var(--plus)':'var(--gold)'};height:${Math.max(2,r.got/mx*60)}px"></div></div><span style="font-size:10px" class="muted">${monthLabel(r.mk).slice(0,3)}</span></div>`).join('')}</div>
     <div class="small muted">Çubuk: o ay aldığın birikimlerin alış tutarı · kesikli çizgi: hedef. Alış tarihi ve tutarı girilen varlıklar sayılır.</div></section>`}
 /* net varlık: hesaplar + birikim + alacaklar − kart borçları − borçlar */
