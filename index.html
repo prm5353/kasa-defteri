@@ -479,8 +479,12 @@ const isProp=a=>a.type==='esya';/* mal varlığı (ev, araba, motosiklet) yatır
 /* yarım = 2 çeyrek, tam = 4 çeyrek fiyatından hesaplanır */
 const PRICED=Object.keys(ASSET_TYPES).filter(k=>!['tl','yarim','tam','esya'].includes(k));
 /* varlığın bugünkü değeri; araç/eşya için elle girilen tahmini değer */
-const aVal=(a,P)=>a.type==='esya'?num(a.value):a.qty*aPrice(P,a.type);
-const aPrice=(P,t)=>t==='tl'?1:t==='yarim'?2*num((P||{}).ceyrek):t==='tam'?4*num((P||{}).ceyrek):num((P||{})[t]);
+/* fiyat kaynağı her alışta seçilir: 'harem' (Harem Altın alış) ya da 'fiba' (Fibabanka alış). Fibabanka'da çeyrek yok. Varsayılan: gümüş Fibabanka, diğerleri Harem. */
+const FIBA_T=['gram','gumus','usd','eur'];
+const srcOf=a=>FIBA_T.includes(a.type)?(a.src||(a.type==='gumus'?'fiba':'harem')):'harem';
+const SRC_LBL={harem:'Harem Altın',fiba:'Fibabanka'};
+const aVal=(a,P)=>a.type==='esya'?num(a.value):a.qty*aPrice(P,a.type,srcOf(a));
+const aPrice=(P,t,src)=>{P=P||{};if(src==='fiba'&&FIBA_T.includes(t)){const f=num(P.fiba?.[t]);if(f>0)return f;if(t==='gumus')return num(P.gumus)}if(t==='gumus'&&src!=='fiba'&&num(P.gumusH)>0)return num(P.gumusH);return t==='tl'?1:t==='yarim'?2*num(P.ceyrek):t==='tam'?4*num(P.ceyrek):num(P[t])};
 const PGROUPS=['Meyve & sebze','Et & tavuk','Süt & kahvaltılık','Temel gıda','Atıştırmalık','İçecek','Temizlik','Kişisel bakım','Kağıt ürünleri','Bebek','Evcil hayvan','Diğer'];
 const AY=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const AYK=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
@@ -812,9 +816,9 @@ function partition(docs){
 }
 /* otomatik kur: Harem Altın'ın canlı fiyat bağlantısından (websocket) alış fiyatları. İnternet varken açılışta ve 15 dakikada bir; yoksa son kur kalır. Gümüş elle girilir. Yarım/tam = 2/4 çeyrek. */
 const KUR_WS='wss://hrmsocketonly.haremaltin.com/socket.io/?EIO=4&transport=websocket';
-const KUR_MAP={gram:'KULCEALTIN',ceyrek:'CEYREK_YENI',usd:'USDTRY',eur:'EURTRY'};
+const KUR_MAP={gram:'KULCEALTIN',ceyrek:'CEYREK_YENI',usd:'USDTRY',eur:'EURTRY',gumusH:'GUMUSTRY'};
 const GUMUS_URL='https://raw.githubusercontent.com/prm5353/kasa-defteri/data/gumus.json';
-async function gumusFetch(){const r=await fetch(GUMUS_URL+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error(r.status);const j=await r.json();const v=num(j.alis);if(!(v>0))throw new Error('boş');return {v,at:j.updated||j.at}}
+async function gumusFetch(){const r=await fetch(GUMUS_URL+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error(r.status);const j=await r.json();const v=num(j.alis);if(!(v>0))throw new Error('boş');const fiba={};Object.entries(j.fiba||{}).forEach(([k,o])=>{const x=num(o&&o.alis);if(x>0)fiba[k]=x});return {v,at:j.updated||j.at,fiba}}
 let kurBusy=false;
 function kurFetch(){return new Promise((res,rej)=>{let ws;const got={};const done=()=>{try{ws&&ws.close()}catch(e){}};
   const to=setTimeout(()=>{done();Object.keys(got).length?res(got):rej(new Error('zaman aşımı'))},15000);
@@ -827,9 +831,9 @@ function kurFetch(){return new Promise((res,rej)=>{let ws;const got={};const don
 async function autoPrices(force){if(kurBusy||!db||(typeof navigator!=='undefined'&&navigator.onLine===false))return;const P=S.prices||{};
   if(!force&&P.autoCheck&&Date.now()-P.autoCheck<14*60*1000)return;kurBusy=true;
   try{const [h,g]=await Promise.allSettled([kurFetch(),gumusFetch()]);if(h.status!=='fulfilled'&&g.status!=='fulfilled')throw h.reason||g.reason;
-    const got=h.status==='fulfilled'?h.value:{};const cur={};Object.entries(got).forEach(([k,o])=>cur[k]=o.v);if(Object.keys(got).length)cur.haremAt=Date.now();if(g.status==='fulfilled'){cur.gumus=g.value.v;cur.gumusAt=g.value.at}
+    const got=h.status==='fulfilled'?h.value:{};const cur={};Object.entries(got).forEach(([k,o])=>cur[k]=o.v);if(Object.keys(got).length)cur.haremAt=Date.now();if(g.status==='fulfilled'){cur.gumus=g.value.v;cur.gumusAt=g.value.at;if(Object.keys(g.value.fiba).length)cur.fiba={...g.value.fiba,at:g.value.at}}
     const P1=S.prices||{};const hist={...(P1.history||{})};hist[today()]=clean({...(hist[today()]||{}),...PRICED.reduce((o,k)=>(P1[k]?{...o,[k]:P1[k]}:o),{}),...cur});
-    const P2=S.prices||{};await db.doc('market/prices').set(clean({...P2,...cur,history:hist,updatedAt:new Date().toISOString(),source:'Harem Altın · alış',autoCheck:Date.now(),autoErr:Object.keys(KUR_MAP).every(k=>got[k])&&g.status==='fulfilled'?'':'eksik'}));
+    const P2=S.prices||{};await db.doc('market/prices').set(clean({...P2,...cur,history:hist,updatedAt:new Date().toISOString(),source:'Harem Altın · alış',autoCheck:Date.now(),autoErr:['gram','ceyrek','usd','eur'].every(k=>got[k])&&g.status==='fulfilled'?'':'eksik'}));
   }catch(e){try{await db.doc('market/prices').set(clean({...(S.prices||{}),autoCheck:Date.now(),autoErr:String(e.message||e)}))}catch(_){}}
   finally{kurBusy=false}}
 /* kurların yaşı: altın/döviz son başarılı çekiş, gümüş Fibabanka'nın kendi güncelleme saati (hafta sonu güncellenmez) */
@@ -2385,8 +2389,9 @@ function assetsSheet(mode){if(mode)ASM=mode;const pm=ASM==='prop';shReg('assets'
     <button class="btn" style="width:100%;margin-top:12px" data-act="newasset">+ Yatırım ekle (altın, gümüş, döviz)</button>
     ${goalSec()}
     <details class="sec" style="margin-top:12px"><summary><h2>Fiyatlar <span class="small muted" style="font-weight:500">${P.updatedAt?`· ${fmtD(ymd(new Date(P.updatedAt)))} ${new Date(P.updatedAt).toTimeString().slice(0,5)}`:'· girilmedi'}</span></h2></summary>
-      <div class="small muted" style="margin:6px 0">Gram, çeyrek, dolar, euro: Harem Altın alış. Gümüş: Fibabanka FX Market alış. İnternet varken 15 dakikada bir güncellenir.${P.autoErr&&navigator.onLine!==false?' Son güncelleme alınamadı, son kur kullanılıyor.':''}</div>
-      <div class="kv">${PRICED.map(k=>[k,ASSET_TYPES[k]]).map(([k,l])=>`<span class="k">${l}</span><b>${P[k]?TL2(num(P[k])):'—'}</b>`).join('')}</div>
+      <div class="small muted" style="margin:6px 0">İkisi de <b>alış</b> fiyatı (elindekini bugün satsan eline geçecek). Her alışta hangisinden hesaplanacağını alışın ekranından seçersin. İnternet varken 15 dakikada bir güncellenir.${P.autoErr&&navigator.onLine!==false?' Son güncelleme alınamadı, son kur kullanılıyor.':''}</div>
+      <table class="kpit"><thead><tr><th></th><th>Harem Altın</th><th>Fibabanka</th></tr></thead><tbody>${PRICED.map(k=>`<tr><td>${ASSET_TYPES[k]}</td><td>${aPrice(P,k,'harem')?TL2(aPrice(P,k,'harem')):'—'}</td><td>${FIBA_T.includes(k)&&aPrice(P,k,'fiba')?TL2(aPrice(P,k,'fiba')):'—'}</td></tr>`).join('')}</tbody></table>
+      <div class="small muted" style="margin-top:4px">${P.haremAt?`Harem: ${new Date(P.haremAt).toLocaleString('tr-TR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}${P.fiba?.at?` · Fibabanka: ${new Date(P.fiba.at).toLocaleString('tr-TR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}</div>
       <div class="btnrow" style="margin-top:8px"><button class="btn sm ghost" data-act="kurnow">Şimdi çek</button><button class="btn sm ghost" data-act="prices">Elle gir</button></div></details>`);
 }
 const qtyFmt=(t,q)=>`${nfq.format(q)} ${t==='gram'||t==='gumus'?'gr':t==='usd'?'$':t==='eur'?'€':t==='tl'?'₺':'adet'}`;
@@ -2395,10 +2400,10 @@ function assetTypeSheet(t){shReg('atype:'+t,()=>assetTypeSheet(t));const P=S.pri
   if(!L.length){assetsSheet('inv');return}const q=L.reduce((s,r)=>s+r.qty,0),v=L.reduce((s,r)=>s+r.val,0);const C=L.filter(r=>r.costTL>0);const c=C.reduce((s,r)=>s+r.costTL,0),cv=C.reduce((s,r)=>s+r.val,0),cq=C.reduce((s,r)=>s+r.qty,0);const g=cv-c;
   const pc=pnl(L,P);
   openSheet(head(esc(ASSET_TYPES[t]||t))+`<section class="sec"><div class="eyebrow">Elindeki</div><div class="total">${qtyFmt(t,q)}</div>
-    <div class="kv" style="margin-top:8px"><span class="k">Bugünkü değeri</span><b style="color:var(--gold)">${TL(v)}</b>${t!=='tl'?`<span class="k">Bugünkü fiyat</span><b>${aPrice(P,t)?TL2(aPrice(P,t)):'—'}</b>`:''}
+    <div class="kv" style="margin-top:8px"><span class="k">Bugünkü değeri</span><b style="color:var(--gold)">${TL(v)}</b>${t!=='tl'?[...new Set(L.map(srcOf))].map(s=>`<span class="k">Bugünkü fiyat · ${SRC_LBL[s]}</span><b>${aPrice(P,t,s)?TL2(aPrice(P,t,s)):'—'}</b>`).join(''):''}
     ${c>0?`<span class="k">Ödediğin</span><b>${TL(c)}</b><span class="k">Kazancın</span><b style="color:${g>=0?'var(--plus)':'var(--crit)'}">${g>=0?'+':'−'}${TL(Math.abs(g))} (%${Math.round(g/c*100)})</b>${t!=='tl'&&cq>0?`<span class="k">Ortalama alış</span><b>${TL2(c/cq)}</b>`:''}`:''}</div>
     ${pc.nU||pc.nE?`<details style="margin-top:8px"><summary class="small">Dolar / euro bazında</summary>${pnlLine(pc)}</details>`:''}</section>
-    <section class="sec" style="margin-top:12px"><h2>Alışlar</h2>${L.map(r=>`<div class="row tap" data-act="editasset" data-id="${r.id}"><div class="main"><div class="t">${qtyFmt(t,r.qty)}${r.owner?` · ${esc(r.owner)}`:''}</div><div class="s">${r.buyDate?fmtDY(r.buyDate):'tarih yok'}${r.costTL>0?` · ödedin ${TL(r.costTL)}`:' · ödenen girilmedi'}</div></div><div class="amt">${TL(r.val)}${r.costTL>0?`<small style="color:${r.val>=r.costTL?'var(--plus)':'var(--crit)'}">${r.val>=r.costTL?'+':'−'}${TL(Math.abs(r.val-r.costTL))}</small>`:''}</div></div>`).join('')}</section>
+    <section class="sec" style="margin-top:12px"><h2>Alışlar</h2>${L.map(r=>`<div class="row tap" data-act="editasset" data-id="${r.id}"><div class="main"><div class="t">${qtyFmt(t,r.qty)}${r.owner?` · ${esc(r.owner)}`:''}</div><div class="s">${r.buyDate?fmtDY(r.buyDate):'tarih yok'}${r.costTL>0?` · ödedin ${TL(r.costTL)}`:' · ödenen girilmedi'}${FIBA_T.includes(t)?` · ${SRC_LBL[srcOf(r)]} fiyatı`:''}</div></div><div class="amt">${TL(r.val)}${r.costTL>0?`<small style="color:${r.val>=r.costTL?'var(--plus)':'var(--crit)'}">${r.val>=r.costTL?'+':'−'}${TL(Math.abs(r.val-r.costTL))}</small>`:''}</div></div>`).join('')}</section>
     <p class="small muted">Bir alışa dokununca düzenler, bozdurur ya da silersin.</p>
     <button class="btn" style="width:100%;margin-top:6px" data-act="newassetof" data-v="${t}">+ ${esc(ASSET_TYPES[t]||'')} alımı ekle</button>`)}
 function ledgerSheet(){
@@ -2649,6 +2654,7 @@ function formLoanFor(){const acc=S.accounts[0]?.name||'';return head('Başkası 
   <label class="f">Hangi hesaba girip çıkıyor<select name="account">${accOpts(acc)}</select></label>
   <button class="btn" type="submit">Kaydet</button></form>`}
 function formAsset(a){a=a||{type:'gram'};const gr=a._goal?S.recs.find(r=>r.id===a._goal):null;return head(gr?`${esc(gr.name)} · ek alım`:'Varlık')+`<form data-form="asset"><input type="hidden" name="id" value="${esc(a.id||'')}">${gr?`<input type="hidden" name="goalRec" value="${gr.id}"><input type="hidden" name="goalMk" value="${a._gmk}">`:''}<div class="two"><label class="f">Tür<select id="aType" name="type">${Object.entries(ASSET_TYPES).map(([k,l])=>opt(k,l,a.type)).join('')}</select></label><label class="f">Miktar<input id="aQty" name="qty" type="number" step="0.01" required value="${a.qty??1}"></label></div>
+    <label class="f" id="aSrcBox" ${FIBA_T.includes(a.type||'gram')?'':'hidden'}>Değeri hangi fiyattan hesaplansın<select name="src">${opt('harem','Harem Altın (kuyumcu alış)',srcOf({type:a.type||'gram',src:a.src}))}${opt('fiba','Fibabanka (banka alış)',srcOf({type:a.type||'gram',src:a.src}))}</select></label>
     <label class="f" id="aValBox" ${a.type==='esya'?'':'hidden'}>Bugünkü tahmini değeri (₺) · ör. aracın 2. el değeri<input name="value" type="number" step="any" inputmode="decimal" value="${a.value||''}"></label>
     <label class="f" id="aNameBox" ${a.type==='esya'?'':'hidden'}>Adı<input name="name" value="${esc(a.name||'')}" placeholder="ör. Ev, 2021 Passat, motosiklet"></label>
     ${(()=>{const bt=a.id?S.tx.find(t=>t.assetId===a.id&&t.assetBuy):null;const acc=bt?bt.account||'':a.id?'__none':(a._acc||S.accounts[0]?.name||'');
@@ -2664,7 +2670,7 @@ function formAsset(a){a=a||{type:'gram'};const gr=a._goal?S.recs.find(r=>r.id===
     <label class="f">Not<input id="aNote" name="note" value="${esc(a.note||'')}"></label><button class="btn" type="submit">Kaydet</button>${a.id?`<button class="btn ghost" type="button" data-act="sellasset" data-id="${a.id}">${a.type==='esya'?'Sattım':'Boz / sat'} · para hesaba gelsin</button><button class="btn danger" type="button" data-act="delasset" data-id="${a.id}">Sil</button>`:''}</form>`}
 const assetLbl=a=>a.type==='esya'?(a.name||'Mal'):ASSET_TYPES[a.type]||'Varlık';
 /* bozdurma / satış: ne kadarını, eline geçen TL, hangi hesaba */
-function sellSheet(a){const P=S.prices||{};const v=aVal(a,P);const unit=a.type==='esya'?0:aPrice(P,a.type);
+function sellSheet(a){const P=S.prices||{};const v=aVal(a,P);const unit=a.type==='esya'?0:aPrice(P,a.type,srcOf(a));
   openSheet(head(`${esc(assetLbl(a))} · ${a.type==='esya'?'sat':'boz / sat'}`)+`<form data-form="assetsell"><input type="hidden" name="id" value="${a.id}">
     <section class="sec" style="margin-bottom:10px"><div class="eyebrow">Elindeki</div><div class="total">${a.type==='esya'?TL(v):`${nfq.format(a.qty)} ${esc(ASSET_TYPES[a.type]||'')}`}</div><div class="small muted">${a.type==='esya'?'girdiğin tahmini değer':`güncel değeri ≈ ${TL(v)}`}${a.costTL>0?` · alış ${TL(a.costTL)}`:''}</div></section>
     <div class="two">${a.type==='esya'?`<input type="hidden" name="qty" value="${a.qty||1}">`:`<label class="f">Ne kadarını bozdurdun<input id="sellQty" name="qty" type="number" step="any" inputmode="decimal" value="${a.qty}" data-unit="${unit}" data-max="${a.qty}" required></label>`}<label class="f">Eline geçen (₺)<input id="sellTL" name="amount" type="number" step="0.01" inputmode="decimal" value="${r2(v)||''}" required></label></div>
@@ -3173,7 +3179,7 @@ document.addEventListener('change',e=>{
   if((t.id==='anFrom'||t.id==='anTo')&&AN){if(t.value){if(t.id==='anFrom')AN.from=t.value;else AN.to=t.value;if(AN.from>AN.to)[AN.from,AN.to]=[AN.to,AN.from];anSave();analizSheet()}return}
   if(t.dataset&&t.dataset.anx&&AN){const key={G:'exG',S:'exS',I:'exI'}[t.dataset.anx];const set=new Set(AN[key]);if(t.checked)set.delete(t.value);else set.add(t.value);AN[key]=[...set];anSave();
     if(t.dataset.anx==='G'){const d=t.closest('details');if(d)d.querySelectorAll('input[data-anx="S"]').forEach(x=>{x.disabled=!t.checked;x.checked=t.checked&&!AN.exS.includes(x.value)})}return}
-  if(t.name==='type'&&t.closest('form[data-form="asset"]')){const e=t.value==='esya';['aValBox','aNameBox'].forEach(id=>{const b=document.getElementById(id);if(b)b.hidden=!e});return}
+  if(t.name==='type'&&t.closest('form[data-form="asset"]')){const e=t.value==='esya';['aValBox','aNameBox'].forEach(id=>{const b=document.getElementById(id);if(b)b.hidden=!e});const sb=document.getElementById('aSrcBox');if(sb){sb.hidden=!FIBA_T.includes(t.value);const sel=sb.querySelector('select');if(sel&&!t.form.querySelector('[name=id]').value)sel.value=t.value==='gumus'?'fiba':'harem'}return}
   if(t.name==='lent'&&t.closest('form[data-form="asset"]')){const b=document.getElementById('lentBox');if(b)b.hidden=!t.checked;return}
   if(t.id==='apiModel'){ls.set('kd_model',t.value);toast('Okuma kalitesi değişti');return}
   if(t.id==='targetDate'){if(t.value){ls.set('kd3_target',t.value);render()}return}
@@ -3332,7 +3338,7 @@ document.addEventListener('submit',async e=>{
       await saveTx([{id:newId(),type:'gelir',amount:r2(amt),date:g('date')||today(),merchant:pl.name,source:'Araba taksiti',planId:pl.id,planMonth:mk,account:g('account')||'',ts:Date.now(),via:'manuel'}]);
       closeSheet();toast(`${TL(amt)} geldi olarak kaydedildi`);break}
     case 'recdone':{const r=S.recs.find(x=>x.id===g('id'));const mk=g('mk');await saveTx([{id:newId(),type:r.dir==='gelir'?'gelir':'odeme',amount:Math.abs(num(g('amount'))),date:g('date')||today(),account:g('account')||'',merchant:r.name,source:r.dir==='gelir'?(incomeSrc().includes(r.name)?r.name:'Diğer'):undefined,recId:r.id,recMonth:mk,ts:Date.now(),via:'manuel'}]);closeSheet();toast('İşaretlendi');break}
-    case 'asset':{const lent=fd.has('lent');const ow=String(g('owner')||'').trim();const aid=g('id')||newId();await put({id:aid,k:'asset',type:g('type'),qty:num(g('qty')),note:g('note')||'',value:g('type')==='esya'?num(g('value'))||0:undefined,name:g('type')==='esya'?String(g('name')||'').trim():undefined,owner:ow&&ow!=='Kendim'?ow:'',buyDate:g('buyDate')||'',costTL:num(g('costTL'))||0,usdRate:num(g('usdRate'))||0,eurRate:num(g('eurRate'))||0,lent,who:lent?String(g('who')||'').trim():'',since:lent?g('since')||'':'',dueDate:lent?g('dueDate')||'':''});
+    case 'asset':{const lent=fd.has('lent');const ow=String(g('owner')||'').trim();const aid=g('id')||newId();await put({id:aid,k:'asset',type:g('type'),src:FIBA_T.includes(g('type'))?(g('src')||undefined):undefined,qty:num(g('qty')),note:g('note')||'',value:g('type')==='esya'?num(g('value'))||0:undefined,name:g('type')==='esya'?String(g('name')||'').trim():undefined,owner:ow&&ow!=='Kendim'?ow:'',buyDate:g('buyDate')||'',costTL:num(g('costTL'))||0,usdRate:num(g('usdRate'))||0,eurRate:num(g('eurRate'))||0,lent,who:lent?String(g('who')||'').trim():'',since:lent?g('since')||'':'',dueDate:lent?g('dueDate')||'':''});
       /* alış parası seçilen hesaptan düşer: tek hareket, harcama sayılmaz */
       const pa=g('payAcc');const amt=num(g('costTL'));const bt=S.tx.find(t=>t.assetId===aid&&t.assetBuy);
       if(pa!=null&&pa!=='__none'&&amt>0){await saveTx([{...(bt||{}),id:bt?.id||newId(),type:'odeme',amount:r2(amt),date:g('buyDate')||today(),account:pa,merchant:`${g('type')==='esya'?(String(g('name')||'').trim()||'Eşya'):ASSET_TYPES[g('type')]||'Varlık'} alımı`,assetId:aid,assetBuy:true,...(g('goalRec')?{recId:g('goalRec'),recMonth:g('goalMk'),recExtra:true}:{}),ts:bt?.ts||Date.now(),via:'manuel'}]);toast(`Kaydedildi · ${TL(amt)} ${pa||'Nakit'} hesabından düştü`)}
