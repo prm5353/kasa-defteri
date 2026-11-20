@@ -5,9 +5,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
+      - run: pip install -q websocket-client
       - run: |
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
-          B=https://www.fibabanka.com.tr/api/services
-          for c in XAU XAG USD EUR GAU GAG; do for t in TRY; do echo "== $c->$t"; curl -sS -m 20 -A "$UA" -H "Content-Type: application/json" -H "Origin: https://www.fibabanka.com.tr" -H "Referer: https://www.fibabanka.com.tr/yatirim/fx-market" -d "{\"amount\":\"1\",\"currency\":\"$c\",\"targetCurrency\":\"$t\"}" $B/currency-convert; echo; done; done
-          echo "== TRY->XAU"; curl -sS -m 20 -A "$UA" -H "Content-Type: application/json" -d '{"amount":"1","currency":"TRY","targetCurrency":"XAU"}' $B/currency-convert; echo
-          for n in currency-rates currency-list exchange-rates fx-prices fx-price list-fx-price fxprice currencies rates currency doviz-kurlari gold-prices; do for m in GET POST; do echo "== $m $n $(curl -sS -m 15 -A "$UA" -X $m -H 'Content-Type: application/json' -d '{}' -o o.txt -w '%{http_code}' $B/$n) $(head -c 400 o.txt)"; done; done
+          cat > h.py <<'PY'
+          import websocket, json, time
+          ws=websocket.create_connection("wss://hrmsocketonly.haremaltin.com/socket.io/?EIO=4&transport=websocket",timeout=20,header=["Origin: https://www.haremaltin.com","User-Agent: Mozilla/5.0"])
+          t0=time.time();shown=False
+          while time.time()-t0<25:
+              m=ws.recv()
+              if m.startswith('0'): ws.send('40'); continue
+              if m=='2': ws.send('3'); continue
+              if m.startswith('42'):
+                  e,p=json.loads(m[2:])
+                  if e!='price_changed': continue
+                  d=p.get('data',{})
+                  keys=['ALTIN','KULCEALTIN','CEYREK_YENI','CEYREK_ESKI','USDTRY','EURTRY','GUMUSTRY','XAGUSD','XAUUSD','ONS']
+                  print({k:(d[k].get('alis'),d[k].get('satis'),d[k].get('tarih')) for k in keys if k in d})
+                  print(sorted(d.keys())[:80]); break
+          PY
+          python h.py
