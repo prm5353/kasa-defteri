@@ -1,0 +1,11 @@
+name: fiba-debug
+on: workflow_dispatch
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
+          for u in /servisler/ListFXPrice /tr/yatirim/fx-market /en/investment/fx-market; do echo "== $u"; curl -sS -m 25 -A "$UA" -o p.html -w "%{http_code} %{content_type}\n" "https://www.fibabanka.com.tr$u"; head -c 300 p.html; echo; grep -oiE '(/[a-zA-Z0-9_./-]*(servis|api|price|fx|kur|Price|FX)[a-zA-Z0-9_./?=&-]*)' p.html | sort -u | head -60; grep -oiE 'src="[^"]+\.js[^"]*"' p.html | head -40; done
+          for js in $(grep -oiE 'src="[^"]+\.js[^"]*"' p.html | sed 's/src="//;s/"$//' | head -40); do case $js in http*) U=$js;; *) U="https://www.fibabanka.com.tr$js";; esac; curl -sS -m 20 -A "$UA" "$U" -o s.js; echo "-- $U $(wc -c < s.js)"; grep -oE '["'"'"'][^"'"'"']*(ListFX|FXPrice|servisler|Servisler|fxmarket|FxMarket|XAG|XAU)[^"'"'"']*["'"'"']' s.js | sort -u | head -20; done
