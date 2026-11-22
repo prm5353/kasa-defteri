@@ -848,7 +848,7 @@ async function boot(){
   try{idb=await idbOpen();(await idbAll()).forEach(([k,v])=>MEM.set(k,v))}catch(e){S.error='idb';render();return}
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
   db=localDb;base=localDb.collection();
-  base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render();fixPendPerson()});
+  base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render();fixPendPerson();fixInstNames()});
   try{if(ls.get('kd_due1','')!=='1'){for(const c of S.cards){if(!c.cuts||!hasDays(c))continue;const nc=fixCuts(c.cuts,c.cutDay,c.dueDay);if(JSON.stringify(nc)!==JSON.stringify(c.cuts))await put({...c,cuts:nc})}ls.set('kd_due1','1')}}catch(e){}
   try{if(ls.get('kd_sal1','')!=='1'){if(!S.recs.some(r=>r.dir==='gelir')){await put({k:'rec',dir:'gelir',name:'Maaş',amount:80000,day:15});await put({k:'rec',dir:'gelir',name:'Ek gelir 1',amount:10000,day:25});await put({k:'rec',dir:'gelir',name:'Ek gelir 2',amount:10000,day:30})}ls.set('kd_sal1','1')}}catch(e){}
   /* kategori ağacı hiç kaydedilmemişse, kullanılan alt kategorilerle birlikte veriye yazılır (kod içindeki varsayılan değişse de kaybolmaz) */
@@ -2073,7 +2073,7 @@ function inclLine(){const L=S.catIcons?.__non||[];const NI=nonIncome();const n=L
 let _tix=null;
 /* kategori ağacından: hangi alt başlık hangi ana başlıkların altında */
 function treeIndex(){const t=catTree();const own={};Object.entries(t).forEach(([m,subs])=>(subs||[]).forEach(s=>(own[s]=own[s]||[]).push(m)));return {t,own}}
-function archMap(t){if(t.type!=='gider')return t;const A=S.catIcons?.__alias;let c=t.category||'',s=t.sub||'';
+function archMap(t){if(t.merchant){const s=stripInst(t.merchant);if(s.n&&s.name)t={...t,merchant:s.name}}if(t.type!=='gider')return t;const A=S.catIcons?.__alias;let c=t.category||'',s=t.sub||'';
   if(A)for(let i=0;i<6;i++){const x=A[c+'|'+s]||(A[c]&&{c:A[c].c,s:A[c].s===undefined?s:A[c].s});if(!x)break;if(x.c===c&&x.s===s)break;c=x.c;s=x.s||''}
   /* eşleme kaydı olmayan eski taşımalar: alt başlık artık eski ana başlığın altında yoksa ağaçta bulunduğu yere konur */
   const X=_tix||(_tix=treeIndex());
@@ -2753,8 +2753,15 @@ const TX_SCHEMA=`{"merchant":"işyeri/açıklama aynen","amount":"tutar ekranda 
 const txRules=()=>`Bugün ${today()}. Yıl yoksa bugünden önceki en yakın tarihi kullan; "Bugün", "Dün" ifadelerini tarihe çevir.
 Kategori listesi: ${catPromptList().join(', ')}.
 amount her zaman pozitif TL. İade/para girişi ise income true. Taksitli işlemde (ör. "(09/12)", "Taksit: 09/12", "6/5.taksit") installments toplam taksit sayısı (12), installment_no kaçıncı taksit (9); amount satırın tutar sütununda yazan tutardır, yani o ayın taksitidir, bölme ya da çarpma yapma. Kart borcu ödeme satırlarını, 0,00 TL satırlarını ve TL tutarı olmayan mil puan, ParafPara, chip-para gibi puan satırlarını atla. Ekstrede "**** 1234 AD SOYAD Harcamaları" gibi kart sahibi başlıkları varsa altındaki satırların holder alanına o adı yaz. Görüntüler aynı listenin kaydırılmış parçalarıysa üst üste binen satırları bir kez yaz.`;
+/* işyeri adının sonundaki taksit etiketi: "(1/3)", "1/3", "TAKSIT 2/6", "2/6 TAKSIT", "2/6.taksit". Ad olarak saklanmaz; taksit bilgisi ayrı tutulur */
+const INST_RX=/[\s\-·,]*[\(\[]?\s*(?:TAKS[İI]T\s*:?\s*)?(\d{1,2})\s*\/\s*(\d{1,2})\s*\.?\s*(?:TAKS[İI]T)?\s*[\)\]]?\s*$/i;
+function stripInst(m){m=String(m||'');const x=m.match(INST_RX);if(!x)return {name:m.trim(),no:0,n:0};const a=+x[1],b=+x[2];
+  if(!(b>=2&&b<=48&&a>=1&&a<=b)||x.index===0)return {name:m.trim(),no:0,n:0};return {name:m.slice(0,x.index).trim(),no:a,n:b}}
+/* geçmişe dönük: kayıtlı harcamaların adındaki taksit etiketini temizle (bir kez, kayıtlar değişmez sadece ad) */
+let _fin=false;function fixInstNames(){if(_fin||!S.tx)return;_fin=true;const L=[];txAll().forEach(t=>{if(!t.merchant)return;const s=stripInst(t.merchant);if(!s.n||!s.name)return;const o={...t,merchant:s.name};if(!(t.installments>1))o.instLabel=`${s.no}/${s.n}`;L.push(o)});if(L.length)saveTx(L).catch(()=>{})}
 function holderPerson(h){if(!h)return null;const k=asciiUp(h);const p=S.persons.find(p=>k.includes(asciiUp(p.name.split(' ')[0])));return p?.id||null}
 function rowFromAI(r,src,isCard){
+  const si=stripInst(r.merchant);if(si.n&&si.name){r={...r,merchant:si.name};if(!(num(r.installments)>1)){r.installments=si.n;r.installment_no=si.no}}
   const inst=Math.max(1,Math.round(num(r.installments)||1)),no=Math.max(1,Math.round(num(r.installment_no)||1));
   let amount=Math.abs(trAmount(r.amount)),date=/^\d{4}-\d{2}-\d{2}$/.test(r.date||'')?r.date:today();let extra={};
   let per=amount;if(inst>1){const tot=trAmount(r.total_amount);amount=tot>per*1.5?tot:per*inst;per=amount/inst;

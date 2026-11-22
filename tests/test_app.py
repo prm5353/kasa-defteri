@@ -1005,6 +1005,16 @@ def main():
         check("gelir de harcama da artmadı", page.evaluate("incomeTotal('2026-11')") == inc0 and page.evaluate("incA('2026-11')") == ia0 and page.evaluate("mineTotal('2026-11')") == sp0)
         page.evaluate("closeAll()")
 
+        print("Taksit etiketi ad sayılmaz")
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'ti.json'))", SAMPLE); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        page.evaluate("saveTx([{id:'ti1',type:'gider',amount:1000,date:'2026-10-05',cardId:'c1',personId:'me',category:'Alışveriş',sub:'',merchant:'MEDIAMARKT METROGARD (1/3)',ts:5},{id:'ti2',type:'gider',amount:2009,date:'2026-11-05',cardId:'c1',personId:'me',category:'Alışveriş',sub:'',merchant:'HEPSİBURADA 2/2',ts:6}]).then(()=>{_fin=false;fixInstNames()})"); page.wait_for_timeout(700)
+        M = page.evaluate("['ti1','ti2'].map(i=>{const t=txAll().find(x=>x.id===i);return [t.merchant,t.instLabel]})")
+        check("geçmiş kayıtlarda taksit etiketi addan silindi", M == [["MEDIAMARKT METROGARD", "1/3"], ["HEPSİBURADA", "2/2"]], M)
+        r = page.evaluate("rowFromAI({merchant:'APPLE (2/6)',amount:'500',date:'2026-11-03'},'card:c1',true)")
+        check("ekran görüntüsünden gelen satırda ad temiz, taksit 2/6 olarak algılanır", r["merchant"] == "APPLE" and r["inst"] == 6 and r["no"] == 2, r)
+        check("'SHELL 24/7' gibi adlar bozulmaz", page.evaluate("stripInst('SHELL 24/7').name") == "SHELL 24/7")
+
         print("Tutarlılık: aynı rakam her ekranda aynı")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tt.json'))", SAMPLE); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
