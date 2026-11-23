@@ -1015,6 +1015,18 @@ def main():
         check("ekran görüntüsünden gelen satırda ad temiz, taksit 2/6 olarak algılanır", r["merchant"] == "APPLE" and r["inst"] == 6 and r["no"] == 2, r)
         check("'SHELL 24/7' gibi adlar bozulmaz", page.evaluate("stripInst('SHELL 24/7').name") == "SHELL 24/7")
 
+        print("Yatırım hedefi her yerde aynı")
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'gy.json'))", SAMPLE); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        page.evaluate("put({id:'gz1',k:'rec',name:'Altın',amount:105000,day:15,dir:'hedef',account:S.accounts[0].name,ts:1})"); page.wait_for_timeout(400)
+        page.evaluate("openSheet(formAsset())"); page.wait_for_timeout(200)
+        check("yeni altın alışında 'Yatırım hedefime say' seçili gelir", page.evaluate("document.querySelector('#sheetBody select[name=goalRec]').value") == "gz1")
+        page.fill("#aQty", "8"); page.fill("#sheetBody input[name=costTL]", "48000"); page.fill("#sheetBody input[name=buyDate]", "2026-11-09")
+        page.click("#sheetBody form[data-form=asset] button[type=submit]"); page.wait_for_timeout(700)
+        R = page.evaluate("(()=>{const o=monthPlan('2026-11').outs.find(x=>x.id==='gz1'&&!x.done);const g=goalRows(1)[0];return {planLeft:Math.round(o.amount),planDone:o.done,stag:o.stag,target:g.target,got:g.got}})()")
+        check("Gelen-Giden ve Yatırımlar aynı: hedef 105.000, alınan 48.000, kalan 57.000", R["target"] == 105000 and R["got"] == 48000 and R["planLeft"] == 57000 and not R["planDone"], R)
+        page.evaluate("closeAll()")
+
         print("Tutarlılık: aynı rakam her ekranda aynı")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tt.json'))", SAMPLE); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)

@@ -953,8 +953,8 @@ function formQuick(mode){
 /* birikim hedefi: Aylık tablodaki "Birikim hedefi" kalemine karşı o ay alınan birikimlerin (alış maliyeti) toplamı */
 function goalRows(n){const goals=S.recs.filter(r=>r.dir==='hedef');if(!goals.length)return null;const cur=today().slice(0,7);
   return Array.from({length:n},(_,i)=>shiftMonth(cur,i-n+1)).map(mk=>{const target=goals.reduce((a,r)=>{const o=recOcc(r,mk);return a+(o?o.plan:0)},0);/* hedef sabit kalır; fazla alım hedefi büyütmez */
-    let got=S.assets.filter(a=>a.type!=='esya'&&a.buyDate&&a.buyDate.slice(0,7)===mk&&a.costTL>0).reduce((a,x)=>a+x.costTL,0);
-    got=Math.max(got,goals.reduce((a,r)=>{const o=recOcc(r,mk);return a+(o?o.paid:0)},0));return {mk,target,got}})}
+    /* Gelen-Giden'deki hedef satırıyla aynı kaynak: hedefe bağlı ödemeler (Yapıldı, ek alım, "hedefime say" denen yatırım alışları) */
+    const got=goals.reduce((a,r)=>{const o=recOcc(r,mk);return a+(o?o.paid:0)},0);return {mk,target,got}})}
 function goalSec(){const R=goalRows(6);if(!R)return '';const c=R[5];const mx=Math.max(1,...R.map(r=>Math.max(r.target,r.got)));const pct=c.target>0?c.got/c.target*100:0;
   const over=c.got-c.target;const tw=c.got>c.target?c.target/c.got*100:100;
   return `<section class="sec" style="margin-top:12px"><h2>Aylık yatırım hedefi · ${monthLabel(c.mk)}</h2>
@@ -2660,6 +2660,8 @@ function formAsset(a){a=a||{type:'gram'};const gr=a._goal?S.recs.find(r=>r.id===
     ${(()=>{const bt=a.id?S.tx.find(t=>t.assetId===a.id&&t.assetBuy):null;const acc=bt?bt.account||'':a.id?'__none':(a._acc||S.accounts[0]?.name||'');
       return `<section class="sec" style="margin:4px 0 10px;padding:12px"><div class="two"><label class="f">Ödediğim toplam (₺)<input name="costTL" type="number" step="0.01" inputmode="decimal" value="${bt?bt.amount:(a.costTL||'')}" placeholder="ör. 45000"></label><label class="f">Alış tarihi<input type="date" name="buyDate" value="${bt?.date||a.buyDate||today()}"></label></div>
       <label class="f">Parayı hangi hesaptan ödedin<select name="payAcc">${opt('__none','Hesaptan çıkmadı / eskiden aldım',acc)}${accOpts(acc)}</select></label>
+      ${(()=>{if(a._goal||a.type==='esya')return '';const mk=(bt?.date||a.buyDate||today()).slice(0,7);const gs=S.recs.filter(r=>r.dir==='hedef'&&recOcc(r,mk));if(!gs.length)return '';const cur=bt?.recId||(a.id?'':gs[0].id);
+        return `<label class="f">Yatırım hedefime say<select name="goalRec">${opt('','Sayma',cur)}${gs.map(r=>opt(r.id,`${r.name} hedefi (${monthLabel(mk)})`,cur)).join('')}</select></label><input type="hidden" name="goalMk" value="${mk}"><div class="small muted" style="margin:-4px 0 8px">Sayarsan Gelen-Giden'deki hedef satırında ve Yatırımlar'daki hedefte aynı tutar görünür. Bunun için yukarıda hesap seçili olmalı.</div>`})()}
       <div class="small muted">Hesap seçersen tutar o hesaptan otomatik düşer. Harcama sayılmaz; para varlığa dönüştüğü için net varlığın değişmez.</div></section>`})()}
     <details ${a.usdRate||a.eurRate?'open':''} style="margin:4px 0 8px"><summary>Alış günündeki kurlar (dolar/euro bazında kâr/zarar için)</summary>
       <div class="two"><label class="f">O gün dolar kuru (₺)<input name="usdRate" type="number" step="0.0001" inputmode="decimal" value="${a.usdRate||''}"></label><label class="f">O gün euro kuru (₺)<input name="eurRate" type="number" step="0.0001" inputmode="decimal" value="${a.eurRate||''}"></label></div>
@@ -3348,7 +3350,7 @@ document.addEventListener('submit',async e=>{
     case 'asset':{const lent=fd.has('lent');const ow=String(g('owner')||'').trim();const aid=g('id')||newId();await put({id:aid,k:'asset',type:g('type'),src:FIBA_T.includes(g('type'))?(g('src')||undefined):undefined,qty:num(g('qty')),note:g('note')||'',value:g('type')==='esya'?num(g('value'))||0:undefined,name:g('type')==='esya'?String(g('name')||'').trim():undefined,owner:ow&&ow!=='Kendim'?ow:'',buyDate:g('buyDate')||'',costTL:num(g('costTL'))||0,usdRate:num(g('usdRate'))||0,eurRate:num(g('eurRate'))||0,lent,who:lent?String(g('who')||'').trim():'',since:lent?g('since')||'':'',dueDate:lent?g('dueDate')||'':''});
       /* alış parası seçilen hesaptan düşer: tek hareket, harcama sayılmaz */
       const pa=g('payAcc');const amt=num(g('costTL'));const bt=S.tx.find(t=>t.assetId===aid&&t.assetBuy);
-      if(pa!=null&&pa!=='__none'&&amt>0){await saveTx([{...(bt||{}),id:bt?.id||newId(),type:'odeme',amount:r2(amt),date:g('buyDate')||today(),account:pa,merchant:`${g('type')==='esya'?(String(g('name')||'').trim()||'Eşya'):ASSET_TYPES[g('type')]||'Varlık'} alımı`,assetId:aid,assetBuy:true,...(g('goalRec')?{recId:g('goalRec'),recMonth:g('goalMk'),recExtra:true}:{}),ts:bt?.ts||Date.now(),via:'manuel'}]);toast(`Kaydedildi · ${TL(amt)} ${pa||'Nakit'} hesabından düştü`)}
+      if(pa!=null&&pa!=='__none'&&amt>0){await saveTx([{...(bt||{}),id:bt?.id||newId(),type:'odeme',amount:r2(amt),date:g('buyDate')||today(),account:pa,merchant:`${g('type')==='esya'?(String(g('name')||'').trim()||'Eşya'):ASSET_TYPES[g('type')]||'Varlık'} alımı`,assetId:aid,assetBuy:true,...(g('goalRec')?{recId:g('goalRec'),recMonth:(g('buyDate')||today()).slice(0,7),recExtra:true}:{recId:undefined,recMonth:undefined,recExtra:undefined}),ts:bt?.ts||Date.now(),via:'manuel'}].map(clean));toast(`Kaydedildi · ${TL(amt)} ${pa||'Nakit'} hesabından düştü`)}
       else if(bt&&pa==='__none')await saveTx([],[bt.id]);
       closeSheet();setTimeout(()=>assetsSheet(g('type')==='esya'?'prop':'inv'),250);break}
     case 'assetsell':{const a=S.assets.find(x=>x.id===g('id'));if(!a)break;const amt=Math.abs(num(g('amount')));let q=Math.abs(num(g('qty')))||a.qty;if(!(amt>0)){toast('Eline geçen tutarı yaz');break}if(q>a.qty+1e-9)q=a.qty;
