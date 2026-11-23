@@ -1020,11 +1020,30 @@ def main():
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
         page.evaluate("put({id:'gz1',k:'rec',name:'Altın',amount:105000,day:15,dir:'hedef',account:S.accounts[0].name,ts:1})"); page.wait_for_timeout(400)
         page.evaluate("openSheet(formAsset())"); page.wait_for_timeout(200)
-        check("yeni altın alışında 'Yatırım hedefime say' seçili gelir", page.evaluate("document.querySelector('#sheetBody select[name=goalRec]').value") == "gz1")
+        check("yeni altın alışında 'Yatırım hedefime say: Evet' seçili gelir", page.evaluate("document.querySelector('#sheetBody select[name=goalRec]').value") == "")
         page.fill("#aQty", "8"); page.fill("#sheetBody input[name=costTL]", "48000"); page.fill("#sheetBody input[name=buyDate]", "2026-11-09")
         page.click("#sheetBody form[data-form=asset] button[type=submit]"); page.wait_for_timeout(700)
         R = page.evaluate("(()=>{const o=monthPlan('2026-11').outs.find(x=>x.id==='gz1'&&!x.done);const g=goalRows(1)[0];return {planLeft:Math.round(o.amount),planDone:o.done,stag:o.stag,target:g.target,got:g.got}})()")
         check("Gelen-Giden ve Yatırımlar aynı: hedef 105.000, alınan 48.000, kalan 57.000", R["target"] == 105000 and R["got"] == 48000 and R["planLeft"] == 57000 and not R["planDone"], R)
+        page.evaluate("closeAll()")
+
+        print("Yatırım hedefi: ay içindeki tüm altın alışları sayılır, çift sayılmaz")
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'g2.json'))", SAMPLE); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        page.evaluate("""(async()=>{await put({id:'gq1',k:'rec',name:'Altın',amount:105000,day:15,dir:'hedef',account:S.accounts[0].name,ts:1});
+          await saveTx([{id:'gp1',type:'odeme',amount:105000,date:'2026-11-05',account:S.accounts[0].name,merchant:'Altın',recId:'gq1',recMonth:'2026-11',ts:1}]);
+          await put({id:'aa1',k:'asset',type:'gram',qty:18,costTL:105000,buyDate:'2026-11-05',ts:1});
+          await put({id:'aa2',k:'asset',type:'gram',qty:7.5,costTL:45000,buyDate:'2026-11-18',ts:1});
+          await put({id:'aa3',k:'asset',type:'gram',qty:10,costTL:60000,buyDate:'2026-11-20',ts:1});
+          await put({id:'aa4',k:'asset',type:'gram',qty:5,costTL:30000,buyDate:'2026-10-20',ts:1});})()"""); page.wait_for_timeout(800)
+        R = page.evaluate("(()=>{const o=recOcc(S.recs.find(r=>r.id==='gq1'),'2026-11');const g=goalRows(1)[0];const p=monthPlan('2026-11').outs.filter(x=>x.id==='gq1');return {paid:o.paid,done:o.done,got:g.got,target:g.target,plan:p.map(x=>[Math.round(x.amount),x.done])}})()")
+        check("hedef 105.000, alınan 210.000 (Yapıldı 105.000 + 45.000 + 60.000; aynı 105.000'lik alış iki kez sayılmaz; Ekim alışı sayılmaz)", R["paid"] == 210000 and R["got"] == 210000 and R["target"] == 105000 and R["done"] and R["plan"] == [[210000, True]], R)
+        page.evaluate("planMonth='2026-11';openSheet('');planItemSheet('rec','gq1')"); page.wait_for_timeout(200)
+        sb = page.evaluate("document.getElementById('sheetBody').textContent")
+        check("hedef ekranında sayılanların listesi ve toplam", "hedefe sayılanlar" in sb and "210.000" in sb and "+105.000" in sb, sb[:400])
+        page.evaluate("openSheet(formAsset(S.assets.find(a=>a.id==='aa3')))"); page.wait_for_timeout(200)
+        page.select_option("#sheetBody select[name=goalRec]", "no"); page.click("#sheetBody form[data-form=asset] button[type=submit]"); page.wait_for_timeout(600)
+        check("'hedefe sayma' denen alış düşer: 150.000", page.evaluate("goalRows(1)[0].got") == 150000)
         page.evaluate("closeAll()")
 
         print("Tutarlılık: aynı rakam her ekranda aynı")
