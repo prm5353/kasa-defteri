@@ -580,7 +580,8 @@ function fixCuts(cuts,cutDay,dueDay,oldCut){const out={};const t=today();Object.
 function cutFor(card,dateStr){return cutCands(card,dateStr).find(c=>c>=dateStr)}
 function dueFor(card,cut){if(card.cuts&&card.cuts[cut])return card.cuts[cut];const d=parse(cut);return card.dueDay>card.cutDay?dayIn(d.getFullYear(),d.getMonth(),card.dueDay):dayIn(d.getFullYear(),d.getMonth()+1,card.dueDay)}
 function prevCut(card,cut){const c=cutCands(card,cut).filter(x=>x<cut);return c[c.length-1]}
-function lastCut(card){const t=today();const c=cutCands(card,t).filter(x=>x<=t);return c[c.length-1]}
+/* kesim günü bitmeden ekstre kesilmiş sayılmaz: kesim günündeki harcamalar da o ekstreye girer (banka gün sonunda keser) */
+function lastCut(card){const t=today();const c=cutCands(card,t).filter(x=>x<t);return c[c.length-1]}
 /* kesin ekstre (banka) tutarı elle girilince: o ekstrenin borcu bu tutardır; uygulamadaki fazlası (kesime yakın, bankanın yeni döneme yazdığı harcamalar) bir sonraki ekstreye geçer. Kartın toplam borcu değişmez, hiçbir harcama iki kez sayılmaz */
 const stmtRaw=(card,cut)=>livePortions().filter(p=>p.cardId===card.id&&(p.pcut||cutFor(card,p.pdate))===cut);
 function stmt(card,cut){
@@ -2587,7 +2588,9 @@ function formTx(x,type){
     <div class="two" data-for="gider"><label class="f">Bir kısmı başkasının mı?<select id="txSplitP" name="splitP">${opt('','Hayır','')}${S.persons.map(p=>opt(p.id,p.name,'')).join('')}</select></label><label class="f">Onun payı (${(x.inst||1)>1?'aylık ':''}₺)<input id="txSplitA" name="splitAmt" type="number" step="0.01" inputmode="decimal" placeholder="ör. 69240"></label></div>
     <div class="f" data-for="gider" id="catWrap"><span class="lbl2">Kategori</span><input type="hidden" name="cat" value="${esc(catVal(x.category||'Market',x.sub))}">${catButton(catVal(x.category||'Market',x.sub),'form')}</div>
     <div class="two" data-for="gider"><label class="f">Taksit sayısı<input id="txInst" name="inst" type="number" min="1" max="36" value="${x.inst||1}"></label><label class="f">Kaçıncı taksit<input id="txInstNo" name="instNo" type="number" min="1" max="36" value="${x.nextDate?(x.instDone||0)+1:1}"></label></div>
-    <div data-for="gider"><p class="small muted" style="margin:0 0 6px">Bankada "(2/2)" gibi görünen eski bir taksitse: taksit sayısı 2, kaçıncı taksit 2 yaz. Sadece kalan taksitler borca eklenir.</p><label class="check"><input type="checkbox" name="refund" ${x.amount<0?'checked':''}> İade</label></div>
+    <div id="txInstCutBox" ${x.nextDate&&x.instDone?'':'hidden'}><label class="f">Bu taksit hangi ekstreye giriyor<select name="instCut">${(()=>{const cd=x.cardId?cardById(x.cardId):null;let cur='open';if(cd&&hasDays(cd)&&x.nextDate){const oc=cutFor(cd,addDays(lastCut(cd),1));cur=cutFor(cd,x.nextDate)>oc?'next':'open'}
+      return opt('open','Şu an kesilecek ekstre (bu ay ödeyeceğim)',cur)+opt('next','Bir sonraki ekstre',cur)})()}</select></label></div>
+    <div data-for="gider"><p class="small muted" style="margin:0 0 6px">Bankada "(2/2)" gibi görünen eski bir taksitse: taksit sayısı 2, kaçıncı taksit 2 yaz ve hangi ekstreye girdiğini seç. Sadece kalan taksitler borca eklenir.</p><label class="check"><input type="checkbox" name="refund" ${x.amount<0?'checked':''}> İade</label></div>
     <label class="f" data-for="gelir">Gelir türü<select id="txSrc" name="source">${incomeSrc().map(s=>opt(s,s,x.source||'Maaş')).join('')}</select></label>
     <label class="f" data-for="tahsilat verdim">Kişi<select id="txWho" name="who">${S.persons.map(p=>opt(p.id,p.name,x.personId)).join('')}</select></label>
     <div class="f"><span class="lbl2" id="srcLbl">Kart / hesap</span>${chipPick('src',srcChoices(),sv)}</div>
@@ -3192,6 +3195,7 @@ function fxRefresh(){const c=document.getElementById('txCur');if(!c)return;const
   if(on&&r){if(!r.value||r.dataset.cur!==c.value){if(!r.dataset.cur||r.dataset.cur!==c.value)r.value=fxDefault(c.value);r.dataset.cur=c.value}document.getElementById('txRateL').textContent=`Kur (1 ${c.value==='EUR'?'€':'$'} = ₺)`;
     const a=num(document.getElementById('txAmount').value);document.getElementById('txTL').textContent=a>0&&num(r.value)>0?TL2(a*num(r.value)):'—'}}
 document.addEventListener('input',e=>{if(['txAmount','txRate','txCur'].includes(e.target.id))fxRefresh();
+  if(e.target.id==='txInstNo'||e.target.id==='txInst'){const b=document.getElementById('txInstCutBox');if(b)b.hidden=!(num(document.getElementById('txInstNo')?.value)>1&&num(document.getElementById('txInst')?.value)>1)}
   if(e.target.id==='subsQ'){subsQ=e.target.value;clearTimeout(window._sqT);window._sqT=setTimeout(()=>{subsEditSheet();const i=document.getElementById('subsQ');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},250);return}
   if(e.target.id==='txSearch'){txQuery=e.target.value;fillTxList()}
   if(e.target.id==='gSearch'){gsQuery=e.target.value;fillSearch()}
@@ -3201,6 +3205,7 @@ document.addEventListener('change',e=>{
   if(e.target.dataset&&(e.target.dataset.incl!=null||e.target.dataset.incli!=null)){inclToggle(e.target);return}
   if(e.target.dataset&&e.target.dataset.lay){const[t,k]=e.target.dataset.lay.split(':');const C=layCfg(t);const hide=new Set(C.hide);if(e.target.checked)hide.delete(k);else hide.add(k);laySave(t,{...C,order:layOrder(t),hide:[...hide]}).then(()=>layoutSheet(t));return}
   if(e.target.id==='txCur')fxRefresh();
+  if(e.target.id==='txInstNo'||e.target.id==='txInst'){const b=document.getElementById('txInstCutBox');if(b)b.hidden=!(num(document.getElementById('txInstNo')?.value)>1&&num(document.getElementById('txInst')?.value)>1)}
   if(e.target.id==='sellQty'){const u=+e.target.dataset.unit||0;const t=document.getElementById('sellTL');if(t&&u>0)t.value=r2(num(e.target.value)*u)}
   if(e.target.id==='dDir'){const l=document.getElementById('dAccL');if(l)l.textContent=e.target.value==='borc'?'Para hangi hesaba geldi':'Parayı hangi hesaptan verdin'}
   if(e.target.dataset&&e.target.dataset.rg){const[k,part]=e.target.dataset.rg.split(':');const td=today();RG[k]=RG[k]||{from:td.slice(0,8)+'01',to:td};RG[k][part]=e.target.value;if(RG[k].from>RG[k].to)[RG[k].from,RG[k].to]=[RG[k].to,RG[k].from];rgRefresh(k);return}
@@ -3303,7 +3308,9 @@ document.addEventListener('submit',async e=>{
       const old=txAll().find(x=>x.id===g('id'));const o={...(old||{}),...fx,id:g('id')||newId(),type,amount,date:g('date'),note:g('note')||'',...srcParse(g('src')),ts:old?.ts||Date.now(),via:old?.via||'manuel'};
       if(type==='gider'){const pid=g('personId');const c=pid===ME?(parseCat(g('cat'))||{category:'Diğer',sub:''}):{category:'',sub:''};Object.assign(o,{merchant:g('merchant'),category:c.category,sub:c.sub,personId:pid,inst:Math.max(1,Math.round(num(g('inst'))||1))});
         const n=o.inst,no=Math.min(n,Math.max(1,Math.round(num(g('instNo'))||1)));o.amount=r2(amount*n);
-        if(n>1&&no>1){if(!(old&&old.nextDate&&old.instDone===no-1&&old.cardId===o.cardId)){const cd=cardById(o.cardId);let nd=o.date;if(cd&&hasDays(cd)){const lc=lastCut(cd);if(nd<=lc)nd=cutFor(cd,addDays(lc,1))}o.nextDate=nd}o.instDone=no-1}else{delete o.nextDate;delete o.instDone}
+        if(n>1&&no>1){const cd=cardById(o.cardId);const ic=g('instCut');
+          if(cd&&hasDays(cd)&&ic){const oc=cutFor(cd,addDays(lastCut(cd),1));o.nextDate=ic==='next'?cutFor(cd,addDays(oc,1)):oc}
+          else if(!(old&&old.nextDate&&old.instDone===no-1&&old.cardId===o.cardId)){let nd=o.date;if(cd&&hasDays(cd)){const lc=lastCut(cd);if(nd<=lc)nd=cutFor(cd,addDays(lc,1))}o.nextDate=nd}o.instDone=no-1}else{delete o.nextDate;delete o.instDone}
         if(fd.has('refund'))o.amount=-o.amount}
       else if(type==='gelir')Object.assign(o,{merchant:g('merchant'),source:g('source')});
       else if(type==='transfer'){const to=srcParse(g('to'));Object.assign(o,{merchant:g('merchant')||'Transfer',toCardId:to.cardId,toAccount:to.account})}
