@@ -1105,6 +1105,23 @@ def main():
         check("kesildikten sonra 'son kesilen ekstreye ekle' ile o ekstreye girer", page.evaluate("livePortions().find(p=>p.merchant==='Geç gelen').pcut") == "2026-11-05")
         page.evaluate("closeAll();CUTCONF_FROM='2026-11-24'")
 
+        print("Fiş: ürün çeşidi kısaltılmaz")
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'fs.json'))", SAMPLE); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        page.evaluate("""(async()=>{S.prod.map={p1:{name:'Maden suyu',size:'200 ml',unit:'adet',group:'İçecek'}};S.prod.alias={};S.prod.alias[normProd('BEYPAZARI MADEN SUYU')]='p1';await saveProd();
+          await saveReceipt({id:'r1',store:'Migros',date:'2026-11-03',total:30,items:[{pid:'p1',raw:'BEYPAZARI MADEN SUYU',qty:1,unit:'adet',unitPrice:10,lineTotal:10,discount:0},{pid:'p1',raw:'BEYPAZARI MADEN SUYU FRENK',qty:2,unit:'adet',unitPrice:10,lineTotal:20,discount:0}],ts:1})})()"""); page.wait_for_timeout(500)
+        it = page.evaluate("fisItem({raw:'BEYPAZARI MADEN SUYU FRENK',name:'Maden suyu',size:'200 ml',qty:'1',unitPrice:'11',lineTotal:'11'})")
+        check("yeni fişte 'MADEN SUYU FRENK' → 'Maden suyu frenk', sade maden suyuna bağlanmaz", it["name"] == "Maden suyu frenk", it["name"])
+        page.evaluate("_fpv=false;fixProdVariants()"); page.wait_for_timeout(600)
+        N = page.evaluate("S.receipts.find(r=>r.id==='r1').items.map(i=>S.prod.map[i.pid].name)")
+        check("geçmiş fişte de ayrıldı", N == ["Maden suyu", "Maden suyu frenk"], N)
+        page.evaluate("receiptSheet('r1')"); page.wait_for_timeout(200)
+        page.click("#sheetBody [data-act=rcitem][data-v='0']"); page.wait_for_timeout(200)
+        page.fill("#sheetBody form[data-form=rcitem] input[name=name]", "Maden suyu sade"); page.click("#sheetBody form[data-form=rcitem] button[type=submit]"); page.wait_for_timeout(600)
+        N = page.evaluate("S.receipts.find(r=>r.id==='r1').items.map(i=>S.prod.map[i.pid].name)")
+        check("fişteki ürün adı elle düzeltilebilir", N == ["Maden suyu sade", "Maden suyu frenk"], N)
+        page.evaluate("closeAll()")
+
         print("Tutarlılık: aynı rakam her ekranda aynı")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tt.json'))", SAMPLE); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)

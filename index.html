@@ -855,7 +855,7 @@ async function boot(){
   try{idb=await idbOpen();(await idbAll()).forEach(([k,v])=>MEM.set(k,v))}catch(e){S.error='idb';render();return}
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
   db=localDb;base=localDb.collection();
-  base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render();fixPendPerson();fixInstNames()});
+  base.onSnapshot(snap=>{partition(snap.docs);S.loaded=true;S.error=null;render();fixPendPerson();fixInstNames();fixProdVariants()});
   try{if(ls.get('kd_due1','')!=='1'){for(const c of S.cards){if(!c.cuts||!hasDays(c))continue;const nc=fixCuts(c.cuts,c.cutDay,c.dueDay);if(JSON.stringify(nc)!==JSON.stringify(c.cuts))await put({...c,cuts:nc})}ls.set('kd_due1','1')}}catch(e){}
   try{if(ls.get('kd_sal1','')!=='1'){if(!S.recs.some(r=>r.dir==='gelir')){await put({k:'rec',dir:'gelir',name:'Maaş',amount:80000,day:15});await put({k:'rec',dir:'gelir',name:'Ek gelir 1',amount:10000,day:25});await put({k:'rec',dir:'gelir',name:'Ek gelir 2',amount:10000,day:30})}ls.set('kd_sal1','1')}}catch(e){}
   /* kategori ağacı hiç kaydedilmemişse, kullanılan alt kategorilerle birlikte veriye yazılır (kod içindeki varsayılan değişse de kaybolmaz) */
@@ -2378,7 +2378,7 @@ function productSheet(pid){
 }
 function receiptSheet(id){
   const r=S.receipts.find(x=>x.id===id);if(!r)return;const P=S.prod.map;
-  openSheet(head(esc(r.store))+`<div class="small muted" style="margin:-6px 0 10px">${fmtDY(r.date)} · ${TL2(r.total)}</div><section class="sec">${(r.items||[]).map(it=>`<div class="row"><div class="main"><div class="t">${esc(P[it.pid]?.name||it.raw)}</div><div class="s">${esc(it.raw)} · ${nfq.format(it.qty)} ${it.unit==='kg'?'kg':'adet'} × ${TL2(it.unitPrice)}</div></div><div class="amt">${TL2((it.lineTotal||0)-(it.discount||0))}</div></div>`).join('')}</section><div class="btnrow" style="margin-top:12px"><button class="btn danger" data-act="delreceipt" data-id="${r.id}">Fişi sil</button></div>`);
+  openSheet(head(esc(r.store))+`<div class="small muted" style="margin:-6px 0 10px">${fmtDY(r.date)} · ${TL2(r.total)}</div><section class="sec">${(r.items||[]).map((it,ix)=>`<div class="row tap" data-act="rcitem" data-id="${r.id}" data-v="${ix}"><div class="main"><div class="t">${esc(P[it.pid]?.name||it.raw)}</div><div class="s">${esc(it.raw)} · ${nfq.format(it.qty)} ${it.unit==='kg'?'kg':'adet'} × ${TL2(it.unitPrice)}</div></div><div class="amt">${TL2((it.lineTotal||0)-(it.discount||0))}</div></div>`).join('')}</section><p class="small muted">Ürünün adı yanlış ya da kısaltılmışsa satıra dokun, düzelt.</p><div class="btnrow" style="margin-top:12px"><button class="btn danger" data-act="delreceipt" data-id="${r.id}">Fişi sil</button></div>`);
 }
 
 /* ---------- birikim, defter, kişi ---------- */
@@ -2910,18 +2910,31 @@ async function runFis(){
   btn.disabled=true;st.innerHTML='<span class="spin"></span> Fiş okunuyor…';
   const known=Object.values(S.prod.map).slice(0,150).map(p=>p.name+(p.size?' '+p.size:'')).join(', ');
   const prompt=`Görüntü(ler) Türkiye'den bir market fişi; birden fazlaysa aynı fişin parçaları, tekrar eden satırları bir kez yaz. Bugün ${today()}.
-Yalnızca şu JSON'u döndür: {"store":"kısa marka adı","date":"YYYY-MM-DD","total":"fiş TOPLAMI, ekranda yazdığı gibi metin","items":[{"raw":"fişteki ad aynen","name":"genel ürün adı, marka ve gramajsız (Muz, Peçete, Süt)","brand":"","size":"paket gramajı/hacmi, tartılıda boş","qty":sayı,"unit":"adet|kg","unitPrice":"birim ya da kg fiyatı, fişte yazdığı gibi metin","lineTotal":"satır tutarı, fişte yazdığı gibi metin","discount":"ürüne indirim, metin; yoksa 0","group":"${PGROUPS.join(' | ')}"}]}
-Kurallar: "2 x 12,50" ya da üst/alt satırdaki "2 AD X 12,50": qty 2, unitPrice 12,50, lineTotal 25,00; çarpanı doğru ürüne bağla, tek ürün sanma. Tartılı "0,845 KG X 89,90": qty 0.845, unit kg, unitPrice 89,90. İndirim satırlarını ayrı ürün yazma, üstündeki ürünün discount'una ekle. KDV, ara toplam, ödeme satırlarını yazma. Virgül ondalıktır.${known?` Bilinen ürün adları (aynı ürünse bunları kullan): ${known}.`:''}`;
+Yalnızca şu JSON'u döndür: {"store":"kısa marka adı","date":"YYYY-MM-DD","total":"fiş TOPLAMI, ekranda yazdığı gibi metin","items":[{"raw":"fişteki ad aynen","name":"ürün adı: marka ve gramaj OLMADAN ama çeşit/tat/tür kelimeleri AYNEN KALIR (Maden suyu frenk üzümlü ≠ Maden suyu; Süt laktozsuz ≠ Süt; Yoğurt süzme; Muz; Peçete). Fişteki adı kısaltma, çeşidi atma","brand":"","size":"paket gramajı/hacmi, tartılıda boş","qty":sayı,"unit":"adet|kg","unitPrice":"birim ya da kg fiyatı, fişte yazdığı gibi metin","lineTotal":"satır tutarı, fişte yazdığı gibi metin","discount":"ürüne indirim, metin; yoksa 0","group":"${PGROUPS.join(' | ')}"}]}
+Kurallar: "2 x 12,50" ya da üst/alt satırdaki "2 AD X 12,50": qty 2, unitPrice 12,50, lineTotal 25,00; çarpanı doğru ürüne bağla, tek ürün sanma. Tartılı "0,845 KG X 89,90": qty 0.845, unit kg, unitPrice 89,90. İndirim satırlarını ayrı ürün yazma, üstündeki ürünün discount'una ekle. KDV, ara toplam, ödeme satırlarını yazma. Virgül ondalıktır.${known?` Daha önce kaydedilen ürün adları: ${known}. Yalnızca ürün VE çeşidi birebir aynıysa bu adı kullan; çeşit/tat farklıysa (frenk, limonlu, light, laktozsuz…) yeni ad yaz.`:''}`;
   try{const res=(await askImages(prompt,files.slice(0,sampleCaps?.images?.maxCount||4)))[0]||{};
     RC={store:tidyStore(res.store),date:/^\d{4}-\d{2}-\d{2}$/.test(res.date||'')?res.date:today(),total:r2(trAmount(res.total)),items:(Array.isArray(res.items)?res.items:[]).map(fisItem)};renderFis();
   }catch(e){btn.disabled=false;st.textContent=sampleErr(e)}
 }
 function tidyStore(s){s=String(s||'Market').trim();const k=asciiUp(s).replace(/\s/g,'');const map={MIGROS:'Migros',FILE:'File',A101:'A101',BIM:'BİM',SOK:'Şok',CARREFOURSA:'CarrefourSA',MACROFOOD:'Macrofood',METRO:'Metro',HAKMAR:'Hakmar',TARIMKREDI:'Tarım Kredi'};for(const[a,b]of Object.entries(map))if(k.startsWith(a))return b;return s.slice(0,24)}
 function findProd(name,size){const k=normProd(name)+'|'+normSize(size);return Object.keys(S.prod.map).find(pid=>{const p=S.prod.map[pid];return normProd(p.name)+'|'+normSize(p.size||'')===k})||null}
+/* çeşit / tat kelimeleri: "MADEN SUYU FRENK" ile "MADEN SUYU" farklı ürün */
+const VAR_W=['FRENK','LIMON','LIMONLU','ELMA','ELMALI','PORTAKAL','PORTAKALLI','CILEK','CILEKLI','KIRAZ','VISNE','VISNELI','NAR','MANGO','ANANAS','KAYISI','SEFTALI','MUZLU','KARPUZ','KAVUN','NANE','NANELI','MANDALINA','GREYFURT','KARADUT','BOGURTLEN','AHUDUDU','SADE','LIGHT','ZERO','DIYET','SEKERSIZ','LAKTOZSUZ','YAGSIZ','YARIMYAGLI','TAMYAGLI','SUZME','KAKAOLU','CIKOLATALI','FINDIKLI','KEPEKLI','TAMBUGDAY','CAVDARLI','TAM','YARIM','BEYAZ','KARA','KIRMIZI','YESIL','ACI','TATLI','TUZSUZ','TUZLU','AZTUZLU','KREMALI','VANILYALI','KARAMELLI','COKELEKLI','KASARLI','PEYNIRLI','SUCUKLU','TAVUKLU','DANA','KUZU','HINDI','PILIC'];
+const varWords=s=>{const W=asciiUp(s||'').replace(/[^A-Z0-9 ]/g,' ').split(/\s+/);return [...new Set(W.filter(w=>VAR_W.includes(w)))]};
+const titleTr=w=>{const m={FRENK:'frenk',LIMON:'limon',LIMONLU:'limonlu',SADE:'sade',LIGHT:'light',ZERO:'zero'};return m[w]||w.toLocaleLowerCase('tr-TR')};
+/* geçmişe dönük: fişte çeşit kelimesi olup ürün adında olmayan satırlar doğru (çeşitli) ürüne taşınır, bir kez */
+let _fpv=false;async function fixProdVariants(){if(_fpv||!S.receipts||!S.prod)return;_fpv=true;let ch=false;const upd=[];
+  for(const r of S.receipts){let rc=false;const items=(r.items||[]).map(it=>{const p=S.prod.map[it.pid];if(!p)return it;const miss=varWords(it.raw).filter(w=>!varWords(p.name).includes(w));if(!miss.length)return it;
+    const name=(p.name+' '+miss.map(titleTr).join(' ')).trim();let pid=findProd(name,p.size||'');if(!pid){pid=newId();S.prod.map[pid]={...p,name}}S.prod.alias[normProd(it.raw)]=pid;ch=rc=true;return {...it,pid}});
+    if(rc)upd.push({...r,items})}
+  if(ch){try{await saveProd();for(const r of upd)await saveReceipt(r)}catch(e){}}}
 function fisItem(it){
   const qty=Math.abs(trAmount(it.qty))||1;let up=Math.abs(trAmount(it.unitPrice)),lt=trAmount(it.lineTotal);const unit=String(it.unit||'').toLowerCase().startsWith('k')?'kg':'adet';let warn='';
   if(!lt&&up)lt=r2(qty*up);if(!up&&lt)up=r2(lt/qty);if(Math.abs(qty*up-lt)>0.06&&lt>0){up=r2(lt/qty);warn='Adet × fiyat satır tutarını tutmuyordu, birim fiyatı satırdan hesapladım.'}
-  const name=String(it.name||it.raw||'Ürün').trim(),size=String(it.size||'').trim();const al=S.prod.alias[normProd(it.raw)];const ex=al&&S.prod.map[al]?al:findProd(name,size);
+  let name=String(it.name||it.raw||'Ürün').trim();const size=String(it.size||'').trim();
+  const miss=varWords(it.raw).filter(w=>!varWords(name).includes(w));if(miss.length)name=(name+' '+miss.map(titleTr).join(' ')).trim();
+  const same=pid=>{const p=S.prod.map[pid];if(!p)return false;const a=varWords(p.name),b=varWords(name);return a.length===b.length&&a.every(w=>b.includes(w))};
+  const al=S.prod.alias[normProd(it.raw)];const fp=findProd(name,size);const ex=al&&same(al)?al:fp;
   return {raw:String(it.raw||name),name:ex?S.prod.map[ex].name:name,size:ex?(S.prod.map[ex].size||''):size,brand:String(it.brand||''),qty,unit,unitPrice:up,lineTotal:r2(lt),discount:r2(Math.abs(trAmount(it.discount))),group:PGROUPS.includes(it.group)?it.group:(ex?S.prod.map[ex].group:'Diğer'),warn,on:true};
 }
 function renderFis(){
@@ -3180,6 +3193,11 @@ document.addEventListener('click',async e=>{
     case 'savefis':el.disabled=true;await saveFis();break;
     case 'product':productSheet(id);break;
     case 'receipt':receiptSheet(id);break;
+    case 'rcitem':{const r=S.receipts.find(x=>x.id===id);const it=r?.items?.[+el.dataset.v];if(!it)break;const p=S.prod.map[it.pid]||{};
+      openSheet(head('Ürünü düzelt')+`<form data-form="rcitem"><input type="hidden" name="rid" value="${r.id}"><input type="hidden" name="ix" value="${el.dataset.v}"><div class="small muted" style="margin:0 0 8px">Fişte: <b>${esc(it.raw)}</b></div>
+        <div class="two"><label class="f">Ürün adı<input name="name" list="prodNames" required value="${esc(p.name||it.raw)}"></label><label class="f">Gramaj<input name="size" value="${esc(p.size||'')}"></label></div><datalist id="prodNames">${Object.values(S.prod.map).map(q=>`<option value="${esc(q.name)}">`).join('')}</datalist>
+        <label class="check"><input type="checkbox" name="all" checked> Bu addaki (${esc(it.raw)}) bütün fişlerde düzelt</label>
+        <p class="small muted">Ad başka bir ürünle aynıysa ona katılır, değilse yeni ürün olur. Fiyat geçmişi doğru ürüne geçer.</p><button class="btn" type="submit">Kaydet</button></form>`);break}
     case 'delreceipt':if(armed(el)){const old=S.receipts.find(x=>x.id===id);await saveReceipt(null,id);closeSheet();toast('Fiş silindi',0,old?()=>saveReceipt(old):null)}break;
     case 'person':personSheet(id);break;
     case 'payp':openSheet(formPay(id));break;
@@ -3368,6 +3386,11 @@ document.addEventListener('submit',async e=>{
       await put({...base,id:newId(),dir:'gelir',name:`${who} · kredi taksiti gelir`,amount:num(g('inAmt')),day:Math.round(num(g('inDay')))||1});
       await put({...base,id:newId(),dir:'gider',name:`${who} adına kredi taksiti`,amount:num(g('outAmt')),day:Math.round(num(g('outDay')))||1});
       closeSheet();toast('Kaydedildi · gelen ve giden Gelen-Giden\'de, gelir/gider sayılmaz');break}
+    case 'rcitem':{const r=S.receipts.find(x=>x.id===g('rid'));const it=r?.items?.[+g('ix')];if(!it)break;const name=g('name').trim(),size=(g('size')||'').trim();if(!name)break;
+      let pid=findProd(name,size);if(!pid){pid=newId();const o=S.prod.map[it.pid]||{};S.prod.map[pid]={name,size,unit:it.unit,group:o.group||'Diğer'}}
+      const k=normProd(it.raw);S.prod.alias[k]=pid;const targets=fd.has('all')?S.receipts.filter(x=>(x.items||[]).some(y=>normProd(y.raw)===k)):[r];
+      await saveProd();for(const x of targets)await saveReceipt({...x,items:x.items.map((y,j)=>(fd.has('all')?normProd(y.raw)===k:(x.id===r.id&&j===+g('ix')))?{...y,pid}:y)});
+      closeSheet();toast(`${targets.length} fişte düzeltildi`);break}
     case 'sub':{const E=subsEdit();const id=g('id');const it={id:id||newId(),name:g('name').trim(),amt:num(g('amount'))>0?r2(num(g('amount'))):0,note:g('note').trim()};if(!it.name)return;
       if(id)E.items=E.items.map(x=>x.id===id?it:x);else E.items.push(it);await subsSave(E);subsEditSheet();toast(it.note?`${it.note} kaydedildi`:'Kaydedildi');break}
     case 'recover':{const r=S.recs.find(x=>x.id===g('id'));if(!r)return;const mk=g('mk');const over={...(r.over||{})};const[y,m]=mk.split('-').map(Number);const def=dayIn(y,m-1,r.day||1);
