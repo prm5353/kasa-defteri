@@ -1141,6 +1141,18 @@ def main():
         check("eski ekstreye dokununca o ekstrenin harcamaları", "Eski ekstre deneme" in page.evaluate("document.getElementById('sheetBody').textContent"))
         page.evaluate("closeAll()")
 
+        print("Kesilmiş ekstre karşılaştırması: dönem kartın kesiminden")
+        page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'ke.json'))", SAMPLE); page.wait_for_timeout(300)
+        page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
+        page.evaluate("saveTx([{id:'o1',type:'gider',amount:100,date:'2026-10-05',cardId:'c1',personId:'me',category:'Market',sub:'',merchant:'EKIM A',ts:1},{id:'o2',type:'gider',amount:200,date:'2026-10-12',cardId:'c1',personId:'me',category:'Market',sub:'',merchant:'EKIM B',ts:1},{id:'o3',type:'gider',amount:300,date:'2026-10-18',cardId:'c1',personId:'me',category:'Market',sub:'',merchant:'EKIM C',ts:1}])"); page.wait_for_timeout(400)
+        page.evaluate("""sampleFn=()=>{};askImages=async()=>[{total:'300',period_end:'2026-10-21',rows:[{date:'2026-10-05',merchant:'EKIM A',amount:'100'}]}]""")
+        page.evaluate("openSheet(formStmt('c1','last'))"); page.wait_for_timeout(200)
+        page.set_input_files("#stFiles", png); page.click("#stGo"); page.wait_for_timeout(600)
+        R = page.evaluate("({end:RV.end,ex:RV.extras.map(x=>x.merchant).sort()})")
+        check("ekstre dönemi kartın kesiminden (20 Eki), Kasım harcamaları fazla sayılmaz", R["end"] == "2026-10-20" and R["ex"] == ["EKIM B", "EKIM C"], R)
+        check("ekstrenin tüm sayfaları yüklenmediyse 'silme' uyarısı", "Aşağıdakileri silme" in page.evaluate("document.getElementById('sheetBody').textContent"))
+        page.evaluate("closeAll()")
+
         print("Tutarlılık: aynı rakam her ekranda aynı")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tt.json'))", SAMPLE); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
