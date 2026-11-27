@@ -1122,6 +1122,14 @@ def main():
         check("fişteki ürün adı elle düzeltilebilir", N == ["Maden suyu sade", "Maden suyu frenk"], N)
         page.evaluate("closeAll()")
 
+        print("Bankayla karşılaştır düğmesi")
+        page.evaluate("openSheet(head('k')+cardBlock(S.cards[0],cardState(S.cards[0])))"); page.wait_for_timeout(200)
+        page.click("#sheetBody [data-act=bankcheck]"); page.wait_for_timeout(200)
+        check("kart ekranında 'Bankayla karşılaştır' → dönem içi ve kesilen ekstre seçenekleri", page.locator("#sheetBody [data-act=stmtcmp][data-per=open]").count() == 1 and page.locator("#sheetBody [data-act=stmtcmp][data-per=last]").count() == 1)
+        page.click("#sheetBody [data-act=stmtcmp][data-per=last]"); page.wait_for_timeout(200)
+        check("seçince ilgili yükleme ekranı açılır", page.evaluate("document.querySelector('#sheetBody input[name=per][value=last], #sheetBody [data-chip] ') !== null || document.getElementById('sheetBody').textContent.includes('Kesilmiş ekstre')"))
+        page.evaluate("closeAll()")
+
         print("Tutarlılık: aynı rakam her ekranda aynı")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tt.json'))", SAMPLE); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
