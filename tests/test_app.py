@@ -1141,6 +1141,20 @@ def main():
         check("eski ekstreye dokununca o ekstrenin harcamaları", "Eski ekstre deneme" in page.evaluate("document.getElementById('sheetBody').textContent"))
         page.evaluate("closeAll()")
 
+        print("Taksit bankadaki gibi alışveriş gününde düşer")
+        page.evaluate("saveTx([{id:'tk17',type:'gider',amount:300,inst:3,date:'2026-09-17',cardId:S.cards[0].id,personId:'me',category:'Giyim',sub:'',merchant:'Onyedi taksit',ts:2}])"); page.wait_for_timeout(400)
+        P = page.evaluate("livePortions().filter(p=>p.merchant==='Onyedi taksit').map(p=>[p.pdate,p.pcut])")
+        cn = page.evaluate("cutFor(S.cards[0],today())")
+        check("her taksit kendi döneminde ayın 17'sinde", [x[0][8:] for x in P] == ["17","17","17"] and len(set(x[1] for x in P)) == 3, P)
+        last = P[-1]
+        page.evaluate("closeAll();openSheet(head('k')+cardBlock(S.cards[0],cardState(S.cards[0])))"); page.wait_for_timeout(200)
+        sb = page.evaluate("document.getElementById('sheetBody').textContent")
+        if last[1] == cn and last[0] > "2026-11-10":
+            check("dönem içinde henüz düşmemiş taksit ayrı gösterilir", "Bu dönem düşecek taksitler" in sb, sb[:300])
+        else:
+            check("dönem içi listesi açılır", "Dönem içi harcamalar" in sb)
+        page.evaluate("closeAll()")
+
         print("Kesilmiş ekstre karşılaştırması: dönem kartın kesiminden")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'ke.json'))", SAMPLE); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)

@@ -560,12 +560,12 @@ function portions(t){
   const done=t.nextDate?Math.max(0,Math.round(t.instDone||0)):0;let first=t.nextDate||t.date;
   const card=t.cardId?S.cards.find(c=>c.id===t.cardId):null;
   /* kesim günü sonradan değiştiyse (25→24) kayıtlı taksit tarihini en yakın kesime oturt */
-  if(t.nextDate&&card&&hasDays(card)){const near=cutCands(card,t.nextDate).find(c=>Math.abs(daysBetween(c,t.nextDate))<=3);if(near)first=near}
+  if(t.nextDate&&!t.ndDay&&card&&hasDays(card)){const near=cutCands(card,t.nextDate).find(c=>Math.abs(daysBetween(c,t.nextDate))<=3);if(near)first=near}
   const out=[];let cut=card&&hasDays(card)?cutFor(card,first):null;
   for(let j=0;j<n-done;j++){
     let pd;
     if(j===0)pd=first;
-    else if(cut){cut=cutFor(card,addDays(cut,1));pd=cut}
+    else if(cut){cut=cutFor(card,addDays(cut,1));pd=instDay(card,cut,+String(t.date).slice(8,10))}
     else pd=addMonths(first,j);
     out.push({...t,pdate:pd,pamount:per,pi:done+j+1,pn:n,pcut:cut?(j===0&&t.stmtCut?t.stmtCut:cutFor(card,pd)):null});
   }
@@ -579,11 +579,14 @@ function cutCands(card,dateStr){const d=parse(dateStr);const known=card.cuts||{}
 function fixCuts(cuts,cutDay,dueDay,oldCut){const out={};const t=today();Object.entries(cuts||{}).forEach(([k,v])=>{if(k<=t){out[k]=v;return}if(oldCut&&oldCut!==cutDay)return;out[k]=dueFor({cutDay,dueDay},k)});return out}
 function cutFor(card,dateStr){return cutCands(card,dateStr).find(c=>c>=dateStr)}
 function dueFor(card,cut){if(card.cuts&&card.cuts[cut])return card.cuts[cut];const d=parse(cut);return card.dueDay>card.cutDay?dayIn(d.getFullYear(),d.getMonth(),card.dueDay):dayIn(d.getFullYear(),d.getMonth()+1,card.dueDay)}
+/* banka taksiti her ay alışverişin yapıldığı gün düşer (17'sinde alındıysa her ayın 17'si): o ekstre dönemindeki aynı gün */
+function instDay(card,cut,day){const pc=prevCut(card,cut);const mk=(y,m)=>{const dim=new Date(y,m,0).getDate();return `${y}-${String(m).padStart(2,'0')}-${String(Math.min(day,dim)).padStart(2,'0')}`};
+  let [y,m]=cut.split('-').map(Number);let d=mk(y,m);if(d>cut){m--;if(m<1){m=12;y--}d=mk(y,m)}if(pc&&d<=pc)d=cut;return d}
 function prevCut(card,cut){const c=cutCands(card,cut).filter(x=>x<cut);return c[c.length-1]}
 /* kesim günü bitmeden ekstre kesilmiş sayılmaz: kesim günündeki harcamalar da o ekstreye girer (banka gün sonunda keser) */
 /* ekstre senin onayınla kesilir: kesim günü geçse de bankayla karşılaştırıp onaylayana (ya da bankanın tutarını girene) kadar dönem açık kalır.
    Son ödeme günü geçerse kendiliğinden kesilmiş sayılır. Bu özellikten önceki kesimler onaylı sayılır. */
-const APP_VER='v125';
+const APP_VER='v126';
 let CUTCONF_FROM='2026-11-24';
 const cutOk=(card,c)=>{const s=S.stmts.find(x=>x.cardId===card.id&&x.cut===c);return !!(s&&(s.confirmed||s.manualTotal!=null||s.paid||s.checked))};
 function pendingCut(card){if(!hasDays(card))return null;const t=today();const c=cutCands(card,t).filter(x=>x<t);const lc=c[c.length-1];return lc&&lc>=CUTCONF_FROM&&!cutOk(card,lc)&&dueFor(card,lc)>=t?lc:null}
@@ -1645,10 +1648,13 @@ function viewCards(){
 }
 let cardRange={};
 /* dönem içi: bugünün dahil olduğu dönemin harcamaları (ekstre kesildikten sonra girilenler burada), liste açık gelir */
-function curPeriodBox(c,st){const cn=cutFor(c,today());const s=stmt(c,cn);const pc=prevCut(c,cn);const L=[...s.items].sort((a,b)=>b.pdate.localeCompare(a.pdate)||(b.ts||0)-(a.ts||0));
-  return `<details class="box" open style="margin-top:10px"><summary style="cursor:pointer"><span class="eyebrow" style="display:inline">Dönem içi harcamalar</span> <span class="small muted">${pc?fmtD(addDays(pc,1)):''} – bugün · kesim ${fmtD(cn)}</span><b style="float:right">${TL(s.total)}</b></summary>
-    ${s.carryIn>0.5?`<div class="small muted" style="margin:4px 0">Önceki ekstreden geçen ${TL(s.carryIn)} dahil (bankada bu dönemde görünmez)</div>`:''}
-    ${L.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')||'<div class="empty">Bu dönem henüz harcama yok.</div>'}</details>`}
+function curPeriodBox(c,st){const cn=cutFor(c,today());const s=stmt(c,cn);const pc=prevCut(c,cn);const t=today();const srt=L=>[...L].sort((a,b)=>b.pdate.localeCompare(a.pdate)||(b.ts||0)-(a.ts||0));
+  const now=srt(s.items.filter(p=>p.pdate<=t)),up=srt(s.items.filter(p=>p.pdate>t)).reverse();const nowT=now.reduce((a,p)=>a+p.pamount,0),upT=up.reduce((a,p)=>a+p.pamount,0);const row=p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true});
+  return `<details class="box" open style="margin-top:10px"><summary style="cursor:pointer"><span class="eyebrow" style="display:inline">Dönem içi harcamalar</span> <span class="small muted">${pc?fmtD(addDays(pc,1)):''} – bugün · kesim ${fmtD(cn)}</span><b style="float:right">${TL(nowT)}</b></summary>
+    <div class="small muted" style="margin:4px 0">Bankanın dönem içinde bugün göreceğin tutar: <b>${TL(nowT)}</b>${upT>0.5?` · kesime kadar düşecek taksitlerle dönem sonu <b>${TL(nowT+upT+(s.carryIn||0))}</b>`:''}</div>
+    ${s.carryIn>0.5?`<div class="small muted" style="margin:4px 0">Önceki ekstreden geçen ${TL(s.carryIn)} de bu ekstreye eklenecek (bankada bu dönemde görünmez)</div>`:''}
+    ${now.map(row).join('')||'<div class="empty">Bu dönem henüz harcama yok.</div>'}
+    ${up.length?`<div class="daygrp">Bu dönem düşecek taksitler · ${TL(upT)}</div><div class="small muted" style="margin:-2px 0 4px">Banka taksiti alışverişin yapıldığı günde dönem içine ekler; o güne kadar bankada görünmez.</div>${up.map(row).join('')}`:''}</details>`}
 /* eski ekstreler: kesim kesim toplam, ödendi mi; dokununca o ekstrenin harcamaları */
 function pastStmts(c){const cn=cutFor(c,today());const cuts=[...new Set(livePortions().filter(p=>p.cardId===c.id).map(p=>p.pcut||cutFor(c,p.pdate)))].filter(x=>x<cn).sort().reverse().slice(0,24);
   if(!cuts.length)return '';
@@ -3366,7 +3372,7 @@ document.addEventListener('submit',async e=>{
       if(type==='gider'){const pid=g('personId');const c=pid===ME?(parseCat(g('cat'))||{category:'Diğer',sub:''}):{category:'',sub:''};Object.assign(o,{merchant:g('merchant'),category:c.category,sub:c.sub,personId:pid,inst:Math.max(1,Math.round(num(g('inst'))||1))});
         const n=o.inst,no=Math.min(n,Math.max(1,Math.round(num(g('instNo'))||1)));o.amount=r2(amount*n);
         if(n>1&&no>1){const cd=cardById(o.cardId);const ic=g('instCut');
-          if(cd&&hasDays(cd)&&ic){const oc=cutFor(cd,addDays(lastCut(cd),1));o.nextDate=ic==='next'?cutFor(cd,addDays(oc,1)):oc}
+          if(cd&&hasDays(cd)&&ic){const oc=cutFor(cd,addDays(lastCut(cd),1));const kc=ic==='next'?cutFor(cd,addDays(oc,1)):oc;o.nextDate=instDay(cd,kc,+String(o.date).slice(8,10));o.ndDay=true}
           else if(!(old&&old.nextDate&&old.instDone===no-1&&old.cardId===o.cardId)){let nd=o.date;if(cd&&hasDays(cd)){const lc=lastCut(cd);if(nd<=lc)nd=cutFor(cd,addDays(lc,1))}o.nextDate=nd}o.instDone=no-1}else{delete o.nextDate;delete o.instDone}
         {const sp=g('stmtPin');const cd=o.cardId?cardById(o.cardId):null;if(sp==='last'&&cd&&hasDays(cd))o.stmtCut=lastCut(cd);else if(sp==='')delete o.stmtCut;}
         if(fd.has('refund'))o.amount=-o.amount}
