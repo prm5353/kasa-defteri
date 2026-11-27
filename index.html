@@ -583,7 +583,7 @@ function prevCut(card,cut){const c=cutCands(card,cut).filter(x=>x<cut);return c[
 /* kesim günü bitmeden ekstre kesilmiş sayılmaz: kesim günündeki harcamalar da o ekstreye girer (banka gün sonunda keser) */
 /* ekstre senin onayınla kesilir: kesim günü geçse de bankayla karşılaştırıp onaylayana (ya da bankanın tutarını girene) kadar dönem açık kalır.
    Son ödeme günü geçerse kendiliğinden kesilmiş sayılır. Bu özellikten önceki kesimler onaylı sayılır. */
-const APP_VER='v123';
+const APP_VER='v124';
 let CUTCONF_FROM='2026-11-24';
 const cutOk=(card,c)=>{const s=S.stmts.find(x=>x.cardId===card.id&&x.cut===c);return !!(s&&(s.confirmed||s.manualTotal!=null||s.paid||s.checked))};
 function pendingCut(card){if(!hasDays(card))return null;const t=today();const c=cutCands(card,t).filter(x=>x<t);const lc=c[c.length-1];return lc&&lc>=CUTCONF_FROM&&!cutOk(card,lc)&&dueFor(card,lc)>=t?lc:null}
@@ -1644,6 +1644,20 @@ function viewCards(){
   <button class="btn" data-act="newcard">+ Kart ekle</button>`]]);
 }
 let cardRange={};
+/* dönem içi: bugünün dahil olduğu dönemin harcamaları (ekstre kesildikten sonra girilenler burada), liste açık gelir */
+function curPeriodBox(c,st){const cn=cutFor(c,today());const s=stmt(c,cn);const pc=prevCut(c,cn);const L=[...s.items].sort((a,b)=>b.pdate.localeCompare(a.pdate)||(b.ts||0)-(a.ts||0));
+  return `<details class="box" open style="margin-top:10px"><summary style="cursor:pointer"><span class="eyebrow" style="display:inline">Dönem içi harcamalar</span> <span class="small muted">${pc?fmtD(addDays(pc,1)):''} – bugün · kesim ${fmtD(cn)}</span><b style="float:right">${TL(s.total)}</b></summary>
+    ${s.carryIn>0.5?`<div class="small muted" style="margin:4px 0">Önceki ekstreden geçen ${TL(s.carryIn)} dahil (bankada bu dönemde görünmez)</div>`:''}
+    ${L.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')||'<div class="empty">Bu dönem henüz harcama yok.</div>'}</details>`}
+/* eski ekstreler: kesim kesim toplam, ödendi mi; dokununca o ekstrenin harcamaları */
+function pastStmts(c){const cn=cutFor(c,today());const cuts=[...new Set(livePortions().filter(p=>p.cardId===c.id).map(p=>p.pcut||cutFor(c,p.pdate)))].filter(x=>x<cn).sort().reverse().slice(0,24);
+  if(!cuts.length)return '';
+  return `<details style="margin-top:8px"><summary>Eski ekstreler (${cuts.length})</summary>${cuts.map(k=>{const s=stmt(c,k);return `<div class="row tap" data-act="stmtview" data-id="${c.id}" data-cut="${k}"><div class="main"><div class="t">${fmtDY(k)} ekstresi</div><div class="s">son ödeme ${fmtD(s.due)}${s.manual!=null?' · bankanın tutarı':''}${s.paid?' · <span style="color:var(--plus)">ödendi</span>':''}</div></div><div class="amt">${TL(s.total)}</div></div>`}).join('')}</details>`}
+function stmtSheet(c,cut){shReg('stmt:'+c.id+cut,()=>stmtSheet(c,cut));const s=stmt(c,cut);const pc=prevCut(c,cut);const L=[...s.items].sort((a,b)=>b.pdate.localeCompare(a.pdate));
+  openSheet(head(`${esc(c.name)} · ${fmtD(cut)} ekstresi`)+`<section class="sec"><div class="eyebrow">${pc?fmtD(addDays(pc,1)):''} – ${fmtDY(cut)}</div><div class="total">${TL(s.total)}</div>
+    <div class="kv" style="margin-top:8px">${s.manual!=null?`<span class="k">Bankanın kestiği</span><b>${TL(s.manual)}</b><span class="k">Uygulamadaki harcamalar</span><b>${TL(s.appTotal)}</b>`:''}${s.carryIn>0.5?`<span class="k">Önceki ekstreden geçen</span><b>${TL(s.carryIn)}</b>`:''}<span class="k">Son ödeme</span><b>${fmtD(s.due)}</b><span class="k">Durum</span><b style="color:${s.paid?'var(--plus)':'var(--warn)'}">${s.paid?'ödendi':'ödenmedi'}</b></div>
+    <button class="btn sm ghost" style="width:100%;margin-top:8px" data-act="manstmt" data-id="${c.id}" data-cut="${cut}">${s.manual!=null?'Bankanın tutarını değiştir':'Bankanın kestiği tutarı gir'}</button></section>
+    <section class="sec" style="margin-top:12px"><h2>Harcamalar (${L.length})</h2>${L.map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')||'<div class="empty">Yok</div>'}</section>`)}
 function cardBlock(c,st){
   const T=st.T;const LI=limitInfo(c);const lim=LI.limit;const others=LI.debt-st.debt;const np=nextPay(c,st);
   const rg=cardRange[c.id]||{};const rFrom=rg.from||'',rTo=rg.to||'';
@@ -1659,6 +1673,7 @@ function cardBlock(c,st){
     <div class="box"><span class="eyebrow">Kimin ne kadar harcadığı</span>${splitRows(T.by,c.id,'all')}</div>
     ${!st.noDays&&!st.last.paid&&st.last.total>0.5?periodBox(c,st.last,true):''}${!st.noDays&&(st.last.paid||st.last.total<=0.5)&&st.last.total>0.5?`<button class="linkbtn" data-act="manstmt" data-id="${c.id}" data-cut="${st.last.cut}">Son ekstrenin (${fmtD(st.last.cut)}) kesin tutarını gir</button>`:''}
     ${!st.noDays&&st.open.total>0.5?periodBox(c,st.open,false):''}
+    ${!st.noDays?curPeriodBox(c,st):''}
     ${cardStatsBox(c,st)}
     ${T.pays.length?`<details class="box"><summary class="eyebrow" style="cursor:pointer">Ödeme geçmişi (${T.pays.length})</summary>${[...T.pays].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,24).map(t=>`<div class="sumline tap" data-act="edittx" data-id="${t.id}"><span>${fmtDY(t.date)} <span class="muted">· ${esc(t.account||'Nakit')}</span></span><b>${TL(t.amount)}</b></div>`).join('')}</details>`:''}
     <div class="btnrow" style="margin-top:10px"><button class="btn sm ghost" data-act="lump" data-id="${c.id}" data-m="stmt">Ekstre borcunu gir</button><button class="btn sm ghost" data-act="lump" data-id="${c.id}" data-m="open">Dönem içi kullanımı gir</button></div>
@@ -1668,6 +1683,7 @@ function cardBlock(c,st){
       ${inRange?`<div class="box"><div class="sumline"><span>${rFrom?fmtD(rFrom):'Başından'} – ${rTo?fmtD(rTo):'bugün'}</span><b>${TL(inRange.reduce((a,p)=>a+p.pamount,0))}</b></div>${Object.entries(rBy).map(([p,v])=>`<div class="sumline"><span>${p===ME?'Benim':esc(personName(p))}</span><b>${TL(v)}</b></div>`).join('')}<div class="small muted">Bu aralık sadece görüntüleme içindir, toplam borcu etkilemez.</div></div>${[...inRange].sort((a,b)=>b.pdate.localeCompare(a.pdate)).map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')}`:''}
     </details>
     ${inst.length?`<details style="margin-top:8px"><summary>Taksitlerim · kalan ${TL(inst.reduce((a,i)=>a+i.leftTotal,0))}</summary>${inst.map(i=>`<div class="row tap" data-act="edittx" data-id="${i.t.id}"><div class="main"><div class="t">${esc(i.t.merchant||'Taksitli alışveriş')}${i.personId!==ME?` <span class="chip oth">${esc(personName(i.personId))}</span>`:''}</div><div class="s">${i.left} taksit kaldı · aylık ${TL(i.per)}</div></div><div class="amt">${TL(i.leftTotal)}</div></div>`).join('')}</details>`:''}
+    ${!st.noDays?pastStmts(c):''}
     <details style="margin-top:8px"><summary>Tüm harcamalar (${T.billed.length})</summary>${[...T.billed].sort((a,b)=>b.pdate.localeCompare(a.pdate)).map(p=>txRow({...p,amount:p.pamount,_portion:p.pn>1?`${p.pi}/${p.pn}`:'',_date:true})).join('')||'<div class="empty">Yok</div>'}${T.pays.length?`<div class="daygrp">Ödemeler</div>${T.pays.map(t=>txRow({...t,_date:true})).join('')}`:''}</details>
     <div class="btnrow" style="margin-top:12px">${S.cards[0]?.id!==c.id?`<button class="btn ghost sm" data-act="cardtop" data-id="${c.id}">En üste al</button>`:''}<button class="btn ghost sm" data-act="stmtcmp" data-id="${c.id}">Ekstre yükle ve karşılaştır</button></div>
   </section>`;
@@ -3011,6 +3027,7 @@ document.addEventListener('click',async e=>{
         <section class="sec"><div class="row tap" data-act="stmtcmp" data-id="${c.id}" data-per="open"><div class="main"><div class="t">Dönem içi (kesilmemiş harcamalar)</div><div class="s">Bankada <b>Dönem İçi</b> sekmesi · ${fmtD(addDays(kc&&!pc?kc:lc,1))} – bugün${pc?' (kesilecek ekstre dahil)':''}</div></div>${chev}</div>
         ${kc?`<div class="row tap" data-act="stmtcmp" data-id="${c.id}" data-per="last"><div class="main"><div class="t">Kesilen ekstre (${fmtD(kc)})</div><div class="s">Bankada <b>Ekstre</b> sekmesi · ${pc?'henüz onaylanmadı':'kesildi'}</div></div>${chev}</div>`:''}</section>
         <p class="small muted">İpucu: Önce kesilen ekstreyi karşılaştır, sonra dönem içini. İkisi de tutunca uygulama bankayla aynı olur.</p>`);break}
+    case 'stmtview':{const c=cardById(id);if(c)stmtSheet(c,el.dataset.cut);break}
     case 'cutok':{if(!armed(el,'Emin misin? Tekrar bas'))break;const c=cardById(id);const cut=el.dataset.cut;const ex=S.stmts.find(x=>x.cardId===id&&x.cut===cut);await put({...(ex||{}),id:ex?.id,k:'stmt',cardId:id,cut,due:ex?.due||dueFor(c,cut),confirmed:true,checked:true,paid:!!ex?.paid});toast(`${c.name} ekstresi kesildi · ${fmtD(cut)}`);openSheet(head(esc(c.name))+cardBlock(c,cardState(c)));break}
     case 'cardopen':openSheet(head(esc(cardById(id)?.name||'Kart'))+cardBlock(cardById(id),cardState(cardById(id))));break;
     case 'reorder':cardReorder=!cardReorder;render();break;

@@ -1130,6 +1130,17 @@ def main():
         check("seçince ilgili yükleme ekranı açılır", page.evaluate("document.querySelector('#sheetBody input[name=per][value=last], #sheetBody [data-chip] ') !== null || document.getElementById('sheetBody').textContent.includes('Kesilmiş ekstre')"))
         page.evaluate("closeAll()")
 
+        print("Kart: dönem içi ve eski ekstreler")
+        page.evaluate("saveTx([{id:'dp1',type:'gider',amount:333,date:today(),cardId:S.cards[0].id,personId:'me',category:'Market',sub:'',merchant:'Dönem içi deneme',ts:Date.now()},{id:'dp0',type:'gider',amount:222,date:'2026-09-10',cardId:S.cards[0].id,personId:'me',category:'Market',sub:'',merchant:'Eski ekstre deneme',ts:1}])"); page.wait_for_timeout(400)
+        page.evaluate("closeAll();openSheet(head('k')+cardBlock(S.cards[0],cardState(S.cards[0])))"); page.wait_for_timeout(200)
+        sb = page.evaluate("document.getElementById('sheetBody').textContent")
+        check("karta dokununca dönem içi harcamalar açık listede", "Dönem içi harcamalar" in sb and page.evaluate("[...document.querySelectorAll('#sheetBody details[open]')].some(d=>d.textContent.includes('Dönem içi deneme'))"))
+        check("eski ekstreler listesi var", "Eski ekstreler" in sb)
+        page.evaluate("document.querySelectorAll('#sheetBody details').forEach(d=>d.open=true)")
+        page.locator("#sheetBody [data-act=stmtview]").last.click(); page.wait_for_timeout(200)
+        check("eski ekstreye dokununca o ekstrenin harcamaları", "Eski ekstre deneme" in page.evaluate("document.getElementById('sheetBody').textContent"))
+        page.evaluate("closeAll()")
+
         print("Tutarlılık: aynı rakam her ekranda aynı")
         page.evaluate("j=>restoreFrom(new File([JSON.stringify(j)],'tt.json'))", SAMPLE); page.wait_for_timeout(300)
         page.click("[data-act=restoreok]"); page.wait_for_timeout(500)
